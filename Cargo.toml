@@ -1,0 +1,19 @@
+[package]
+name = "wasapi"
+version = "0.1.0"
+edition = "2018"
+authors = ["HEnquist <henrik.enquist@gmail.com>"]
+description = "Bindings for the Wasapi API on Windows"
+license = "MIT"
+repository = "https://github.com/HEnquist/wasapi-rs"
+keywords = ["audio", "sound", "windows", "wasapi"]
+categories = ["multimedia::audio", "os::windows-apis"]
+readme = "README.md"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+windows = "0.10.0"
+widestring = "0.4.3"
+
+[build-dependencies]
+windows = "0.10.0"
