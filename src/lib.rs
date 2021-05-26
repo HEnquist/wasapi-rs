@@ -14,6 +14,9 @@
 use Windows::Win32::System::PropertiesSystem::PROPERTYKEY;
 pub mod wasapi;
 
+#[macro_use]
+extern crate log;
+
 #[allow(non_upper_case_globals)]
 pub const PKEY_Device_FriendlyName: PROPERTYKEY = PROPERTYKEY {
     fmtid: windows::Guid::from_values(

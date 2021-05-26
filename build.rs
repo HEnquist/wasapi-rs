@@ -3,11 +3,14 @@ fn main() {
         Windows::Win32::Media::Audio::CoreAudio::{
             eConsole, eRender, eCapture, IAudioClient, IAudioRenderClient, IAudioCaptureClient, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, IMMDeviceCollection,
             AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
+            AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
         },
         Windows::Win32::Devices::FunctionDiscovery::IFunctionInstance,
         Windows::Win32::Media::Multimedia::{
             WAVEFORMATEX,
             WAVEFORMATEXTENSIBLE,
+            WAVE_FORMAT_PCM,
+            WAVE_FORMAT_IEEE_FLOAT,
             KSDATAFORMAT_SUBTYPE_PCM,
             KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
         },
