@@ -12,7 +12,8 @@
 
 ::windows::include_bindings!();
 use Windows::Win32::System::PropertiesSystem::PROPERTYKEY;
-pub mod wasapi;
+mod api;
+pub use api::*;
 
 #[macro_use]
 extern crate log;

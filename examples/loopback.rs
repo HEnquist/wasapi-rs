@@ -3,7 +3,7 @@ use std::sync::mpsc;
 use std::thread;
 use windows::initialize_mta;
 use std::error;
-use wasapi::wasapi::*;
+use wasapi::*;
 
 #[macro_use] extern crate log;
 use simplelog::*;
@@ -34,7 +34,7 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
     let mut sample_queue: VecDeque<u8> = VecDeque::with_capacity(100*blockalign as usize * (1024 + 2*buffer_frame_count as usize));
     audio_client.start_stream()?;
     loop {
-        buffer_frame_count = audio_client.get_available_frames()?;
+        buffer_frame_count = audio_client.get_available_space_in_frames()?;
         trace!("New buffer frame count {}", buffer_frame_count);
         while sample_queue.len() < (blockalign as usize * buffer_frame_count as usize) {
             debug!("need more samples");

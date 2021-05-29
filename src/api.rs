@@ -348,7 +348,8 @@ impl AudioClient {
         Ok(buffer_frame_count)
     }
 
-    /// Get current padding in frames
+    /// Get current padding in frames.
+    /// This represents the number of frames currently in the buffer, for both capture and render devices.
     pub fn get_current_padding(&self) -> WasapiRes<u32> {
         let mut padding_count = 0;
         unsafe { self.client.GetCurrentPadding(&mut padding_count).ok()? };
@@ -356,8 +357,9 @@ impl AudioClient {
         Ok(padding_count)
     }
 
-    /// Get buffer size minus padding in frames
-    pub fn get_available_frames(&self) -> WasapiRes<u32> {
+    /// Get buffer size minus padding in frames.
+    /// Use this to find out how much free space is available in the buffer.
+    pub fn get_available_space_in_frames(&self) -> WasapiRes<u32> {
         let frames = match self.sharemode {
             Some(ShareMode::Exclusive) => {
                 let mut buffer_frame_count = 0;
@@ -480,7 +482,7 @@ impl AudioCaptureClient {
                 .GetBuffer(buffer.as_mut_ptr(), &mut nbr_frames_returned, &mut 0, ptr::null_mut(), ptr::null_mut())
                 .ok()?
         };
-        if data_len_in_frames != nbr_frames_returned as usize {
+        if data_len_in_frames < nbr_frames_returned as usize {
             return Err(WasapiError::new(format!("Wrong length of data, got {} frames, expected {} frames", data_len_in_frames, nbr_frames_returned).as_str()).into());
         }
         let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
@@ -519,7 +521,7 @@ pub struct Handle {
 }
 
 impl Handle {
-    /// Wait for an event on a handle
+    /// Wait for an event on a handle, with a timeout given in ms
     pub fn wait_for_event(&self, timeout_ms: u32) -> WasapiRes<()> {
         let retval = unsafe { WaitForSingleObject(self.handle, timeout_ms) };
         if retval != WAIT_OBJECT_0
