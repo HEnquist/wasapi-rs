@@ -1,14 +1,16 @@
 //! # Wasapi bindings for Rust
 //!
-//! This create is meant as a thin wrapper for the Wasapi API.
+//! The aim of this create is to provide easy and safe access to the Wasapi API for audio playback and capture.
 //!
-//! Most things map directly to something in the Windows API.
+//! Most things map closely to something in the Windows API.
+//!
+//! For details on how to use Wasapi, please see ["the Windows documentation"](https://docs.microsoft.com/en-us/windows/win32/coreaudio/core-audio-interfaces).
 //!
 //! Both shared and exclusive modes are supported. 
 //!
-//! Bindings are generated automatically using the `windows` crate.
+//! Bindings are generated automatically using the [windows](https://crates.io/crates/windows) crate.
 //! 
-//! The `loopback` example shows how to simultaneously capture and render sound. 
+//! The `loopback` example shows how to simultaneously capture and render sound, with separate threads for capture and render.
 
 ::windows::include_bindings!();
 use Windows::Win32::System::PropertiesSystem::PROPERTYKEY;
