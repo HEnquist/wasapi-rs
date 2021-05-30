@@ -1,38 +1,31 @@
-use std::mem;
-use std::ptr;
-use std::slice;
-use std::fmt;
-use std::collections::VecDeque;
-use widestring::U16CString;
-use windows::Interface;
-use std::error;
 use crate::{
     PKEY_Device_FriendlyName,
     Windows::Win32::Media::Audio::CoreAudio::{
-        eConsole, eRender, eCapture, IAudioClient, IAudioRenderClient, IAudioCaptureClient, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, IMMDeviceCollection,
-        AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
-        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+        eCapture, eConsole, eRender, IAudioCaptureClient, IAudioClient, IAudioRenderClient,
+        IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator,
+        AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK,
+        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
     },
     Windows::Win32::Media::Multimedia::{
-        WAVEFORMATEX,
-        WAVEFORMATEXTENSIBLE,
-        WAVEFORMATEXTENSIBLE_0,
-        WAVE_FORMAT_PCM,
-        WAVE_FORMAT_IEEE_FLOAT,
-        KSDATAFORMAT_SUBTYPE_PCM,
-        KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
+        KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_PCM,
     },
     Windows::Win32::Storage::StructuredStorage::PROPVARIANT,
     Windows::Win32::Storage::StructuredStorage::STGM_READ,
     Windows::Win32::System::Com::CLSCTX_ALL,
     Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
-    Windows::Win32::System::SystemServices::{PSTR, PWSTR, HANDLE, S_OK, S_FALSE},
-    Windows::Win32::System::Threading::{
-        CreateEventA,
-        WAIT_OBJECT_0,
-        WaitForSingleObject,
-    },
+    Windows::Win32::System::SystemServices::{HANDLE, PSTR, PWSTR, S_FALSE, S_OK},
+    Windows::Win32::System::Threading::{CreateEventA, WaitForSingleObject, WAIT_OBJECT_0},
 };
+use std::collections::VecDeque;
+use std::error;
+use std::fmt;
+use std::mem;
+use std::ptr;
+use std::slice;
+use widestring::U16CString;
+use windows::Interface;
 
 type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
@@ -98,7 +91,10 @@ pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
         debug!("default device {:?}", device);
     }
     match device {
-        Some(dev) => Ok(Device{ device: dev, direction: direction.clone()}),
+        Some(dev) => Ok(Device {
+            device: dev,
+            direction: direction.clone(),
+        }),
         None => Err(WasapiError::new("Failed to get default device").into()),
     }
 }
@@ -124,7 +120,10 @@ impl DeviceCollection {
                 .ok()?;
         }
         match devs {
-            Some(collection) => Ok(DeviceCollection { collection, direction: direction.clone()}),
+            Some(collection) => Ok(DeviceCollection {
+                collection,
+                direction: direction.clone(),
+            }),
             None => Err(WasapiError::new("Failed to get devices").into()),
         }
     }
@@ -132,7 +131,7 @@ impl DeviceCollection {
     /// Get the number of devices in an IMMDeviceCollection
     pub fn get_nbr_devices(&self) -> WasapiRes<u32> {
         let mut count = 0;
-        unsafe  { self.collection.GetCount(&mut count).ok()? };
+        unsafe { self.collection.GetCount(&mut count).ok()? };
         Ok(count)
     }
 
@@ -141,7 +140,10 @@ impl DeviceCollection {
         let mut dev = None;
         unsafe { self.collection.Item(idx, &mut dev).ok()? };
         match dev {
-            Some(device) => Ok(Device { device, direction: self.direction.clone()}),
+            Some(device) => Ok(Device {
+                device,
+                direction: self.direction.clone(),
+            }),
             None => Err(WasapiError::new("Failed to get device").into()),
         }
     }
@@ -149,13 +151,13 @@ impl DeviceCollection {
     /// Get a device from an IMMDeviceCollection using name
     pub fn get_device_with_name(&self, name: &str) -> WasapiRes<Device> {
         let mut count = 0;
-        unsafe  { self.collection.GetCount(&mut count).ok()? };
+        unsafe { self.collection.GetCount(&mut count).ok()? };
         trace!("nbr devices {}", count);
         for n in 0..count {
             let device = self.get_device_at_index(n)?;
             let devname = device.get_friendlyname()?;
             if name == devname {
-                return Ok(device)
+                return Ok(device);
             }
         }
         Err(WasapiError::new(format!("Unable to find device {}", name).as_str()).into())
@@ -181,21 +183,25 @@ impl Device {
                     audio_client.as_mut_ptr() as *mut _,
                 )
                 .ok()?;
-            Ok(AudioClient { client: audio_client.assume_init(), direction: self.direction.clone(), sharemode: None})
+            Ok(AudioClient {
+                client: audio_client.assume_init(),
+                direction: self.direction.clone(),
+                sharemode: None,
+            })
         }
     }
 
     /// Read state from an IMMDevice
     pub fn get_state(&self) -> WasapiRes<u32> {
         let mut state: u32 = 0;
-        unsafe  {
+        unsafe {
             self.device.GetState(&mut state).ok()?;
         }
         trace!("state: {:?}", state);
         Ok(state)
     }
 
-    /// Read the FrienlyName of an IMMDevice 
+    /// Read the FrienlyName of an IMMDevice
     pub fn get_friendlyname(&self) -> WasapiRes<String> {
         let mut store = None;
         unsafe {
@@ -214,7 +220,7 @@ impl Device {
             PropVariantToStringAlloc(&prop, &mut propstr).ok()?;
         }
         let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
-        let name =  wide_name.to_string_lossy();
+        let name = wide_name.to_string_lossy();
         trace!("name: {}", name);
         Ok(name)
     }
@@ -222,7 +228,7 @@ impl Device {
     /// Get the Id of an IMMDevice
     pub fn get_id(&self) -> WasapiRes<String> {
         let mut idstr = PWSTR::NULL;
-        unsafe { 
+        unsafe {
             self.device.GetId(&mut idstr).ok()?;
         }
         let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
@@ -244,45 +250,74 @@ impl AudioClient {
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
         let mut mix_format: mem::MaybeUninit<*mut WAVEFORMATEX> = mem::MaybeUninit::zeroed();
         unsafe { self.client.GetMixFormat(mix_format.as_mut_ptr()).ok()? };
-        let temp_fmt = unsafe {mix_format.assume_init().read()};
-        let mix_format = if temp_fmt.cbSize == 22 && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE {
-            unsafe {WaveFormat {wave_fmt: (mix_format.assume_init() as *const _ as *const WAVEFORMATEXTENSIBLE).read()}}
-        }
-        else {
+        let temp_fmt = unsafe { mix_format.assume_init().read() };
+        let mix_format = if temp_fmt.cbSize == 22
+            && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
+        {
+            unsafe {
+                WaveFormat {
+                    wave_fmt: (mix_format.assume_init() as *const _ as *const WAVEFORMATEXTENSIBLE)
+                        .read(),
+                }
+            }
+        } else {
             WaveFormat::from_waveformatex(temp_fmt)?
         };
         Ok(mix_format)
     }
 
-
     /// Check if a format is supported.
     /// If it's sirectly supported, this returns Ok(None). If not, but a similar format is, then the supported format is returned as Ok(Some(WaveFormat)).
-    pub fn is_supported(&self, wave_fmt: &WaveFormat, sharemode: &ShareMode) -> WasapiRes<Option<WaveFormat>> {
+    pub fn is_supported(
+        &self,
+        wave_fmt: &WaveFormat,
+        sharemode: &ShareMode,
+    ) -> WasapiRes<Option<WaveFormat>> {
         let supported = match sharemode {
             ShareMode::Exclusive => {
-                unsafe { self.client.IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, wave_fmt.as_waveformatex_ptr(), ptr::null_mut()).ok()? };
+                unsafe {
+                    self.client
+                        .IsFormatSupported(
+                            AUDCLNT_SHAREMODE_EXCLUSIVE,
+                            wave_fmt.as_waveformatex_ptr(),
+                            ptr::null_mut(),
+                        )
+                        .ok()?
+                };
                 None
-            },
+            }
             ShareMode::Shared => {
-                let mut supported_format: mem::MaybeUninit<*mut WAVEFORMATEX> = mem::MaybeUninit::zeroed();
-                let res = unsafe { self.client.IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, wave_fmt.as_waveformatex_ptr(), supported_format.as_mut_ptr()) };
+                let mut supported_format: mem::MaybeUninit<*mut WAVEFORMATEX> =
+                    mem::MaybeUninit::zeroed();
+                let res = unsafe {
+                    self.client.IsFormatSupported(
+                        AUDCLNT_SHAREMODE_SHARED,
+                        wave_fmt.as_waveformatex_ptr(),
+                        supported_format.as_mut_ptr(),
+                    )
+                };
                 res.ok()?;
                 if res == S_OK {
                     debug!("format is supported");
                     None
-                }
-                else if res == S_FALSE {
+                } else if res == S_FALSE {
                     debug!("format is not supported");
-                    let temp_fmt = unsafe {supported_format.assume_init().read()};
-                    let new_fmt = if temp_fmt.cbSize == 22 && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE {
-                        unsafe {WaveFormat {wave_fmt: (supported_format.assume_init() as *const _ as *const WAVEFORMATEXTENSIBLE).read()}}
-                    }
-                    else {
+                    let temp_fmt = unsafe { supported_format.assume_init().read() };
+                    let new_fmt = if temp_fmt.cbSize == 22
+                        && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
+                    {
+                        unsafe {
+                            WaveFormat {
+                                wave_fmt: (supported_format.assume_init() as *const _
+                                    as *const WAVEFORMATEXTENSIBLE)
+                                    .read(),
+                            }
+                        }
+                    } else {
                         WaveFormat::from_waveformatex(temp_fmt)?
                     };
                     Some(new_fmt)
-                }
-                else {
+                } else {
                     return Err(WasapiError::new("Unsupported format").into());
                 }
             }
@@ -294,28 +329,40 @@ impl AudioClient {
     pub fn get_periods(&self) -> WasapiRes<(i64, i64)> {
         let mut def_time = 0;
         let mut min_time = 0;
-        unsafe { self.client.GetDevicePeriod(&mut def_time, &mut min_time).ok()? };
+        unsafe {
+            self.client
+                .GetDevicePeriod(&mut def_time, &mut min_time)
+                .ok()?
+        };
         trace!("default period {}, min period {}", def_time, min_time);
         Ok((def_time, min_time))
     }
 
-
-
     /// Initialize an IAudioClient for the given direction, sharemode and format.
     /// Setting `convert` to true enables automatic samplerate and format conversion, meaning that almost any format will be accepted.
-    pub fn initialize_client(&mut self, wavefmt: &WaveFormat, period: i64, direction: &Direction, sharemode: &ShareMode, convert: bool) -> WasapiRes<()> {
+    pub fn initialize_client(
+        &mut self,
+        wavefmt: &WaveFormat,
+        period: i64,
+        direction: &Direction,
+        sharemode: &ShareMode,
+        convert: bool,
+    ) -> WasapiRes<()> {
         let mut streamflags = match (&self.direction, direction, sharemode) {
-            (Direction::Render, Direction::Capture, ShareMode::Shared) => AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_LOOPBACK,
+            (Direction::Render, Direction::Capture, ShareMode::Shared) => {
+                AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_LOOPBACK
+            }
             (Direction::Render, Direction::Capture, ShareMode::Exclusive) => {
                 return Err(WasapiError::new("Cant use Loopback with exclusive mode").into());
-            },
+            }
             (Direction::Capture, Direction::Render, _) => {
                 return Err(WasapiError::new("Cant render to a capture device").into());
-            },
-            _ => AUDCLNT_STREAMFLAGS_EVENTCALLBACK
+            }
+            _ => AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
         };
         if convert {
-            streamflags |= AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+            streamflags |=
+                AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
         }
         let mode = match sharemode {
             ShareMode::Exclusive => AUDCLNT_SHAREMODE_EXCLUSIVE,
@@ -323,12 +370,16 @@ impl AudioClient {
         };
         self.sharemode = Some(sharemode.clone());
         unsafe {
-            self.client.Initialize(mode,
-                streamflags,
-                period,
-                period,
-                wavefmt.as_waveformatex_ptr(),
-                std::ptr::null()).ok()?;
+            self.client
+                .Initialize(
+                    mode,
+                    streamflags,
+                    period,
+                    period,
+                    wavefmt.as_waveformatex_ptr(),
+                    std::ptr::null(),
+                )
+                .ok()?;
         }
         Ok(())
     }
@@ -337,14 +388,14 @@ impl AudioClient {
     pub fn set_get_eventhandle(&self) -> WasapiRes<Handle> {
         let h_event = unsafe { CreateEventA(std::ptr::null_mut(), false, false, PSTR::default()) };
         unsafe { self.client.SetEventHandle(h_event).ok()? };
-        Ok(Handle {handle: h_event})
+        Ok(Handle { handle: h_event })
     }
 
     /// Get buffer size in frames
     pub fn get_bufferframecount(&self) -> WasapiRes<u32> {
         let mut buffer_frame_count = 0;
         unsafe { self.client.GetBufferSize(&mut buffer_frame_count).ok()? };
-        trace!("buffer_frame_count {}",buffer_frame_count);
+        trace!("buffer_frame_count {}", buffer_frame_count);
         Ok(buffer_frame_count)
     }
 
@@ -353,7 +404,7 @@ impl AudioClient {
     pub fn get_current_padding(&self) -> WasapiRes<u32> {
         let mut padding_count = 0;
         unsafe { self.client.GetCurrentPadding(&mut padding_count).ok()? };
-        trace!("padding_count {}",padding_count);
+        trace!("padding_count {}", padding_count);
         Ok(padding_count)
     }
 
@@ -364,21 +415,20 @@ impl AudioClient {
             Some(ShareMode::Exclusive) => {
                 let mut buffer_frame_count = 0;
                 unsafe { self.client.GetBufferSize(&mut buffer_frame_count).ok()? };
-                trace!("buffer_frame_count {}",buffer_frame_count);
+                trace!("buffer_frame_count {}", buffer_frame_count);
                 buffer_frame_count
-            },
+            }
             Some(ShareMode::Shared) => {
                 let mut padding_count = 0;
                 let mut buffer_frame_count = 0;
                 unsafe { self.client.GetBufferSize(&mut buffer_frame_count).ok()? };
                 unsafe { self.client.GetCurrentPadding(&mut padding_count).ok()? };
-                buffer_frame_count-padding_count
-            },
+                buffer_frame_count - padding_count
+            }
             _ => return Err(WasapiError::new("Client has not been initialized").into()),
         };
         Ok(frames)
     }
-
 
     /// Start the stream on an IAudioClient
     pub fn start_stream(&self) -> WasapiRes<()> {
@@ -396,7 +446,7 @@ impl AudioClient {
     pub fn get_audiorenderclient(&self) -> WasapiRes<AudioRenderClient> {
         let renderclient: Option<IAudioRenderClient> = unsafe { self.client.GetService().ok() };
         match renderclient {
-            Some(client) => Ok(AudioRenderClient {client}),
+            Some(client) => Ok(AudioRenderClient { client }),
             None => Err(WasapiError::new("Failed getting IAudioRenderClient").into()),
         }
     }
@@ -405,7 +455,7 @@ impl AudioClient {
     pub fn get_audiocaptureclient(&self) -> WasapiRes<AudioCaptureClient> {
         let renderclient: Option<IAudioCaptureClient> = unsafe { self.client.GetService().ok() };
         match renderclient {
-            Some(client) => Ok(AudioCaptureClient {client}),
+            Some(client) => Ok(AudioCaptureClient { client }),
             None => Err(WasapiError::new("Failed getting IAudioCaptureClient").into()),
         }
     }
@@ -418,13 +468,26 @@ pub struct AudioRenderClient {
 
 impl AudioRenderClient {
     /// Write raw bytes data to a device from a slice
-    pub fn write_to_device(&self, nbr_frames: usize, byte_per_frame: usize, data: &[u8]) -> WasapiRes<()> {
+    pub fn write_to_device(
+        &self,
+        nbr_frames: usize,
+        byte_per_frame: usize,
+        data: &[u8],
+    ) -> WasapiRes<()> {
         let nbr_bytes = nbr_frames * byte_per_frame;
         if nbr_bytes != data.len() {
-            return Err(WasapiError::new(format!("Wrong length of data, got {}, expected {}", data.len(), nbr_bytes).as_str()).into());
+            return Err(WasapiError::new(
+                format!(
+                    "Wrong length of data, got {}, expected {}",
+                    data.len(),
+                    nbr_bytes
+                )
+                .as_str(),
+            )
+            .into());
         }
         let mut buffer = mem::MaybeUninit::uninit();
-        unsafe { 
+        unsafe {
             self.client
                 .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr())
                 .ok()?
@@ -438,15 +501,24 @@ impl AudioRenderClient {
     }
 
     /// Write raw bytes data to a device from a deque
-    pub fn write_to_device_from_deque(&self, nbr_frames: usize, byte_per_frame: usize, data: &mut VecDeque<u8>) -> WasapiRes<()> {
+    pub fn write_to_device_from_deque(
+        &self,
+        nbr_frames: usize,
+        byte_per_frame: usize,
+        data: &mut VecDeque<u8>,
+    ) -> WasapiRes<()> {
         let nbr_bytes = nbr_frames * byte_per_frame;
         if nbr_bytes > data.len() {
-            return Err(WasapiError::new(format!("To little data, got {}, need {}", data.len(), nbr_bytes).as_str()).into());
+            return Err(WasapiError::new(
+                format!("To little data, got {}, need {}", data.len(), nbr_bytes).as_str(),
+            )
+            .into());
         }
         let mut buffer = mem::MaybeUninit::uninit();
-        unsafe { 
+        unsafe {
             self.client
-                .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr()).ok()?
+                .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr())
+                .ok()?
         };
         let bufferptr = unsafe { buffer.assume_init() };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
@@ -468,7 +540,7 @@ impl AudioCaptureClient {
     /// Get number of frames in next packet, only works in shared mode
     pub fn get_next_nbr_frames(&self) -> WasapiRes<u32> {
         let mut nbr_frames = 0;
-        unsafe {self.client.GetNextPacketSize(&mut nbr_frames).ok()?};
+        unsafe { self.client.GetNextPacketSize(&mut nbr_frames).ok()? };
         Ok(nbr_frames)
     }
 
@@ -477,13 +549,26 @@ impl AudioCaptureClient {
         let data_len_in_frames = data.len() / bytes_per_frame;
         let mut buffer = mem::MaybeUninit::uninit();
         let mut nbr_frames_returned = 0;
-        unsafe { 
+        unsafe {
             self.client
-                .GetBuffer(buffer.as_mut_ptr(), &mut nbr_frames_returned, &mut 0, ptr::null_mut(), ptr::null_mut())
+                .GetBuffer(
+                    buffer.as_mut_ptr(),
+                    &mut nbr_frames_returned,
+                    &mut 0,
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                )
                 .ok()?
         };
         if data_len_in_frames < nbr_frames_returned as usize {
-            return Err(WasapiError::new(format!("Wrong length of data, got {} frames, expected {} frames", data_len_in_frames, nbr_frames_returned).as_str()).into());
+            return Err(WasapiError::new(
+                format!(
+                    "Wrong length of data, got {} frames, expected {} frames",
+                    data_len_in_frames, nbr_frames_returned
+                )
+                .as_str(),
+            )
+            .into());
         }
         let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
         let bufferptr = unsafe { buffer.assume_init() };
@@ -495,12 +580,22 @@ impl AudioCaptureClient {
     }
 
     /// Write raw bytes data to a device from a deque
-    pub fn read_from_device_to_deque(&self, bytes_per_frame: usize, data: &mut VecDeque<u8>) -> WasapiRes<()> {
+    pub fn read_from_device_to_deque(
+        &self,
+        bytes_per_frame: usize,
+        data: &mut VecDeque<u8>,
+    ) -> WasapiRes<()> {
         let mut buffer = mem::MaybeUninit::uninit();
         let mut nbr_frames_returned = 0;
-        unsafe { 
+        unsafe {
             self.client
-                .GetBuffer(buffer.as_mut_ptr(), &mut nbr_frames_returned, &mut 0, ptr::null_mut(), ptr::null_mut())
+                .GetBuffer(
+                    buffer.as_mut_ptr(),
+                    &mut nbr_frames_returned,
+                    &mut 0,
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                )
                 .ok()?
         };
         let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
@@ -524,8 +619,7 @@ impl Handle {
     /// Wait for an event on a handle, with a timeout given in ms
     pub fn wait_for_event(&self, timeout_ms: u32) -> WasapiRes<()> {
         let retval = unsafe { WaitForSingleObject(self.handle, timeout_ms) };
-        if retval != WAIT_OBJECT_0
-        {
+        if retval != WAIT_OBJECT_0 {
             return Err(WasapiError::new("Wait timed out").into());
         }
         Ok(())
@@ -538,35 +632,41 @@ pub struct WaveFormat {
     wave_fmt: WAVEFORMATEXTENSIBLE,
 }
 
-
-
 impl fmt::Debug for WaveFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("WaveFormat")
-         .field("nAvgBytesPerSec", &{self.wave_fmt.Format.nAvgBytesPerSec})
-         .field("cbSize", &{self.wave_fmt.Format.cbSize})
-         .field("nBlockAlign", &{self.wave_fmt.Format.nBlockAlign})
-         .field("wBitsPerSample", &{self.wave_fmt.Format.wBitsPerSample})
-         .field("nSamplesPerSec", &{self.wave_fmt.Format.nSamplesPerSec})
-         .field("wFormatTag", &{self.wave_fmt.Format.wFormatTag})
-         .field("wValidBitsPerSampl", &unsafe {self.wave_fmt.Samples.wValidBitsPerSample})
-         .field("SubFormat", &{self.wave_fmt.SubFormat})
-         .field("nChannel", &{self.wave_fmt.Format.nChannels})
-         .field("dwChannelMask", &{self.wave_fmt.dwChannelMask})
-         .finish()
+            .field("nAvgBytesPerSec", &{ self.wave_fmt.Format.nAvgBytesPerSec })
+            .field("cbSize", &{ self.wave_fmt.Format.cbSize })
+            .field("nBlockAlign", &{ self.wave_fmt.Format.nBlockAlign })
+            .field("wBitsPerSample", &{ self.wave_fmt.Format.wBitsPerSample })
+            .field("nSamplesPerSec", &{ self.wave_fmt.Format.nSamplesPerSec })
+            .field("wFormatTag", &{ self.wave_fmt.Format.wFormatTag })
+            .field("wValidBitsPerSampl", &unsafe {
+                self.wave_fmt.Samples.wValidBitsPerSample
+            })
+            .field("SubFormat", &{ self.wave_fmt.SubFormat })
+            .field("nChannel", &{ self.wave_fmt.Format.nChannels })
+            .field("dwChannelMask", &{ self.wave_fmt.dwChannelMask })
+            .finish()
     }
 }
 
 impl WaveFormat {
     /// Build a WAVEFORMATEXTENSIBLE struct for the given parameters
-    pub fn new(storebits: usize, validbits: usize, sample_type: &SampleType, samplerate: usize, channels: usize) -> Self {
+    pub fn new(
+        storebits: usize,
+        validbits: usize,
+        sample_type: &SampleType,
+        samplerate: usize,
+        channels: usize,
+    ) -> Self {
         let blockalign = channels * storebits / 8;
         let byterate = samplerate * blockalign;
 
         let wave_format = WAVEFORMATEX {
             cbSize: 22,
             nAvgBytesPerSec: byterate as u32,
-            nBlockAlign: blockalign as u16, 
+            nBlockAlign: blockalign as u16,
             nChannels: channels as u16,
             nSamplesPerSec: samplerate as u32,
             wBitsPerSample: storebits as u16,
@@ -581,7 +681,7 @@ impl WaveFormat {
         };
         let mut mask = 0;
         for n in 0..channels {
-            mask += 1<<n;
+            mask += 1 << n;
         }
         let wave_fmt = WAVEFORMATEXTENSIBLE {
             Format: wave_format,
@@ -589,7 +689,7 @@ impl WaveFormat {
             SubFormat: subformat,
             dwChannelMask: mask,
         };
-        WaveFormat{ wave_fmt }
+        WaveFormat { wave_fmt }
     }
 
     /// Create from a WAVEFORMATEX structure
@@ -604,10 +704,16 @@ impl WaveFormat {
             WAVE_FORMAT_IEEE_FLOAT => SampleType::Float,
             _ => {
                 return Err(WasapiError::new("Unsupported format").into());
-            },
+            }
         };
-        let storebits = 8*blockalign/channels;
-        Ok(WaveFormat::new(storebits, validbits, &sample_type, samplerate, channels))
+        let storebits = 8 * blockalign / channels;
+        Ok(WaveFormat::new(
+            storebits,
+            validbits,
+            &sample_type,
+            samplerate,
+            channels,
+        ))
     }
 
     /// get a pointer of type WAVEFORMATEX, used internally
@@ -653,11 +759,14 @@ impl WaveFormat {
     /// Read SubFormat.
     pub fn get_subformat(&self) -> WasapiRes<SampleType> {
         let subfmt = match self.wave_fmt.SubFormat {
-            KSDATAFORMAT_SUBTYPE_IEEE_FLOAT  => SampleType::Float,
+            KSDATAFORMAT_SUBTYPE_IEEE_FLOAT => SampleType::Float,
             KSDATAFORMAT_SUBTYPE_PCM => SampleType::Int,
             _ => {
-                return Err(WasapiError::new(format!("Unknown subformat {:?}", {self.wave_fmt.SubFormat}).as_str()).into());
-            },
+                return Err(WasapiError::new(
+                    format!("Unknown subformat {:?}", { self.wave_fmt.SubFormat }).as_str(),
+                )
+                .into());
+            }
         };
         Ok(subfmt)
     }

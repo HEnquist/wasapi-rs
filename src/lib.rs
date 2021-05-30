@@ -6,10 +6,10 @@
 //!
 //! For details on how to use Wasapi, please see ["the Windows documentation"](https://docs.microsoft.com/en-us/windows/win32/coreaudio/core-audio-interfaces).
 //!
-//! Both shared and exclusive modes are supported. 
+//! Both shared and exclusive modes are supported.
 //!
 //! Bindings are generated automatically using the [windows](https://crates.io/crates/windows) crate.
-//! 
+//!
 //! The `loopback` example shows how to simultaneously capture and render sound, with separate threads for capture and render.
 
 ::windows::include_bindings!();
@@ -41,5 +41,3 @@ pub const PKEY_Device_DeviceDesc: PROPERTYKEY = PROPERTYKEY {
     ),
     pid: 2,
 };
-
-
