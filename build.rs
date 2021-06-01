@@ -1,7 +1,8 @@
 fn main() {
     windows::build!(
         Windows::Win32::Media::Audio::CoreAudio::{
-            eConsole, eRender, eCapture, IAudioClient, IAudioRenderClient, IAudioCaptureClient, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, IMMDeviceCollection,
+            AudioSessionState, AudioSessionStateActive,AudioSessionStateInactive,AudioSessionStateExpired, IAudioSessionEvents,
+            eConsole, eRender, eCapture, IAudioClient, IAudioSessionControl, IAudioRenderClient, IAudioCaptureClient, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, IMMDeviceCollection,
             AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
             AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
         },
