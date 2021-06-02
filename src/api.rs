@@ -246,7 +246,7 @@ pub struct AudioClient {
 }
 
 impl AudioClient {
-    // TODO: Add getMixFormat
+    // Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
         let mut mix_format: mem::MaybeUninit<*mut WAVEFORMATEX> = mem::MaybeUninit::zeroed();
         unsafe { self.client.GetMixFormat(mix_format.as_mut_ptr()).ok()? };
@@ -267,7 +267,7 @@ impl AudioClient {
     }
 
     /// Check if a format is supported.
-    /// If it's sirectly supported, this returns Ok(None). If not, but a similar format is, then the supported format is returned as Ok(Some(WaveFormat)).
+    /// If it's directly supported, this returns Ok(None). If not, but a similar format is, then the supported format is returned as Ok(Some(WaveFormat)).
     pub fn is_supported(
         &self,
         wave_fmt: &WaveFormat,
