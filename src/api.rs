@@ -442,6 +442,12 @@ impl AudioClient {
         Ok(())
     }
 
+    /// Reset the stream on an IAudioClient
+    pub fn reset_stream(&self) -> WasapiRes<()> {
+        unsafe { self.client.Reset().ok()? };
+        Ok(())
+    }
+
     /// Get a rendering (playback) client
     pub fn get_audiorenderclient(&self) -> WasapiRes<AudioRenderClient> {
         let renderclient: Option<IAudioRenderClient> = unsafe { self.client.GetService().ok() };
@@ -561,6 +567,7 @@ impl AudioCaptureClient {
                 .ok()?
         };
         if data_len_in_frames < nbr_frames_returned as usize {
+            unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
             return Err(WasapiError::new(
                 format!(
                     "Wrong length of data, got {} frames, expected {} frames",
