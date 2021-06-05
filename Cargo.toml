@@ -1,6 +1,6 @@
 [package]
 name = "wasapi"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2018"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 description = "Bindings for the Wasapi API on Windows"
@@ -21,3 +21,7 @@ windows = "0.10.0"
 
 [dev-dependencies]
 simplelog = "0.10.0"
+
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = ["x86_64-pc-windows-msvc"]
