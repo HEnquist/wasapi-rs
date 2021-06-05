@@ -201,7 +201,7 @@ impl Device {
         Ok(state)
     }
 
-    /// Read the FrienlyName of an IMMDevice
+    /// Read the FriendlyName of an IMMDevice
     pub fn get_friendlyname(&self) -> WasapiRes<String> {
         let mut store = None;
         unsafe {
@@ -648,7 +648,7 @@ impl fmt::Debug for WaveFormat {
             .field("wBitsPerSample", &{ self.wave_fmt.Format.wBitsPerSample })
             .field("nSamplesPerSec", &{ self.wave_fmt.Format.nSamplesPerSec })
             .field("wFormatTag", &{ self.wave_fmt.Format.wFormatTag })
-            .field("wValidBitsPerSampl", &unsafe {
+            .field("wValidBitsPerSample", &unsafe {
                 self.wave_fmt.Samples.wValidBitsPerSample
             })
             .field("SubFormat", &{ self.wave_fmt.SubFormat })
