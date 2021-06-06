@@ -78,7 +78,6 @@ fn main() {
     callbacks.set_channel_volume_callback(|index, vol| println!("New channel volume {}, channel {}", vol, index));
     callbacks.set_disconnected_callback(|reason| println!("Disconnected, reason {:?}", reason));
 
-    //let mut events = AudioSessionEvents::new(callbacks);
     let sessioncontrol = audio_client.get_audiosessioncontrol().unwrap();
     sessioncontrol.register_session_notification(callbacks).unwrap();
 

@@ -521,6 +521,7 @@ impl AudioSessionControl {
     }
 }
 
+
 /// Struct wrapping an IAudioRenderClient.
 pub struct AudioRenderClient {
     client: IAudioRenderClient,
