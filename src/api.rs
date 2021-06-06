@@ -1,8 +1,9 @@
 use crate::{
     PKEY_Device_FriendlyName,
     Windows::Win32::Media::Audio::CoreAudio::{
-        eCapture, eConsole, eRender, IAudioCaptureClient, IAudioClient, IAudioRenderClient,
-        IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator,
+        AudioSessionStateActive,AudioSessionStateInactive,AudioSessionStateExpired,
+        eCapture, eConsole, eRender, IAudioCaptureClient, IAudioClient, IAudioRenderClient, IAudioSessionEvents,
+        IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator, IAudioSessionControl,
         AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK,
         AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
@@ -26,6 +27,8 @@ use std::ptr;
 use std::slice;
 use widestring::U16CString;
 use windows::Interface;
+use windows::implement;
+use windows::HRESULT;
 
 type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
@@ -465,7 +468,84 @@ impl AudioClient {
             None => Err(WasapiError::new("Failed getting IAudioCaptureClient").into()),
         }
     }
+
+    /// Get the AudioSessionControl
+    pub fn get_audiosessioncontrol(&self) -> WasapiRes<AudioSessionControl> {
+        let sessioncontrol: Option<IAudioSessionControl> = unsafe { self.client.GetService().ok() };
+        match sessioncontrol {
+            Some(control) => Ok(AudioSessionControl { control }),
+            None => Err(WasapiError::new("Failed getting IAudioSessionControl").into()),
+        }
+    }
 }
+
+/// Struct wrapping an IAudioSessionControl.
+pub struct AudioSessionControl {
+    control: IAudioSessionControl,
+}
+
+pub enum SessionState {
+    Active,
+    Inactive,
+    Expired,
+}
+
+
+impl AudioSessionControl {
+    pub fn get_state(&self) -> WasapiRes<SessionState> {
+        let mut state = AudioSessionStateActive;
+        unsafe { self.control.GetState(&mut state).ok()? };
+        #[allow(non_upper_case_globals)]
+        let sessionstate = match state {
+            AudioSessionStateActive => SessionState::Active,
+            AudioSessionStateInactive => SessionState::Inactive,
+            AudioSessionStateExpired => SessionState::Expired,
+            _ => {
+                return Err(WasapiError::new("Got an illegal state").into());
+            }
+        };
+        Ok(sessionstate)
+    }
+
+    pub fn register_session_notification(&self, events: AudioSessionEvents) -> WasapiRes<()> {
+        match unsafe { self.control.RegisterAudioSessionNotification(&events.events).ok() } {
+            Ok(()) => Ok(()),
+            Err(err) => Err(WasapiError::new(&format!("Failed to register notifications, {}", err)).into()),
+        }
+    }
+}
+
+pub struct AudioSessionEvents {
+    events: IAudioSessionEvents,
+}
+
+impl AudioSessionEvents {
+    pub fn new() -> WasapiRes<AudioSessionEvents> {
+        let events: IAudioSessionEvents = windows::create_instance(&IAudioSessionEvents::IID)?;
+        Ok(AudioSessionEvents{ events})
+    }
+}
+
+/*
+// This needs a new version of the windows crate to work!
+#[implement(Windows::Win32::Media::Audio::CoreAudio::IAudioSessionEvents)]
+pub struct MyEvents {
+}
+
+impl MyEvents {
+    pub fn OnStateChanged() -> HRESULT {
+        S_OK
+    }
+
+    //OnChannelVolumeChanged
+    //OnDisplayNameChanged
+    //OnGroupingParamChanged
+    //OnIconPathChanged
+    //OnSessionDisconnected
+    //OnSimpleVolumeChanged
+    //OnStateChanged
+}
+*/
 
 /// Struct wrapping an IAudioRenderClient.
 pub struct AudioRenderClient {
