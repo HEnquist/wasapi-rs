@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["wasapi"] = [{"text":"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/ops/drop/trait.Drop.html\" title=\"trait core::ops::drop::Drop\">Drop</a> for <a class=\"struct\" href=\"wasapi/Windows/Win32/System/OleAutomation/struct.BSTR.html\" title=\"struct wasapi::Windows::Win32::System::OleAutomation::BSTR\">BSTR</a>","synthetic":false,"types":["wasapi::Windows::Win32::System::OleAutomation::BSTR"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
