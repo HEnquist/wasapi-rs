@@ -1,6 +1,6 @@
 [package]
 name = "wasapi"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2018"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 description = "Bindings for the Wasapi API on Windows"
@@ -9,6 +9,7 @@ repository = "https://github.com/HEnquist/wasapi-rs"
 keywords = ["audio", "sound", "windows", "wasapi"]
 categories = ["multimedia::audio", "os::windows-apis"]
 readme = "README.md"
+#documentation = "https://docs.rs/bitflags"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
