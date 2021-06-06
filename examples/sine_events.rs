@@ -18,7 +18,7 @@ impl SineGenerator {
         SineGenerator {
             time: 0.0,
             freq,
-            delta_t: 1.0/fs,
+            delta_t: 1.0 / fs,
             amplitude,
         }
     }
@@ -32,7 +32,6 @@ impl Iterator for SineGenerator {
         Some(output)
     }
 }
-
 
 // Main loop
 fn main() {
@@ -58,13 +57,15 @@ fn main() {
     let (def_time, min_time) = audio_client.get_periods().unwrap();
     debug!("default period {}, min period {}", def_time, min_time);
 
-    audio_client.initialize_client(
-        &desired_format,
-        def_time as i64,
-        &Direction::Render,
-        &ShareMode::Shared,
-        true,
-    ).unwrap();
+    audio_client
+        .initialize_client(
+            &desired_format,
+            def_time as i64,
+            &Direction::Render,
+            &ShareMode::Shared,
+            true,
+        )
+        .unwrap();
     debug!("initialized playback");
 
     let h_event = audio_client.set_get_eventhandle().unwrap();
@@ -73,13 +74,19 @@ fn main() {
 
     let mut callbacks = EventCallbacks::new();
 
-    callbacks.set_simple_volume_callback(|vol, mute| println!("New simple volume {}, mute {}", vol, mute));
+    callbacks.set_simple_volume_callback(|vol, mute| {
+        println!("New simple volume {}, mute {}", vol, mute)
+    });
     callbacks.set_state_callback(|state| println!("New state {:?}", state));
-    callbacks.set_channel_volume_callback(|index, vol| println!("New channel volume {}, channel {}", vol, index));
+    callbacks.set_channel_volume_callback(|index, vol| {
+        println!("New channel volume {}, channel {}", vol, index)
+    });
     callbacks.set_disconnected_callback(|reason| println!("Disconnected, reason {:?}", reason));
 
     let sessioncontrol = audio_client.get_audiosessioncontrol().unwrap();
-    sessioncontrol.register_session_notification(callbacks).unwrap();
+    sessioncontrol
+        .register_session_notification(callbacks)
+        .unwrap();
 
     audio_client.start_stream().unwrap();
     loop {
@@ -89,7 +96,7 @@ fn main() {
         for frame in data.chunks_exact_mut(blockalign as usize) {
             let sample = gen.next().unwrap();
             let sample_bytes = sample.to_le_bytes();
-            for value in frame.chunks_exact_mut(blockalign as usize/channels as usize) {
+            for value in frame.chunks_exact_mut(blockalign as usize / channels as usize) {
                 for (bufbyte, sinebyte) in value.iter_mut().zip(sample_bytes.iter()) {
                     *bufbyte = *sinebyte;
                 }
@@ -97,11 +104,9 @@ fn main() {
         }
 
         trace!("write");
-        render_client.write_to_device(
-            buffer_frame_count as usize,
-            blockalign as usize,
-            &data,
-        ).unwrap();
+        render_client
+            .write_to_device(buffer_frame_count as usize, blockalign as usize, &data)
+            .unwrap();
         trace!("write ok");
         if h_event.wait_for_event(1000).is_err() {
             error!("error, stopping playback");

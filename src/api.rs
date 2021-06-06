@@ -1,13 +1,17 @@
 use crate::{
     PKEY_Device_FriendlyName,
     Windows::Win32::Media::Audio::CoreAudio::{
-        AudioSessionState, AudioSessionStateActive,AudioSessionStateInactive,AudioSessionStateExpired, AudioSessionDisconnectReason,
-        DisconnectReasonDeviceRemoval, DisconnectReasonServerShutdown, DisconnectReasonFormatChanged, DisconnectReasonSessionLogoff, DisconnectReasonSessionDisconnected, DisconnectReasonExclusiveModeOverride,
-        eCapture, eConsole, eRender, IAudioCaptureClient, IAudioClient, IAudioRenderClient, IAudioSessionEvents, IAudioSessionEvents_abi,
-        IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator, IAudioSessionControl,
-        AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
-        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK,
-        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
+        eCapture, eConsole, eRender, AudioSessionDisconnectReason, AudioSessionState,
+        AudioSessionStateActive, AudioSessionStateExpired, AudioSessionStateInactive,
+        DisconnectReasonDeviceRemoval, DisconnectReasonExclusiveModeOverride,
+        DisconnectReasonFormatChanged, DisconnectReasonServerShutdown,
+        DisconnectReasonSessionDisconnected, DisconnectReasonSessionLogoff, IAudioCaptureClient,
+        IAudioClient, IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents,
+        IAudioSessionEvents_abi, IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator,
+        MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
+        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
+        WAVE_FORMAT_EXTENSIBLE,
     },
     Windows::Win32::Media::Multimedia::{
         KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVEFORMATEX,
@@ -17,7 +21,9 @@ use crate::{
     Windows::Win32::Storage::StructuredStorage::STGM_READ,
     Windows::Win32::System::Com::CLSCTX_ALL,
     Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
-    Windows::Win32::System::SystemServices::{HANDLE, PSTR, PWSTR, S_FALSE, S_OK, E_NOINTERFACE, BOOL},
+    Windows::Win32::System::SystemServices::{
+        BOOL, E_NOINTERFACE, HANDLE, PSTR, PWSTR, S_FALSE, S_OK,
+    },
     Windows::Win32::System::Threading::{CreateEventA, WaitForSingleObject, WAIT_OBJECT_0},
 };
 use std::collections::VecDeque;
@@ -27,9 +33,9 @@ use std::mem;
 use std::ptr;
 use std::slice;
 use widestring::U16CString;
+use windows::IUnknown;
 use windows::Interface;
 use windows::HRESULT;
-use windows::IUnknown;
 
 type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
@@ -493,7 +499,6 @@ pub enum SessionState {
     Expired,
 }
 
-
 impl AudioSessionControl {
     /// Get the current state
     pub fn get_state(&self) -> WasapiRes<SessionState> {
@@ -510,17 +515,18 @@ impl AudioSessionControl {
         };
         Ok(sessionstate)
     }
-    
+
     /// Register to receive notifications
     pub fn register_session_notification(&self, callbacks: EventCallbacks) -> WasapiRes<()> {
         let events = AudioSessionEvents::new(callbacks);
         match unsafe { self.control.RegisterAudioSessionNotification(events).ok() } {
             Ok(()) => Ok(()),
-            Err(err) => Err(WasapiError::new(&format!("Failed to register notifications, {}", err)).into()),
+            Err(err) => {
+                Err(WasapiError::new(&format!("Failed to register notifications, {}", err)).into())
+            }
         }
     }
 }
-
 
 /// Struct wrapping an IAudioRenderClient.
 pub struct AudioRenderClient {
@@ -916,7 +922,6 @@ impl EventCallbacks {
     pub fn unset_displayname_callback(&mut self) {
         self.displayname = None;
     }
-
 }
 
 /// Reason for session disconnect
@@ -930,7 +935,6 @@ pub enum DisconnectReason {
     ExclusiveModeOverride,
     Unknown,
 }
-
 
 /// Wrapper for IAudioSessionEvents
 struct AudioSessionEvents {
@@ -1001,7 +1005,6 @@ impl AudioSessionEvents {
         res
     }
 
-
     fn on_state_changed(&mut self, newstate: AudioSessionState) -> HRESULT {
         debug!("state change: {:?}", newstate);
         #[allow(non_upper_case_globals)]
@@ -1009,9 +1012,7 @@ impl AudioSessionEvents {
             AudioSessionStateActive => SessionState::Active,
             AudioSessionStateInactive => SessionState::Inactive,
             AudioSessionStateExpired => SessionState::Expired,
-            _ => {
-                return S_OK
-            }
+            _ => return S_OK,
         };
         if let Some(callback) = &mut self.callbacks.state {
             callback(sessionstate);
@@ -1019,11 +1020,14 @@ impl AudioSessionEvents {
         S_OK
     }
 
-    fn on_session_disconnected(&mut self, disconnectreason: AudioSessionDisconnectReason) -> HRESULT {
+    fn on_session_disconnected(
+        &mut self,
+        disconnectreason: AudioSessionDisconnectReason,
+    ) -> HRESULT {
         debug!("Disconnected");
         #[allow(non_upper_case_globals)]
         let reason = match disconnectreason {
-            DisconnectReasonDeviceRemoval =>  DisconnectReason::DeviceRemoval,
+            DisconnectReasonDeviceRemoval => DisconnectReason::DeviceRemoval,
             DisconnectReasonServerShutdown => DisconnectReason::ServerShutdown,
             DisconnectReasonFormatChanged => DisconnectReason::FormatChanged,
             DisconnectReasonSessionLogoff => DisconnectReason::SessionLogoff,
@@ -1037,7 +1041,6 @@ impl AudioSessionEvents {
         }
         S_OK
     }
-    
 
     fn on_display_name_changed(
         &mut self,
@@ -1088,7 +1091,8 @@ impl AudioSessionEvents {
         _eventcontext: *const ::windows::Guid,
     ) -> ::windows::HRESULT {
         debug!("New channel volume for channel: {}", changedchannel);
-        let volslice = unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
+        let volslice =
+            unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
         let newvol = volslice[changedchannel as usize];
         if let Some(callback) = &mut self.callbacks.channel_volume {
             callback(changedchannel as usize, newvol);
@@ -1152,7 +1156,12 @@ impl AudioSessionEvents {
         changedchannel: u32,
         eventcontext: *const ::windows::Guid,
     ) -> ::windows::HRESULT {
-        (*(this as *mut Self)).on_channel_volume_changed(channelcount, newchannelvolumearray, changedchannel, eventcontext)
+        (*(this as *mut Self)).on_channel_volume_changed(
+            channelcount,
+            newchannelvolumearray,
+            changedchannel,
+            eventcontext,
+        )
     }
 
     unsafe extern "system" fn _on_grouping_param_changed(
@@ -1176,8 +1185,4 @@ impl AudioSessionEvents {
     ) -> ::windows::HRESULT {
         (*(this as *mut Self)).on_session_disconnected(disconnectreason)
     }
-
 }
-
-
-
