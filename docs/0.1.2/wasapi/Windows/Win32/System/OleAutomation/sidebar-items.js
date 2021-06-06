@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["SysAllocStringLen",""],["SysFreeString",""],["SysStringLen",""]],"struct":[["BSTR",""],["IDispatch",""],["SAFEARRAY",""],["SAFEARRAYBOUND",""]],"type":[["BSTR_abi",""]]});
