@@ -238,7 +238,7 @@ impl Device {
     }
 }
 
-// Struct wrapping an IAudioClient.
+/// Struct wrapping an IAudioClient.
 pub struct AudioClient {
     client: IAudioClient,
     direction: Direction,
@@ -246,7 +246,7 @@ pub struct AudioClient {
 }
 
 impl AudioClient {
-    // Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
+    /// Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
         let mut mix_format: mem::MaybeUninit<*mut WAVEFORMATEX> = mem::MaybeUninit::zeroed();
         unsafe { self.client.GetMixFormat(mix_format.as_mut_ptr()).ok()? };
