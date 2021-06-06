@@ -1,8 +1,9 @@
 use crate::{
     PKEY_Device_FriendlyName,
     Windows::Win32::Media::Audio::CoreAudio::{
-        AudioSessionStateActive,AudioSessionStateInactive,AudioSessionStateExpired,
-        eCapture, eConsole, eRender, IAudioCaptureClient, IAudioClient, IAudioRenderClient, IAudioSessionEvents,
+        AudioSessionState, AudioSessionStateActive,AudioSessionStateInactive,AudioSessionStateExpired, AudioSessionDisconnectReason,
+        DisconnectReasonDeviceRemoval, DisconnectReasonServerShutdown, DisconnectReasonFormatChanged, DisconnectReasonSessionLogoff, DisconnectReasonSessionDisconnected, DisconnectReasonExclusiveModeOverride,
+        eCapture, eConsole, eRender, IAudioCaptureClient, IAudioClient, IAudioRenderClient, IAudioSessionEvents, IAudioSessionEvents_abi,
         IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator, IAudioSessionControl,
         AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK,
@@ -16,7 +17,7 @@ use crate::{
     Windows::Win32::Storage::StructuredStorage::STGM_READ,
     Windows::Win32::System::Com::CLSCTX_ALL,
     Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
-    Windows::Win32::System::SystemServices::{HANDLE, PSTR, PWSTR, S_FALSE, S_OK},
+    Windows::Win32::System::SystemServices::{HANDLE, PSTR, PWSTR, S_FALSE, S_OK, E_NOINTERFACE, BOOL},
     Windows::Win32::System::Threading::{CreateEventA, WaitForSingleObject, WAIT_OBJECT_0},
 };
 use std::collections::VecDeque;
@@ -27,8 +28,8 @@ use std::ptr;
 use std::slice;
 use widestring::U16CString;
 use windows::Interface;
-use windows::implement;
 use windows::HRESULT;
+use windows::IUnknown;
 
 type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
@@ -484,6 +485,8 @@ pub struct AudioSessionControl {
     control: IAudioSessionControl,
 }
 
+/// States of an AudioSession
+#[derive(Debug)]
 pub enum SessionState {
     Active,
     Inactive,
@@ -492,6 +495,7 @@ pub enum SessionState {
 
 
 impl AudioSessionControl {
+    /// Get the current state
     pub fn get_state(&self) -> WasapiRes<SessionState> {
         let mut state = AudioSessionStateActive;
         unsafe { self.control.GetState(&mut state).ok()? };
@@ -506,46 +510,16 @@ impl AudioSessionControl {
         };
         Ok(sessionstate)
     }
-
-    pub fn register_session_notification(&self, events: AudioSessionEvents) -> WasapiRes<()> {
-        match unsafe { self.control.RegisterAudioSessionNotification(&events.events).ok() } {
+    
+    /// Register to receive notifications
+    pub fn register_session_notification(&self, callbacks: EventCallbacks) -> WasapiRes<()> {
+        let events = AudioSessionEvents::new(callbacks);
+        match unsafe { self.control.RegisterAudioSessionNotification(events).ok() } {
             Ok(()) => Ok(()),
             Err(err) => Err(WasapiError::new(&format!("Failed to register notifications, {}", err)).into()),
         }
     }
 }
-
-pub struct AudioSessionEvents {
-    events: IAudioSessionEvents,
-}
-
-impl AudioSessionEvents {
-    pub fn new() -> WasapiRes<AudioSessionEvents> {
-        let events: IAudioSessionEvents = windows::create_instance(&IAudioSessionEvents::IID)?;
-        Ok(AudioSessionEvents{ events})
-    }
-}
-
-/*
-// This needs a new version of the windows crate to work!
-#[implement(Windows::Win32::Media::Audio::CoreAudio::IAudioSessionEvents)]
-pub struct MyEvents {
-}
-
-impl MyEvents {
-    pub fn OnStateChanged() -> HRESULT {
-        S_OK
-    }
-
-    //OnChannelVolumeChanged
-    //OnDisplayNameChanged
-    //OnGroupingParamChanged
-    //OnIconPathChanged
-    //OnSessionDisconnected
-    //OnSimpleVolumeChanged
-    //OnStateChanged
-}
-*/
 
 /// Struct wrapping an IAudioRenderClient.
 pub struct AudioRenderClient {
@@ -858,3 +832,351 @@ impl WaveFormat {
         Ok(subfmt)
     }
 }
+
+/// A structure holding the callbacks for notifications
+pub struct EventCallbacks {
+    simple_volume: Option<Box<dyn FnMut(f32, bool)>>,
+    channel_volume: Option<Box<dyn FnMut(usize, f32)>>,
+    state: Option<Box<dyn FnMut(SessionState)>>,
+    disconnected: Option<Box<dyn FnMut(DisconnectReason)>>,
+    iconpath: Option<Box<dyn FnMut(String)>>,
+    displayname: Option<Box<dyn FnMut(String)>>,
+}
+
+impl Default for EventCallbacks {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EventCallbacks {
+    /// Create a new EventCallbacks with no callbacks set
+    pub fn new() -> Self {
+        Self {
+            simple_volume: None,
+            channel_volume: None,
+            state: None,
+            disconnected: None,
+            iconpath: None,
+            displayname: None,
+        }
+    }
+
+    /// Set a callback for OnSimpleVolumeChanged notifications
+    pub fn set_simple_volume_callback(&mut self, c: impl FnMut(f32, bool) + 'static) {
+        self.simple_volume = Some(Box::new(c));
+    }
+    /// Remove a callback for OnSimpleVolumeChanged notifications
+    pub fn unset_simple_volume_callback(&mut self) {
+        self.simple_volume = None;
+    }
+
+    /// Set a callback for OnChannelVolumeChanged notifications
+    pub fn set_channel_volume_callback(&mut self, c: impl FnMut(usize, f32) + 'static) {
+        self.channel_volume = Some(Box::new(c));
+    }
+    /// Remove a callback for OnChannelVolumeChanged notifications
+    pub fn unset_channel_volume_callback(&mut self) {
+        self.channel_volume = None;
+    }
+
+    /// Set a callback for OnSessionDisconnected notifications
+    pub fn set_disconnected_callback(&mut self, c: impl FnMut(DisconnectReason) + 'static) {
+        self.disconnected = Some(Box::new(c));
+    }
+    /// Remove a callback for OnSessionDisconnected notifications
+    pub fn unset_disconnected_callback(&mut self) {
+        self.disconnected = None;
+    }
+
+    /// Set a callback for OnStateChanged notifications
+    pub fn set_state_callback(&mut self, c: impl FnMut(SessionState) + 'static) {
+        self.state = Some(Box::new(c));
+    }
+    /// Remove a callback for OnStateChanged notifications
+    pub fn unset_state_callback(&mut self) {
+        self.state = None;
+    }
+
+    /// Set a callback for OnIconPathChanged notifications
+    pub fn set_iconpath_callback(&mut self, c: impl FnMut(String) + 'static) {
+        self.iconpath = Some(Box::new(c));
+    }
+    /// Remove a callback for OnIconPathChanged notifications
+    pub fn unset_iconpath_callback(&mut self) {
+        self.iconpath = None;
+    }
+
+    /// Set a callback for OnDisplayNameChanged notifications
+    pub fn set_displayname_callback(&mut self, c: impl FnMut(String) + 'static) {
+        self.displayname = Some(Box::new(c));
+    }
+    /// Remove a callback for OnDisplayNameChanged notifications
+    pub fn unset_displayname_callback(&mut self) {
+        self.displayname = None;
+    }
+
+}
+
+/// Reason for session disconnect
+#[derive(Debug)]
+pub enum DisconnectReason {
+    DeviceRemoval,
+    ServerShutdown,
+    FormatChanged,
+    SessionLogoff,
+    SessionDisconnected,
+    ExclusiveModeOverride,
+    Unknown,
+}
+
+
+/// Wrapper for IAudioSessionEvents
+struct AudioSessionEvents {
+    _abi: Box<IAudioSessionEvents_abi>,
+    ref_cnt: u32,
+    callbacks: EventCallbacks,
+}
+
+#[allow(dead_code)]
+impl AudioSessionEvents {
+    /// Create a new AudioSessionEvents instance, returned as a IAudioSessionEvent.
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(callbacks: EventCallbacks) -> IAudioSessionEvents {
+        let target = Box::new(Self {
+            _abi: Box::new(IAudioSessionEvents_abi(
+                Self::_query_interface,
+                Self::_add_ref,
+                Self::_release,
+                Self::_on_display_name_changed,
+                Self::_on_icon_path_changed,
+                Self::_on_simple_volume_changed,
+                Self::_on_channel_volume_changed,
+                Self::_on_grouping_param_changed,
+                Self::_on_state_changed,
+                Self::_on_session_disconnected,
+            )),
+            ref_cnt: 1,
+            callbacks,
+        });
+
+        unsafe {
+            let ptr = Box::into_raw(target);
+            mem::transmute(ptr)
+        }
+    }
+
+    fn query_interface(
+        &mut self,
+        iid: &::windows::Guid,
+        interface: *mut ::windows::RawPtr,
+    ) -> HRESULT {
+        if iid == &IAudioSessionEvents::IID || iid == &IUnknown::IID {
+            unsafe {
+                *interface = self as *mut Self as *mut _;
+            }
+            self.add_ref();
+            S_OK
+        } else {
+            E_NOINTERFACE
+        }
+    }
+
+    fn add_ref(&mut self) -> u32 {
+        self.ref_cnt += 1;
+        self.ref_cnt
+    }
+
+    fn release(&mut self) -> u32 {
+        self.ref_cnt -= 1;
+        let res = self.ref_cnt;
+
+        if res == 0 {
+            unsafe {
+                Box::from_raw(self as *mut Self);
+            }
+        }
+
+        res
+    }
+
+
+    fn on_state_changed(&mut self, newstate: AudioSessionState) -> HRESULT {
+        debug!("state change: {:?}", newstate);
+        #[allow(non_upper_case_globals)]
+        let sessionstate = match newstate {
+            AudioSessionStateActive => SessionState::Active,
+            AudioSessionStateInactive => SessionState::Inactive,
+            AudioSessionStateExpired => SessionState::Expired,
+            _ => {
+                return S_OK
+            }
+        };
+        if let Some(callback) = &mut self.callbacks.state {
+            callback(sessionstate);
+        }
+        S_OK
+    }
+
+    fn on_session_disconnected(&mut self, disconnectreason: AudioSessionDisconnectReason) -> HRESULT {
+        debug!("Disconnected");
+        #[allow(non_upper_case_globals)]
+        let reason = match disconnectreason {
+            DisconnectReasonDeviceRemoval =>  DisconnectReason::DeviceRemoval,
+            DisconnectReasonServerShutdown => DisconnectReason::ServerShutdown,
+            DisconnectReasonFormatChanged => DisconnectReason::FormatChanged,
+            DisconnectReasonSessionLogoff => DisconnectReason::SessionLogoff,
+            DisconnectReasonSessionDisconnected => DisconnectReason::SessionDisconnected,
+            DisconnectReasonExclusiveModeOverride => DisconnectReason::ExclusiveModeOverride,
+            _ => DisconnectReason::Unknown,
+        };
+
+        if let Some(callback) = &mut self.callbacks.disconnected {
+            callback(reason);
+        }
+        S_OK
+    }
+    
+
+    fn on_display_name_changed(
+        &mut self,
+        newdisplayname: PWSTR,
+        _eventcontext: *const ::windows::Guid,
+    ) -> ::windows::HRESULT {
+        let wide_name = unsafe { U16CString::from_ptr_str(newdisplayname.0) };
+        let name = wide_name.to_string_lossy();
+        debug!("New display name: {}", name);
+        if let Some(callback) = &mut self.callbacks.displayname {
+            callback(name);
+        }
+        S_OK
+    }
+
+    fn on_icon_path_changed(
+        &mut self,
+        newiconpath: PWSTR,
+        _eventcontext: *const ::windows::Guid,
+    ) -> ::windows::HRESULT {
+        let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
+        let path = wide_path.to_string_lossy();
+        debug!("New icon path: {}", path);
+        if let Some(callback) = &mut self.callbacks.iconpath {
+            callback(path);
+        }
+        S_OK
+    }
+
+    fn on_simple_volume_changed(
+        &mut self,
+        newvolume: f32,
+        newmute: BOOL,
+        _eventcontext: *const ::windows::Guid,
+    ) -> ::windows::HRESULT {
+        debug!("New volume: {}, mute: {:?}", newvolume, newmute);
+        if let Some(callback) = &mut self.callbacks.simple_volume {
+            callback(newvolume, bool::from(newmute));
+        }
+        S_OK
+    }
+
+    fn on_channel_volume_changed(
+        &mut self,
+        channelcount: u32,
+        newchannelvolumearray: *mut f32,
+        changedchannel: u32,
+        _eventcontext: *const ::windows::Guid,
+    ) -> ::windows::HRESULT {
+        debug!("New channel volume for channel: {}", changedchannel);
+        let volslice = unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
+        let newvol = volslice[changedchannel as usize];
+        if let Some(callback) = &mut self.callbacks.channel_volume {
+            callback(changedchannel as usize, newvol);
+        }
+        S_OK
+    }
+
+    fn on_grouping_param_changed(
+        &self,
+        _newgroupingparam: *const ::windows::Guid,
+        _eventcontext: *const ::windows::Guid,
+    ) -> ::windows::HRESULT {
+        S_OK
+    }
+
+    unsafe extern "system" fn _query_interface(
+        this: ::windows::RawPtr,
+        iid: &::windows::Guid,
+        interface: *mut ::windows::RawPtr,
+    ) -> ::windows::HRESULT {
+        (*(this as *mut Self)).query_interface(iid, interface)
+    }
+
+    unsafe extern "system" fn _add_ref(this: ::windows::RawPtr) -> u32 {
+        (*(this as *mut Self)).add_ref()
+    }
+
+    unsafe extern "system" fn _release(this: ::windows::RawPtr) -> u32 {
+        (*(this as *mut Self)).release()
+    }
+
+    unsafe extern "system" fn _on_display_name_changed(
+        this: ::windows::RawPtr,
+        newdisplayname: PWSTR,
+        eventcontext: *const ::windows::Guid,
+    ) -> ::windows::HRESULT {
+        (*(this as *mut Self)).on_display_name_changed(newdisplayname, eventcontext)
+    }
+
+    unsafe extern "system" fn _on_icon_path_changed(
+        this: ::windows::RawPtr,
+        newiconpath: PWSTR,
+        eventcontext: *const ::windows::Guid,
+    ) -> ::windows::HRESULT {
+        (*(this as *mut Self)).on_icon_path_changed(newiconpath, eventcontext)
+    }
+
+    unsafe extern "system" fn _on_simple_volume_changed(
+        this: ::windows::RawPtr,
+        newvolume: f32,
+        newmute: BOOL,
+        eventcontext: *const ::windows::Guid,
+    ) -> ::windows::HRESULT {
+        (*(this as *mut Self)).on_simple_volume_changed(newvolume, newmute, eventcontext)
+    }
+
+    unsafe extern "system" fn _on_channel_volume_changed(
+        this: ::windows::RawPtr,
+        channelcount: u32,
+        newchannelvolumearray: *mut f32,
+        changedchannel: u32,
+        eventcontext: *const ::windows::Guid,
+    ) -> ::windows::HRESULT {
+        (*(this as *mut Self)).on_channel_volume_changed(channelcount, newchannelvolumearray, changedchannel, eventcontext)
+    }
+
+    unsafe extern "system" fn _on_grouping_param_changed(
+        this: ::windows::RawPtr,
+        newgroupingparam: *const ::windows::Guid,
+        eventcontext: *const ::windows::Guid,
+    ) -> ::windows::HRESULT {
+        (*(this as *mut Self)).on_grouping_param_changed(newgroupingparam, eventcontext)
+    }
+
+    unsafe extern "system" fn _on_state_changed(
+        this: ::windows::RawPtr,
+        newstate: AudioSessionState,
+    ) -> ::windows::HRESULT {
+        (*(this as *mut Self)).on_state_changed(newstate)
+    }
+
+    unsafe extern "system" fn _on_session_disconnected(
+        this: ::windows::RawPtr,
+        disconnectreason: AudioSessionDisconnectReason,
+    ) -> ::windows::HRESULT {
+        (*(this as *mut Self)).on_session_disconnected(disconnectreason)
+    }
+
+}
+
+
+

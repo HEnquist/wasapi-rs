@@ -1,7 +1,8 @@
 fn main() {
     windows::build!(
         Windows::Win32::Media::Audio::CoreAudio::{
-            AudioSessionState, AudioSessionStateActive,AudioSessionStateInactive,AudioSessionStateExpired, IAudioSessionEvents,
+            AudioSessionState, AudioSessionStateActive,AudioSessionStateInactive,AudioSessionStateExpired, IAudioSessionEvents, AudioSessionDisconnectReason,
+            DisconnectReasonDeviceRemoval, DisconnectReasonServerShutdown, DisconnectReasonFormatChanged, DisconnectReasonSessionLogoff, DisconnectReasonSessionDisconnected, DisconnectReasonExclusiveModeOverride,
             eConsole, eRender, eCapture, IAudioClient, IAudioSessionControl, IAudioRenderClient, IAudioCaptureClient, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, IMMDeviceCollection,
             AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
             AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
@@ -23,7 +24,7 @@ fn main() {
             WaitForSingleObject,
         },
         Windows::Win32::System::SystemServices::{
-            HANDLE, S_OK, S_FALSE,
+            HANDLE, S_OK, S_FALSE, E_NOINTERFACE, BOOL,
         },
         Windows::Win32::System::PropertiesSystem::PROPERTYKEY,
         Windows::Win32::System::SystemServices::PWSTR,

@@ -37,7 +37,7 @@ impl Iterator for SineGenerator {
 // Main loop
 fn main() {
     let _ = SimpleLogger::init(
-        LevelFilter::Trace,
+        LevelFilter::Debug,
         ConfigBuilder::new()
             .set_time_format_str("%H:%M:%S%.3f")
             .build(),
@@ -70,6 +70,17 @@ fn main() {
     let h_event = audio_client.set_get_eventhandle().unwrap();
 
     let render_client = audio_client.get_audiorenderclient().unwrap();
+
+    let mut callbacks = EventCallbacks::new();
+
+    callbacks.set_simple_volume_callback(|vol, mute| println!("New simple volume {}, mute {}", vol, mute));
+    callbacks.set_state_callback(|state| println!("New state {:?}", state));
+    callbacks.set_channel_volume_callback(|index, vol| println!("New channel volume {}, channel {}", vol, index));
+    callbacks.set_disconnected_callback(|reason| println!("Disconnected, reason {:?}", reason));
+
+    //let mut events = AudioSessionEvents::new(callbacks);
+    let sessioncontrol = audio_client.get_audiosessioncontrol().unwrap();
+    sessioncontrol.register_session_notification(callbacks).unwrap();
 
     audio_client.start_stream().unwrap();
     loop {
