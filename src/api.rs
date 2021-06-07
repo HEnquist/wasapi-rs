@@ -517,7 +517,7 @@ impl AudioSessionControl {
     }
 
     /// Register to receive notifications
-    pub fn register_session_notification(&self, callbacks: &mut EventCallbacks) -> WasapiRes<()> {
+    pub fn register_session_notification(&self, callbacks: &EventCallbacks) -> WasapiRes<()> {
         let events = AudioSessionEvents::new(callbacks);
 
         match unsafe { self.control.RegisterAudioSessionNotification(events).ok() } {
@@ -845,12 +845,12 @@ impl WaveFormat {
 
 /// A structure holding the callbacks for notifications
 pub struct EventCallbacks {
-    simple_volume: Option<Box<dyn FnMut(f32, bool)>>,
-    channel_volume: Option<Box<dyn FnMut(usize, f32)>>,
-    state: Option<Box<dyn FnMut(SessionState)>>,
-    disconnected: Option<Box<dyn FnMut(DisconnectReason)>>,
-    iconpath: Option<Box<dyn FnMut(String)>>,
-    displayname: Option<Box<dyn FnMut(String)>>,
+    simple_volume: Option<Box<dyn Fn(f32, bool)>>,
+    channel_volume: Option<Box<dyn Fn(usize, f32)>>,
+    state: Option<Box<dyn Fn(SessionState)>>,
+    disconnected: Option<Box<dyn Fn(DisconnectReason)>>,
+    iconpath: Option<Box<dyn Fn(String)>>,
+    displayname: Option<Box<dyn Fn(String)>>,
 }
 
 impl Default for EventCallbacks {
@@ -873,7 +873,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnSimpleVolumeChanged notifications
-    pub fn set_simple_volume_callback(&mut self, c: impl FnMut(f32, bool) + 'static) {
+    pub fn set_simple_volume_callback(&mut self, c: impl Fn(f32, bool) + 'static) {
         self.simple_volume = Some(Box::new(c));
     }
     /// Remove a callback for OnSimpleVolumeChanged notifications
@@ -882,7 +882,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnChannelVolumeChanged notifications
-    pub fn set_channel_volume_callback(&mut self, c: impl FnMut(usize, f32) + 'static) {
+    pub fn set_channel_volume_callback(&mut self, c: impl Fn(usize, f32) + 'static) {
         self.channel_volume = Some(Box::new(c));
     }
     /// Remove a callback for OnChannelVolumeChanged notifications
@@ -891,7 +891,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnSessionDisconnected notifications
-    pub fn set_disconnected_callback(&mut self, c: impl FnMut(DisconnectReason) + 'static) {
+    pub fn set_disconnected_callback(&mut self, c: impl Fn(DisconnectReason) + 'static) {
         self.disconnected = Some(Box::new(c));
     }
     /// Remove a callback for OnSessionDisconnected notifications
@@ -900,7 +900,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnStateChanged notifications
-    pub fn set_state_callback(&mut self, c: impl FnMut(SessionState) + 'static) {
+    pub fn set_state_callback(&mut self, c: impl Fn(SessionState) + 'static) {
         self.state = Some(Box::new(c));
     }
     /// Remove a callback for OnStateChanged notifications
@@ -909,7 +909,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnIconPathChanged notifications
-    pub fn set_iconpath_callback(&mut self, c: impl FnMut(String) + 'static) {
+    pub fn set_iconpath_callback(&mut self, c: impl Fn(String) + 'static) {
         self.iconpath = Some(Box::new(c));
     }
     /// Remove a callback for OnIconPathChanged notifications
@@ -918,7 +918,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnDisplayNameChanged notifications
-    pub fn set_displayname_callback(&mut self, c: impl FnMut(String) + 'static) {
+    pub fn set_displayname_callback(&mut self, c: impl Fn(String) + 'static) {
         self.displayname = Some(Box::new(c));
     }
     /// Remove a callback for OnDisplayNameChanged notifications
@@ -943,14 +943,14 @@ pub enum DisconnectReason {
 struct AudioSessionEvents<'a> {
     _abi: Box<IAudioSessionEvents_abi>,
     ref_cnt: u32,
-    callbacks: &'a mut EventCallbacks,
+    callbacks: &'a EventCallbacks,
 }
 
 #[allow(dead_code)]
 impl<'a> AudioSessionEvents<'a> {
     /// Create a new AudioSessionEvents instance, returned as a IAudioSessionEvent.
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(callbacks: &'a mut EventCallbacks) -> IAudioSessionEvents {
+    pub fn new(callbacks: &'a EventCallbacks) -> IAudioSessionEvents {
         let target = Box::new(Self {
             _abi: Box::new(IAudioSessionEvents_abi(
                 Self::_query_interface,
@@ -1017,7 +1017,7 @@ impl<'a> AudioSessionEvents<'a> {
             AudioSessionStateExpired => SessionState::Expired,
             _ => return S_OK,
         };
-        if let Some(callback) = &mut self.callbacks.state {
+        if let Some(callback) = &self.callbacks.state {
             callback(sessionstate);
         }
         S_OK
@@ -1039,7 +1039,7 @@ impl<'a> AudioSessionEvents<'a> {
             _ => DisconnectReason::Unknown,
         };
 
-        if let Some(callback) = &mut self.callbacks.disconnected {
+        if let Some(callback) = &self.callbacks.disconnected {
             callback(reason);
         }
         S_OK
@@ -1053,7 +1053,7 @@ impl<'a> AudioSessionEvents<'a> {
         let wide_name = unsafe { U16CString::from_ptr_str(newdisplayname.0) };
         let name = wide_name.to_string_lossy();
         debug!("New display name: {}", name);
-        if let Some(callback) = &mut self.callbacks.displayname {
+        if let Some(callback) = &self.callbacks.displayname {
             callback(name);
         }
         S_OK
@@ -1067,7 +1067,7 @@ impl<'a> AudioSessionEvents<'a> {
         let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
         let path = wide_path.to_string_lossy();
         debug!("New icon path: {}", path);
-        if let Some(callback) = &mut self.callbacks.iconpath {
+        if let Some(callback) = &self.callbacks.iconpath {
             callback(path);
         }
         S_OK
@@ -1080,7 +1080,7 @@ impl<'a> AudioSessionEvents<'a> {
         _eventcontext: *const ::windows::Guid,
     ) -> ::windows::HRESULT {
         debug!("New volume: {}, mute: {:?}", newvolume, newmute);
-        if let Some(callback) = &mut self.callbacks.simple_volume {
+        if let Some(callback) = &self.callbacks.simple_volume {
             callback(newvolume, bool::from(newmute));
         }
         S_OK
@@ -1097,7 +1097,7 @@ impl<'a> AudioSessionEvents<'a> {
         let volslice =
             unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
         let newvol = volslice[changedchannel as usize];
-        if let Some(callback) = &mut self.callbacks.channel_volume {
+        if let Some(callback) = &self.callbacks.channel_volume {
             callback(changedchannel as usize, newvol);
         }
         S_OK
