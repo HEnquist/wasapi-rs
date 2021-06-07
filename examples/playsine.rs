@@ -51,6 +51,7 @@ fn main() {
     let mut audio_client = device.get_iaudioclient().unwrap();
     let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, channels);
 
+    // Blockalign is the number of bytes per frame
     let blockalign = desired_format.get_blockalign();
     debug!("Desired playback format: {:?}", desired_format);
 
