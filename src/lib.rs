@@ -31,7 +31,7 @@ pub use api::*;
 extern crate log;
 
 #[allow(non_upper_case_globals)]
-pub const PKEY_Device_FriendlyName: PROPERTYKEY = PROPERTYKEY {
+const PKEY_Device_FriendlyName: PROPERTYKEY = PROPERTYKEY {
     fmtid: windows::Guid::from_values(
         0xA45C254E,
         0xDF1C,
@@ -42,7 +42,7 @@ pub const PKEY_Device_FriendlyName: PROPERTYKEY = PROPERTYKEY {
 };
 
 #[allow(non_upper_case_globals)]
-pub const PKEY_Device_DeviceDesc: PROPERTYKEY = PROPERTYKEY {
+const PKEY_Device_DeviceDesc: PROPERTYKEY = PROPERTYKEY {
     fmtid: windows::Guid::from_values(
         0xA45C254E,
         0xDF1C,

@@ -1,5 +1,5 @@
 use crate::{
-    PKEY_Device_FriendlyName,
+    PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
     Windows::Win32::Media::Audio::CoreAudio::{
         eCapture, eConsole, eRender, AudioSessionDisconnectReason, AudioSessionState,
         AudioSessionStateActive, AudioSessionStateExpired, AudioSessionStateInactive,
@@ -233,6 +233,30 @@ impl Device {
         let name = wide_name.to_string_lossy();
         trace!("name: {}", name);
         Ok(name)
+    }
+
+    /// Read the Description of an IMMDevice
+    pub fn get_description(&self) -> WasapiRes<String> {
+        let mut store = None;
+        unsafe {
+            self.device
+                .OpenPropertyStore(STGM_READ as u32, &mut store)
+                .ok()?;
+        }
+        let mut prop: mem::MaybeUninit<PROPVARIANT> = mem::MaybeUninit::zeroed();
+        let mut propstr = PWSTR::NULL;
+        let store = store.ok_or("Failed to get store")?;
+        unsafe {
+            store
+                .GetValue(&PKEY_Device_DeviceDesc, prop.as_mut_ptr())
+                .ok()?;
+            let prop = prop.assume_init();
+            PropVariantToStringAlloc(&prop, &mut propstr).ok()?;
+        }
+        let wide_desc = unsafe { U16CString::from_ptr_str(propstr.0) };
+        let desc = wide_desc.to_string_lossy();
+        trace!("description: {}", desc);
+        Ok(desc)
     }
 
     /// Get the Id of an IMMDevice
@@ -521,9 +545,7 @@ impl AudioSessionControl {
         let events = AudioSessionEvents::new(callbacks);
 
         match unsafe { self.control.RegisterAudioSessionNotification(events).ok() } {
-            Ok(()) => {
-                Ok(())
-            },
+            Ok(()) => Ok(()),
             Err(err) => {
                 Err(WasapiError::new(&format!("Failed to register notifications, {}", err)).into())
             }

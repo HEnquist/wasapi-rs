@@ -36,7 +36,7 @@ impl Iterator for SineGenerator {
 // Main loop
 fn main() {
     let _ = SimpleLogger::init(
-        LevelFilter::Trace,
+        LevelFilter::Debug,
         ConfigBuilder::new()
             .set_time_format_str("%H:%M:%S%.3f")
             .build(),
