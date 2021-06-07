@@ -517,10 +517,13 @@ impl AudioSessionControl {
     }
 
     /// Register to receive notifications
-    pub fn register_session_notification(&self, callbacks: EventCallbacks) -> WasapiRes<()> {
+    pub fn register_session_notification(&self, callbacks: &mut EventCallbacks) -> WasapiRes<()> {
         let events = AudioSessionEvents::new(callbacks);
+
         match unsafe { self.control.RegisterAudioSessionNotification(events).ok() } {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                Ok(())
+            },
             Err(err) => {
                 Err(WasapiError::new(&format!("Failed to register notifications, {}", err)).into())
             }
@@ -937,17 +940,17 @@ pub enum DisconnectReason {
 }
 
 /// Wrapper for IAudioSessionEvents
-struct AudioSessionEvents {
+struct AudioSessionEvents<'a> {
     _abi: Box<IAudioSessionEvents_abi>,
     ref_cnt: u32,
-    callbacks: EventCallbacks,
+    callbacks: &'a mut EventCallbacks,
 }
 
 #[allow(dead_code)]
-impl AudioSessionEvents {
+impl<'a> AudioSessionEvents<'a> {
     /// Create a new AudioSessionEvents instance, returned as a IAudioSessionEvent.
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(callbacks: EventCallbacks) -> IAudioSessionEvents {
+    pub fn new(callbacks: &'a mut EventCallbacks) -> IAudioSessionEvents {
         let target = Box::new(Self {
             _abi: Box::new(IAudioSessionEvents_abi(
                 Self::_query_interface,

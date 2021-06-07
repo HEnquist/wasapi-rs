@@ -85,7 +85,7 @@ fn main() {
 
     let sessioncontrol = audio_client.get_audiosessioncontrol().unwrap();
     sessioncontrol
-        .register_session_notification(callbacks)
+        .register_session_notification(&mut callbacks)
         .unwrap();
 
     audio_client.start_stream().unwrap();
