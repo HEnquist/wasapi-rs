@@ -74,18 +74,20 @@ fn main() {
 
     let mut callbacks = EventCallbacks::new();
 
-    callbacks.set_simple_volume_callback(|vol, mute| {
-        println!("New simple volume {}, mute {}", vol, mute)
+    let mut prev_vol = 0.0;
+    callbacks.set_simple_volume_callback(move |vol, mute| {
+        println!("New simple volume {} -> {}, mute {}", prev_vol, vol, mute);
+        prev_vol = vol;
     });
-    callbacks.set_state_callback(|state| println!("New state {:?}", state));
+    callbacks.set_state_callback(|state| println!("New state: {:?}", state));
     callbacks.set_channel_volume_callback(|index, vol| {
         println!("New channel volume {}, channel {}", vol, index)
     });
-    callbacks.set_disconnected_callback(|reason| println!("Disconnected, reason {:?}", reason));
+    callbacks.set_disconnected_callback(|reason| println!("Disconnected, reason: {:?}", reason));
 
     let sessioncontrol = audio_client.get_audiosessioncontrol().unwrap();
     sessioncontrol
-        .register_session_notification(&callbacks)
+        .register_session_notification(&mut callbacks)
         .unwrap();
 
     audio_client.start_stream().unwrap();
