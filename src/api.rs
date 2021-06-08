@@ -33,6 +33,7 @@ use std::mem;
 use std::ptr;
 use std::slice;
 use widestring::U16CString;
+use windows::Guid;
 use windows::IUnknown;
 use windows::Interface;
 use windows::HRESULT;
@@ -865,14 +866,17 @@ impl WaveFormat {
     }
 }
 
+type OptionBox<T> = Option<Box<T>>;
+
 /// A structure holding the callbacks for notifications
 pub struct EventCallbacks {
-    simple_volume: Option<Box<dyn FnMut(f32, bool)>>,
-    channel_volume: Option<Box<dyn FnMut(usize, f32)>>,
-    state: Option<Box<dyn FnMut(SessionState)>>,
-    disconnected: Option<Box<dyn FnMut(DisconnectReason)>>,
-    iconpath: Option<Box<dyn FnMut(String)>>,
-    displayname: Option<Box<dyn FnMut(String)>>,
+    simple_volume: OptionBox<dyn FnMut(f32, bool, Guid)>,
+    channel_volume: OptionBox<dyn FnMut(usize, f32, Guid)>,
+    state: OptionBox<dyn FnMut(SessionState)>,
+    disconnected: OptionBox<dyn FnMut(DisconnectReason)>,
+    iconpath: OptionBox<dyn FnMut(String, Guid)>,
+    displayname: OptionBox<dyn FnMut(String, Guid)>,
+    groupingparam: OptionBox<dyn FnMut(Guid, Guid)>,
 }
 
 impl Default for EventCallbacks {
@@ -891,11 +895,12 @@ impl EventCallbacks {
             disconnected: None,
             iconpath: None,
             displayname: None,
+            groupingparam: None,
         }
     }
 
     /// Set a callback for OnSimpleVolumeChanged notifications
-    pub fn set_simple_volume_callback(&mut self, c: impl FnMut(f32, bool) + 'static) {
+    pub fn set_simple_volume_callback(&mut self, c: impl FnMut(f32, bool, Guid) + 'static) {
         self.simple_volume = Some(Box::new(c));
     }
     /// Remove a callback for OnSimpleVolumeChanged notifications
@@ -904,7 +909,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnChannelVolumeChanged notifications
-    pub fn set_channel_volume_callback(&mut self, c: impl FnMut(usize, f32) + 'static) {
+    pub fn set_channel_volume_callback(&mut self, c: impl FnMut(usize, f32, Guid) + 'static) {
         self.channel_volume = Some(Box::new(c));
     }
     /// Remove a callback for OnChannelVolumeChanged notifications
@@ -931,7 +936,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnIconPathChanged notifications
-    pub fn set_iconpath_callback(&mut self, c: impl FnMut(String) + 'static) {
+    pub fn set_iconpath_callback(&mut self, c: impl FnMut(String, Guid) + 'static) {
         self.iconpath = Some(Box::new(c));
     }
     /// Remove a callback for OnIconPathChanged notifications
@@ -940,12 +945,21 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnDisplayNameChanged notifications
-    pub fn set_displayname_callback(&mut self, c: impl FnMut(String) + 'static) {
+    pub fn set_displayname_callback(&mut self, c: impl FnMut(String, Guid) + 'static) {
         self.displayname = Some(Box::new(c));
     }
     /// Remove a callback for OnDisplayNameChanged notifications
     pub fn unset_displayname_callback(&mut self) {
         self.displayname = None;
+    }
+
+    /// Set a callback for OnGroupingParamChanged notifications
+    pub fn set_groupingparam_callback(&mut self, c: impl FnMut(Guid, Guid) + 'static) {
+        self.groupingparam = Some(Box::new(c));
+    }
+    /// Remove a callback for OnGroupingParamChanged notifications
+    pub fn unset_groupingparam_callback(&mut self) {
+        self.groupingparam = None;
     }
 }
 
@@ -1070,13 +1084,14 @@ impl<'a> AudioSessionEvents<'a> {
     fn on_display_name_changed(
         &mut self,
         newdisplayname: PWSTR,
-        _eventcontext: *const ::windows::Guid,
+        eventcontext: *const ::windows::Guid,
     ) -> ::windows::HRESULT {
         let wide_name = unsafe { U16CString::from_ptr_str(newdisplayname.0) };
         let name = wide_name.to_string_lossy();
         trace!("New display name: {}", name);
         if let Some(callback) = &mut self.callbacks.displayname {
-            callback(name);
+            let context = unsafe { *eventcontext };
+            callback(name, context);
         }
         S_OK
     }
@@ -1084,13 +1099,14 @@ impl<'a> AudioSessionEvents<'a> {
     fn on_icon_path_changed(
         &mut self,
         newiconpath: PWSTR,
-        _eventcontext: *const ::windows::Guid,
+        eventcontext: *const ::windows::Guid,
     ) -> ::windows::HRESULT {
         let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
         let path = wide_path.to_string_lossy();
         trace!("New icon path: {}", path);
         if let Some(callback) = &mut self.callbacks.iconpath {
-            callback(path);
+            let context = unsafe { *eventcontext };
+            callback(path, context);
         }
         S_OK
     }
@@ -1099,11 +1115,12 @@ impl<'a> AudioSessionEvents<'a> {
         &mut self,
         newvolume: f32,
         newmute: BOOL,
-        _eventcontext: *const ::windows::Guid,
+        eventcontext: *const ::windows::Guid,
     ) -> ::windows::HRESULT {
         trace!("New volume: {}, mute: {:?}", newvolume, newmute);
         if let Some(callback) = &mut self.callbacks.simple_volume {
-            callback(newvolume, bool::from(newmute));
+            let context = unsafe { *eventcontext };
+            callback(newvolume, bool::from(newmute), context);
         }
         S_OK
     }
@@ -1113,23 +1130,30 @@ impl<'a> AudioSessionEvents<'a> {
         channelcount: u32,
         newchannelvolumearray: *mut f32,
         changedchannel: u32,
-        _eventcontext: *const ::windows::Guid,
+        eventcontext: *const ::windows::Guid,
     ) -> ::windows::HRESULT {
         trace!("New channel volume for channel: {}", changedchannel);
         let volslice =
             unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
         let newvol = volslice[changedchannel as usize];
         if let Some(callback) = &mut self.callbacks.channel_volume {
-            callback(changedchannel as usize, newvol);
+            let context = unsafe { *eventcontext };
+            callback(changedchannel as usize, newvol, context);
         }
         S_OK
     }
 
     fn on_grouping_param_changed(
-        &self,
-        _newgroupingparam: *const ::windows::Guid,
-        _eventcontext: *const ::windows::Guid,
+        &mut self,
+        newgroupingparam: *const ::windows::Guid,
+        eventcontext: *const ::windows::Guid,
     ) -> ::windows::HRESULT {
+        trace!("Grouping changed");
+        if let Some(callback) = &mut self.callbacks.groupingparam {
+            let context = unsafe { *eventcontext };
+            let grouping = unsafe { *newgroupingparam };
+            callback(grouping, context);
+        }
         S_OK
     }
 

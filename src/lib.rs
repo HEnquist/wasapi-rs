@@ -26,6 +26,7 @@
 use Windows::Win32::System::PropertiesSystem::PROPERTYKEY;
 mod api;
 pub use api::*;
+pub use windows::Guid;
 
 #[macro_use]
 extern crate log;

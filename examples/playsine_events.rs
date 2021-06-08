@@ -76,12 +76,12 @@ fn main() {
     let mut callbacks = EventCallbacks::new();
 
     let mut prev_vol = 0.0;
-    callbacks.set_simple_volume_callback(move |vol, mute| {
+    callbacks.set_simple_volume_callback(move |vol, mute, _guid| {
         println!("New simple volume {} -> {}, mute {}", prev_vol, vol, mute);
         prev_vol = vol;
     });
     callbacks.set_state_callback(|state| println!("New state: {:?}", state));
-    callbacks.set_channel_volume_callback(|index, vol| {
+    callbacks.set_channel_volume_callback(|index, vol, _guid| {
         println!("New channel volume {}, channel {}", vol, index)
     });
     callbacks.set_disconnected_callback(|reason| println!("Disconnected, reason: {:?}", reason));
