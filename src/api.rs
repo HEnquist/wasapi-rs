@@ -1,5 +1,6 @@
 use crate::{
     PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
+    Windows::Win32::Foundation::{BOOL, E_NOINTERFACE, HANDLE, PSTR, PWSTR, S_FALSE, S_OK},
     Windows::Win32::Media::Audio::CoreAudio::{
         eCapture, eConsole, eRender, AudioSessionDisconnectReason, AudioSessionState,
         AudioSessionStateActive, AudioSessionStateExpired, AudioSessionStateInactive,
@@ -21,9 +22,6 @@ use crate::{
     Windows::Win32::Storage::StructuredStorage::STGM_READ,
     Windows::Win32::System::Com::CLSCTX_ALL,
     Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
-    Windows::Win32::System::SystemServices::{
-        BOOL, E_NOINTERFACE, HANDLE, PSTR, PWSTR, S_FALSE, S_OK,
-    },
     Windows::Win32::System::Threading::{CreateEventA, WaitForSingleObject, WAIT_OBJECT_0},
 };
 use std::collections::VecDeque;
