@@ -632,8 +632,8 @@ pub struct AudioCaptureClient {
 }
 
 impl AudioCaptureClient {
-    /// Get number of frames in next packet, use only in shared mode.
-    /// In exclusive mode it returns None. Instead use `get_bufferframecount()` on the AudioClient.
+    /// Get number of frames in next packet when in shared mode.
+    /// In exclusive mode it returns None, instead use `get_bufferframecount()` on the AudioClient.
     pub fn get_next_nbr_frames(&self) -> WasapiRes<Option<u32>> {
         if let Some(ShareMode::Exclusive) = self.sharemode {
             return Ok(None);
