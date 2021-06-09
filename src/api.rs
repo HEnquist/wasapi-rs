@@ -494,7 +494,10 @@ impl AudioClient {
     pub fn get_audiocaptureclient(&self) -> WasapiRes<AudioCaptureClient> {
         let renderclient: Option<IAudioCaptureClient> = unsafe { self.client.GetService().ok() };
         match renderclient {
-            Some(client) => Ok(AudioCaptureClient { client }),
+            Some(client) => Ok(AudioCaptureClient {
+                client,
+                sharemode: self.sharemode.clone(),
+            }),
             None => Err(WasapiError::new("Failed getting IAudioCaptureClient").into()),
         }
     }
@@ -625,18 +628,23 @@ impl AudioRenderClient {
 /// Struct wrapping an IAudioCaptureClient.
 pub struct AudioCaptureClient {
     client: IAudioCaptureClient,
+    sharemode: Option<ShareMode>,
 }
 
 impl AudioCaptureClient {
-    /// Get number of frames in next packet, only works in shared mode
-    pub fn get_next_nbr_frames(&self) -> WasapiRes<u32> {
+    /// Get number of frames in next packet, use only in shared mode.
+    /// In exclusive mode it returns None. Instead use `get_bufferframecount()` on the AudioClient.
+    pub fn get_next_nbr_frames(&self) -> WasapiRes<Option<u32>> {
+        if let Some(ShareMode::Exclusive) = self.sharemode {
+            return Ok(None);
+        }
         let mut nbr_frames = 0;
         unsafe { self.client.GetNextPacketSize(&mut nbr_frames).ok()? };
-        Ok(nbr_frames)
+        Ok(Some(nbr_frames))
     }
 
-    /// Read raw bytes data from a device into a slice
-    pub fn read_from_device(&self, bytes_per_frame: usize, data: &mut [u8]) -> WasapiRes<()> {
+    /// Read raw bytes data from a device into a slice, returns the number of frames read
+    pub fn read_from_device(&self, bytes_per_frame: usize, data: &mut [u8]) -> WasapiRes<u32> {
         let data_len_in_frames = data.len() / bytes_per_frame;
         let mut buffer = mem::MaybeUninit::uninit();
         let mut nbr_frames_returned = 0;
@@ -651,7 +659,10 @@ impl AudioCaptureClient {
                 )
                 .ok()?
         };
-        if data_len_in_frames < nbr_frames_returned as usize {
+        if nbr_frames_returned == 0 {
+            return Ok(0);
+        }
+        if data_len_in_frames != nbr_frames_returned as usize {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
             return Err(WasapiError::new(
                 format!(
@@ -668,7 +679,7 @@ impl AudioCaptureClient {
         data.copy_from_slice(bufferslice);
         unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
         trace!("read {} frames", nbr_frames_returned);
-        Ok(())
+        Ok(nbr_frames_returned)
     }
 
     /// Write raw bytes data to a device from a deque
