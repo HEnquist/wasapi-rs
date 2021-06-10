@@ -561,7 +561,9 @@ pub struct AudioRenderClient {
 }
 
 impl AudioRenderClient {
-    /// Write raw bytes data to a device from a slice
+    /// Write raw bytes data to a device from a slice.
+    /// The number of frames to write should first be checked with the
+    /// `get_available_space_in_frames()` method on the `AudioClient`.
     pub fn write_to_device(
         &self,
         nbr_frames: usize,
@@ -594,7 +596,9 @@ impl AudioRenderClient {
         Ok(())
     }
 
-    /// Write raw bytes data to a device from a deque
+    /// Write raw bytes data to a device from a deque.
+    /// The number of frames to write should first be checked with the
+    /// `get_available_space_in_frames()` method on the `AudioClient`.
     pub fn write_to_device_from_deque(
         &self,
         nbr_frames: usize,
@@ -645,7 +649,7 @@ impl AudioCaptureClient {
 
     /// Read raw bytes from a device into a slice, returns the number of frames read.
     /// The slice must be large enough to hold all data.
-    /// If it is longer that needed, the unused elements wil not be modified.
+    /// If it is longer that needed, the unused elements will not be modified.
     pub fn read_from_device(&self, bytes_per_frame: usize, data: &mut [u8]) -> WasapiRes<u32> {
         let data_len_in_frames = data.len() / bytes_per_frame;
         let mut buffer = mem::MaybeUninit::uninit();
@@ -684,7 +688,7 @@ impl AudioCaptureClient {
         Ok(nbr_frames_returned)
     }
 
-    /// Write raw bytes data to a device from a deque
+    /// Read raw bytes data from a device into a deque.
     pub fn read_from_device_to_deque(
         &self,
         bytes_per_frame: usize,
