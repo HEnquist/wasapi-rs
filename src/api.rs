@@ -643,7 +643,9 @@ impl AudioCaptureClient {
         Ok(Some(nbr_frames))
     }
 
-    /// Read raw bytes data from a device into a slice, returns the number of frames read
+    /// Read raw bytes from a device into a slice, returns the number of frames read.
+    /// The slice must be large enough to hold all data.
+    /// If it is longer that needed, the unused elements wil not be modified.
     pub fn read_from_device(&self, bytes_per_frame: usize, data: &mut [u8]) -> WasapiRes<u32> {
         let data_len_in_frames = data.len() / bytes_per_frame;
         let mut buffer = mem::MaybeUninit::uninit();
@@ -662,11 +664,11 @@ impl AudioCaptureClient {
         if nbr_frames_returned == 0 {
             return Ok(0);
         }
-        if data_len_in_frames != nbr_frames_returned as usize {
+        if data_len_in_frames < nbr_frames_returned as usize {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
             return Err(WasapiError::new(
                 format!(
-                    "Wrong length of data, got {} frames, expected {} frames",
+                    "Wrong length of data, got {} frames, expected at least {} frames",
                     data_len_in_frames, nbr_frames_returned
                 )
                 .as_str(),
@@ -676,7 +678,7 @@ impl AudioCaptureClient {
         let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
         let bufferptr = unsafe { buffer.assume_init() };
         let bufferslice = unsafe { slice::from_raw_parts(bufferptr, len_in_bytes) };
-        data.copy_from_slice(bufferslice);
+        data[..len_in_bytes].copy_from_slice(bufferslice);
         unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
         trace!("read {} frames", nbr_frames_returned);
         Ok(nbr_frames_returned)
