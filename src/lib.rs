@@ -15,10 +15,13 @@
 //! - Audio playback and capture
 //! - Shared and exclusive modes
 //! - Loopback capture
+//! - Notifications for volume change, device disconnect etc
 //!
 //! ## Examples
 //!
 //! - The `playsine` example plays a sine wave in shared mode on the default output device.
+//!
+//! - The `playsine_events` example is similar to `playsine` but also listens to notifications.
 //!
 //! - The `loopback` example shows how to simultaneously capture and render sound, with separate threads for capture and render.
 
@@ -26,12 +29,13 @@
 use Windows::Win32::System::PropertiesSystem::PROPERTYKEY;
 mod api;
 pub use api::*;
+pub use windows::Guid;
 
 #[macro_use]
 extern crate log;
 
 #[allow(non_upper_case_globals)]
-pub const PKEY_Device_FriendlyName: PROPERTYKEY = PROPERTYKEY {
+const PKEY_Device_FriendlyName: PROPERTYKEY = PROPERTYKEY {
     fmtid: windows::Guid::from_values(
         0xA45C254E,
         0xDF1C,
@@ -42,7 +46,7 @@ pub const PKEY_Device_FriendlyName: PROPERTYKEY = PROPERTYKEY {
 };
 
 #[allow(non_upper_case_globals)]
-pub const PKEY_Device_DeviceDesc: PROPERTYKEY = PROPERTYKEY {
+const PKEY_Device_DeviceDesc: PROPERTYKEY = PROPERTYKEY {
     fmtid: windows::Guid::from_values(
         0xA45C254E,
         0xDF1C,
