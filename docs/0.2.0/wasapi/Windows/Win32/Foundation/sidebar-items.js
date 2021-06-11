@@ -1,0 +1,1 @@
+initSidebarItems({"constant":[["E_NOINTERFACE",""],["S_FALSE",""],["S_OK",""]],"struct":[["BOOL",""],["BSTR",""],["FILETIME",""],["HANDLE",""],["PSTR",""],["PWSTR",""]],"type":[["BSTR_abi",""]]});

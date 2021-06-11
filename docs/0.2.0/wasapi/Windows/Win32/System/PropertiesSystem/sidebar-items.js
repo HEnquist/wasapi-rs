@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["PropVariantToStringAlloc",""]],"struct":[["IPropertyStore",""],["PROPERTYKEY",""]]});
