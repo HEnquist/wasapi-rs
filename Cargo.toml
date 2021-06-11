@@ -9,7 +9,7 @@ repository = "https://github.com/HEnquist/wasapi-rs"
 keywords = ["audio", "sound", "windows", "wasapi"]
 categories = ["multimedia::audio", "os::windows-apis"]
 readme = "README.md"
-documentation = "https://henquist.github.io/wasapi-rs/docs/0.1.2/wasapi/"
+documentation = "https://henquist.github.io/wasapi-rs/docs/0.2.0/wasapi/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
