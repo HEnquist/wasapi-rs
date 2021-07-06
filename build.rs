@@ -27,9 +27,9 @@ fn main() {
             WAIT_RETURN_CAUSE,
             WaitForSingleObject,
         },
-        Windows::Win32::Foundation::{BOOL, E_NOINTERFACE, HANDLE, PSTR, PWSTR, S_FALSE, S_OK},
+        Windows::Win32::Foundation::{BOOL, E_NOINTERFACE, HANDLE, PSTR, PWSTR, S_OK},
         Windows::Win32::System::PropertiesSystem::PROPERTYKEY,
-        Windows::Win32::Storage::StructuredStorage::{STGM_READ, PROPVARIANT},
+        Windows::Win32::Storage::StructuredStorage::{STGM_READ},
         Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
     );
 }
