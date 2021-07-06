@@ -280,14 +280,18 @@ impl AudioClient {
                     )
                 }?;
 
-                debug!("format is not supported");
                 let temp_fmt = unsafe { supported_format.assume_init().read() };
+                // Check if anything was written to the waveformatex structure
                 if temp_fmt.cbSize == 0 && temp_fmt.wFormatTag == 0 {
+                    // Nothing was written, thus the format is supported as is
+                    debug!("requested format is directly supported");
                     None
                 } else {
+                    debug!("requested format is not directly supported");
                     let new_fmt = if temp_fmt.cbSize == 22
                         && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
                     {
+                        debug!("got a WAVEFORMATEXTENSIBLE");
                         unsafe {
                             WaveFormat {
                                 wave_fmt: (supported_format.assume_init() as *const _
@@ -296,12 +300,11 @@ impl AudioClient {
                             }
                         }
                     } else {
+                        debug!("got a WAVEFORMATEX, converting..");
                         WaveFormat::from_waveformatex(temp_fmt)?
                     };
                     Some(new_fmt)
-                } //else {
-                  //    return Err(WasapiError::new("Unsupported format").into());
-                  //}
+                }
             }
         };
         Ok(supported)
