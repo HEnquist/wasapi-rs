@@ -1,6 +1,6 @@
 use crate::{
     PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
-    Windows::Win32::Foundation::{BOOL, E_NOINTERFACE, HANDLE, PSTR, PWSTR, S_FALSE, S_OK},
+    Windows::Win32::Foundation::{BOOL, E_NOINTERFACE, HANDLE, PSTR, PWSTR, S_OK},
     Windows::Win32::Media::Audio::CoreAudio::{
         eCapture, eConsole, eRender, AudioSessionDisconnectReason, AudioSessionState,
         AudioSessionStateActive, AudioSessionStateExpired, AudioSessionStateInactive,
@@ -18,7 +18,6 @@ use crate::{
         KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVEFORMATEX,
         WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_PCM,
     },
-    Windows::Win32::Storage::StructuredStorage::PROPVARIANT,
     Windows::Win32::Storage::StructuredStorage::STGM_READ,
     Windows::Win32::System::Com::CLSCTX_ALL,
     Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
@@ -91,21 +90,22 @@ pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
         Direction::Capture => eCapture,
         Direction::Render => eRender,
     };
-    let mut device = None;
+
     let enumerator: IMMDeviceEnumerator = windows::create_instance(&MMDeviceEnumerator)?;
-    unsafe {
-        enumerator
-            .GetDefaultAudioEndpoint(dir, eConsole, &mut device)
-            .ok()?;
-        debug!("default device {:?}", device);
-    }
-    match device {
-        Some(dev) => Ok(Device {
-            device: dev,
-            direction: direction.clone(),
-        }),
-        None => Err(WasapiError::new("Failed to get default device").into()),
-    }
+    let device = unsafe { enumerator.GetDefaultAudioEndpoint(dir, eConsole)? };
+    debug!("default device {:?}", device);
+
+    //match device {
+    //    Some(dev) => Ok(Device {
+    //        device: dev,
+    //        direction: direction.clone(),
+    //    }),
+    //    None => Err(WasapiError::new("Failed to get default device").into()),
+    //}
+    Ok(Device {
+        device,
+        direction: direction.clone(),
+    })
 }
 
 /// Struct wrapping an IMMDeviceCollection.
@@ -122,45 +122,31 @@ impl DeviceCollection {
             Direction::Render => eRender,
         };
         let enumerator: IMMDeviceEnumerator = windows::create_instance(&MMDeviceEnumerator)?;
-        let mut devs = None;
-        unsafe {
-            enumerator
-                .EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE, &mut devs)
-                .ok()?;
-        }
-        match devs {
-            Some(collection) => Ok(DeviceCollection {
-                collection,
-                direction: direction.clone(),
-            }),
-            None => Err(WasapiError::new("Failed to get devices").into()),
-        }
+        let devs = unsafe { enumerator.EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE)? };
+        Ok(DeviceCollection {
+            collection: devs,
+            direction: direction.clone(),
+        })
     }
 
     /// Get the number of devices in an IMMDeviceCollection
     pub fn get_nbr_devices(&self) -> WasapiRes<u32> {
-        let mut count = 0;
-        unsafe { self.collection.GetCount(&mut count).ok()? };
+        let count = unsafe { self.collection.GetCount()? };
         Ok(count)
     }
 
     /// Get a device from an IMMDeviceCollection using index
     pub fn get_device_at_index(&self, idx: u32) -> WasapiRes<Device> {
-        let mut dev = None;
-        unsafe { self.collection.Item(idx, &mut dev).ok()? };
-        match dev {
-            Some(device) => Ok(Device {
-                device,
-                direction: self.direction.clone(),
-            }),
-            None => Err(WasapiError::new("Failed to get device").into()),
-        }
+        let device = unsafe { self.collection.Item(idx)? };
+        Ok(Device {
+            device,
+            direction: self.direction.clone(),
+        })
     }
 
     /// Get a device from an IMMDeviceCollection using name
     pub fn get_device_with_name(&self, name: &str) -> WasapiRes<Device> {
-        let mut count = 0;
-        unsafe { self.collection.GetCount(&mut count).ok()? };
+        let count = unsafe { self.collection.GetCount()? };
         trace!("nbr devices {}", count);
         for n in 0..count {
             let device = self.get_device_at_index(n)?;
@@ -184,14 +170,12 @@ impl Device {
     pub fn get_iaudioclient(&self) -> WasapiRes<AudioClient> {
         let mut audio_client: mem::MaybeUninit<IAudioClient> = mem::MaybeUninit::zeroed();
         unsafe {
-            self.device
-                .Activate(
-                    &IAudioClient::IID,
-                    CLSCTX_ALL.0,
-                    ptr::null_mut(),
-                    audio_client.as_mut_ptr() as *mut _,
-                )
-                .ok()?;
+            self.device.Activate(
+                &IAudioClient::IID,
+                CLSCTX_ALL.0,
+                ptr::null_mut(),
+                audio_client.as_mut_ptr() as *mut _,
+            )?;
             Ok(AudioClient {
                 client: audio_client.assume_init(),
                 direction: self.direction.clone(),
@@ -202,32 +186,16 @@ impl Device {
 
     /// Read state from an IMMDevice
     pub fn get_state(&self) -> WasapiRes<u32> {
-        let mut state: u32 = 0;
-        unsafe {
-            self.device.GetState(&mut state).ok()?;
-        }
+        let state: u32 = unsafe { self.device.GetState()? };
         trace!("state: {:?}", state);
         Ok(state)
     }
 
     /// Read the FriendlyName of an IMMDevice
     pub fn get_friendlyname(&self) -> WasapiRes<String> {
-        let mut store = None;
-        unsafe {
-            self.device
-                .OpenPropertyStore(STGM_READ as u32, &mut store)
-                .ok()?;
-        }
-        let mut prop: mem::MaybeUninit<PROPVARIANT> = mem::MaybeUninit::zeroed();
-        let mut propstr = PWSTR::NULL;
-        let store = store.ok_or("Failed to get store")?;
-        unsafe {
-            store
-                .GetValue(&PKEY_Device_FriendlyName, prop.as_mut_ptr())
-                .ok()?;
-            let prop = prop.assume_init();
-            PropVariantToStringAlloc(&prop, &mut propstr).ok()?;
-        }
+        let store = unsafe { self.device.OpenPropertyStore(STGM_READ as u32)? };
+        let prop = unsafe { store.GetValue(&PKEY_Device_FriendlyName)? };
+        let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
         let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
         let name = wide_name.to_string_lossy();
         trace!("name: {}", name);
@@ -236,22 +204,9 @@ impl Device {
 
     /// Read the Description of an IMMDevice
     pub fn get_description(&self) -> WasapiRes<String> {
-        let mut store = None;
-        unsafe {
-            self.device
-                .OpenPropertyStore(STGM_READ as u32, &mut store)
-                .ok()?;
-        }
-        let mut prop: mem::MaybeUninit<PROPVARIANT> = mem::MaybeUninit::zeroed();
-        let mut propstr = PWSTR::NULL;
-        let store = store.ok_or("Failed to get store")?;
-        unsafe {
-            store
-                .GetValue(&PKEY_Device_DeviceDesc, prop.as_mut_ptr())
-                .ok()?;
-            let prop = prop.assume_init();
-            PropVariantToStringAlloc(&prop, &mut propstr).ok()?;
-        }
+        let store = unsafe { self.device.OpenPropertyStore(STGM_READ as u32)? };
+        let prop = unsafe { store.GetValue(&PKEY_Device_DeviceDesc)? };
+        let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
         let wide_desc = unsafe { U16CString::from_ptr_str(propstr.0) };
         let desc = wide_desc.to_string_lossy();
         trace!("description: {}", desc);
@@ -260,10 +215,7 @@ impl Device {
 
     /// Get the Id of an IMMDevice
     pub fn get_id(&self) -> WasapiRes<String> {
-        let mut idstr = PWSTR::NULL;
-        unsafe {
-            self.device.GetId(&mut idstr).ok()?;
-        }
+        let idstr = unsafe { self.device.GetId()? };
         let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
         let id = wide_id.to_string_lossy();
         trace!("id: {}", id);
@@ -282,7 +234,7 @@ impl AudioClient {
     /// Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
         let mut mix_format: mem::MaybeUninit<*mut WAVEFORMATEX> = mem::MaybeUninit::zeroed();
-        unsafe { self.client.GetMixFormat(mix_format.as_mut_ptr()).ok()? };
+        unsafe { self.client.GetMixFormat(mix_format.as_mut_ptr())? };
         let temp_fmt = unsafe { mix_format.assume_init().read() };
         let mix_format = if temp_fmt.cbSize == 22
             && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
@@ -309,36 +261,37 @@ impl AudioClient {
         let supported = match sharemode {
             ShareMode::Exclusive => {
                 unsafe {
-                    self.client
-                        .IsFormatSupported(
-                            AUDCLNT_SHAREMODE_EXCLUSIVE,
-                            wave_fmt.as_waveformatex_ptr(),
-                            ptr::null_mut(),
-                        )
-                        .ok()?
+                    self.client.IsFormatSupported(
+                        AUDCLNT_SHAREMODE_EXCLUSIVE,
+                        wave_fmt.as_waveformatex_ptr(),
+                        ptr::null_mut(),
+                    )?
                 };
                 None
             }
             ShareMode::Shared => {
                 let mut supported_format: mem::MaybeUninit<*mut WAVEFORMATEX> =
                     mem::MaybeUninit::zeroed();
-                let res = unsafe {
+                unsafe {
                     self.client.IsFormatSupported(
                         AUDCLNT_SHAREMODE_SHARED,
                         wave_fmt.as_waveformatex_ptr(),
                         supported_format.as_mut_ptr(),
                     )
-                };
-                res.ok()?;
-                if res == S_OK {
-                    debug!("format is supported");
+                }?;
+
+                let temp_fmt = unsafe { supported_format.assume_init().read() };
+                // Check if anything was written to the waveformatex structure
+                if temp_fmt.cbSize == 0 && temp_fmt.wFormatTag == 0 {
+                    // Nothing was written, thus the format is supported as is
+                    debug!("requested format is directly supported");
                     None
-                } else if res == S_FALSE {
-                    debug!("format is not supported");
-                    let temp_fmt = unsafe { supported_format.assume_init().read() };
+                } else {
+                    debug!("requested format is not directly supported");
                     let new_fmt = if temp_fmt.cbSize == 22
                         && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
                     {
+                        debug!("got a WAVEFORMATEXTENSIBLE");
                         unsafe {
                             WaveFormat {
                                 wave_fmt: (supported_format.assume_init() as *const _
@@ -347,11 +300,10 @@ impl AudioClient {
                             }
                         }
                     } else {
+                        debug!("got a WAVEFORMATEX, converting..");
                         WaveFormat::from_waveformatex(temp_fmt)?
                     };
                     Some(new_fmt)
-                } else {
-                    return Err(WasapiError::new("Unsupported format").into());
                 }
             }
         };
@@ -362,11 +314,7 @@ impl AudioClient {
     pub fn get_periods(&self) -> WasapiRes<(i64, i64)> {
         let mut def_time = 0;
         let mut min_time = 0;
-        unsafe {
-            self.client
-                .GetDevicePeriod(&mut def_time, &mut min_time)
-                .ok()?
-        };
+        unsafe { self.client.GetDevicePeriod(&mut def_time, &mut min_time)? };
         trace!("default period {}, min period {}", def_time, min_time);
         Ok((def_time, min_time))
     }
@@ -403,16 +351,14 @@ impl AudioClient {
         };
         self.sharemode = Some(sharemode.clone());
         unsafe {
-            self.client
-                .Initialize(
-                    mode,
-                    streamflags,
-                    period,
-                    period,
-                    wavefmt.as_waveformatex_ptr(),
-                    std::ptr::null(),
-                )
-                .ok()?;
+            self.client.Initialize(
+                mode,
+                streamflags,
+                period,
+                period,
+                wavefmt.as_waveformatex_ptr(),
+                std::ptr::null(),
+            )?;
         }
         Ok(())
     }
@@ -420,14 +366,13 @@ impl AudioClient {
     /// Create an return an event handle for an IAudioClient
     pub fn set_get_eventhandle(&self) -> WasapiRes<Handle> {
         let h_event = unsafe { CreateEventA(std::ptr::null_mut(), false, false, PSTR::default()) };
-        unsafe { self.client.SetEventHandle(h_event).ok()? };
+        unsafe { self.client.SetEventHandle(h_event)? };
         Ok(Handle { handle: h_event })
     }
 
     /// Get buffer size in frames
     pub fn get_bufferframecount(&self) -> WasapiRes<u32> {
-        let mut buffer_frame_count = 0;
-        unsafe { self.client.GetBufferSize(&mut buffer_frame_count).ok()? };
+        let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
         trace!("buffer_frame_count {}", buffer_frame_count);
         Ok(buffer_frame_count)
     }
@@ -435,8 +380,7 @@ impl AudioClient {
     /// Get current padding in frames.
     /// This represents the number of frames currently in the buffer, for both capture and render devices.
     pub fn get_current_padding(&self) -> WasapiRes<u32> {
-        let mut padding_count = 0;
-        unsafe { self.client.GetCurrentPadding(&mut padding_count).ok()? };
+        let padding_count = unsafe { self.client.GetCurrentPadding()? };
         trace!("padding_count {}", padding_count);
         Ok(padding_count)
     }
@@ -446,16 +390,14 @@ impl AudioClient {
     pub fn get_available_space_in_frames(&self) -> WasapiRes<u32> {
         let frames = match self.sharemode {
             Some(ShareMode::Exclusive) => {
-                let mut buffer_frame_count = 0;
-                unsafe { self.client.GetBufferSize(&mut buffer_frame_count).ok()? };
+                let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
                 trace!("buffer_frame_count {}", buffer_frame_count);
                 buffer_frame_count
             }
             Some(ShareMode::Shared) => {
-                let mut padding_count = 0;
-                let mut buffer_frame_count = 0;
-                unsafe { self.client.GetBufferSize(&mut buffer_frame_count).ok()? };
-                unsafe { self.client.GetCurrentPadding(&mut padding_count).ok()? };
+                let padding_count = unsafe { self.client.GetCurrentPadding()? };
+                let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
+
                 buffer_frame_count - padding_count
             }
             _ => return Err(WasapiError::new("Client has not been initialized").into()),
@@ -465,19 +407,19 @@ impl AudioClient {
 
     /// Start the stream on an IAudioClient
     pub fn start_stream(&self) -> WasapiRes<()> {
-        unsafe { self.client.Start().ok()? };
+        unsafe { self.client.Start()? };
         Ok(())
     }
 
     /// Stop the stream on an IAudioClient
     pub fn stop_stream(&self) -> WasapiRes<()> {
-        unsafe { self.client.Stop().ok()? };
+        unsafe { self.client.Stop()? };
         Ok(())
     }
 
     /// Reset the stream on an IAudioClient
     pub fn reset_stream(&self) -> WasapiRes<()> {
-        unsafe { self.client.Reset().ok()? };
+        unsafe { self.client.Reset()? };
         Ok(())
     }
 
@@ -528,8 +470,7 @@ pub enum SessionState {
 impl AudioSessionControl {
     /// Get the current state
     pub fn get_state(&self) -> WasapiRes<SessionState> {
-        let mut state = AudioSessionStateActive;
-        unsafe { self.control.GetState(&mut state).ok()? };
+        let state = unsafe { self.control.GetState()? };
         #[allow(non_upper_case_globals)]
         let sessionstate = match state {
             AudioSessionStateActive => SessionState::Active,
@@ -546,7 +487,7 @@ impl AudioSessionControl {
     pub fn register_session_notification(&self, callbacks: &mut EventCallbacks) -> WasapiRes<()> {
         let events = AudioSessionEvents::new(callbacks);
 
-        match unsafe { self.control.RegisterAudioSessionNotification(events).ok() } {
+        match unsafe { self.control.RegisterAudioSessionNotification(events) } {
             Ok(()) => Ok(()),
             Err(err) => {
                 Err(WasapiError::new(&format!("Failed to register notifications, {}", err)).into())
@@ -585,13 +526,12 @@ impl AudioRenderClient {
         let mut buffer = mem::MaybeUninit::uninit();
         unsafe {
             self.client
-                .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr())
-                .ok()?
+                .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr())?
         };
         let bufferptr = unsafe { buffer.assume_init() };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         bufferslice.copy_from_slice(data);
-        unsafe { self.client.ReleaseBuffer(nbr_frames as u32, 0).ok()? };
+        unsafe { self.client.ReleaseBuffer(nbr_frames as u32, 0)? };
         trace!("wrote {} frames", nbr_frames);
         Ok(())
     }
@@ -615,15 +555,14 @@ impl AudioRenderClient {
         let mut buffer = mem::MaybeUninit::uninit();
         unsafe {
             self.client
-                .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr())
-                .ok()?
+                .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr())?
         };
         let bufferptr = unsafe { buffer.assume_init() };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         for element in bufferslice.iter_mut() {
             *element = data.pop_front().unwrap();
         }
-        unsafe { self.client.ReleaseBuffer(nbr_frames as u32, 0).ok()? };
+        unsafe { self.client.ReleaseBuffer(nbr_frames as u32, 0)? };
         trace!("wrote {} frames", nbr_frames);
         Ok(())
     }
@@ -642,8 +581,7 @@ impl AudioCaptureClient {
         if let Some(ShareMode::Exclusive) = self.sharemode {
             return Ok(None);
         }
-        let mut nbr_frames = 0;
-        unsafe { self.client.GetNextPacketSize(&mut nbr_frames).ok()? };
+        let nbr_frames = unsafe { self.client.GetNextPacketSize()? };
         Ok(Some(nbr_frames))
     }
 
@@ -655,21 +593,19 @@ impl AudioCaptureClient {
         let mut buffer = mem::MaybeUninit::uninit();
         let mut nbr_frames_returned = 0;
         unsafe {
-            self.client
-                .GetBuffer(
-                    buffer.as_mut_ptr(),
-                    &mut nbr_frames_returned,
-                    &mut 0,
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                )
-                .ok()?
+            self.client.GetBuffer(
+                buffer.as_mut_ptr(),
+                &mut nbr_frames_returned,
+                &mut 0,
+                ptr::null_mut(),
+                ptr::null_mut(),
+            )?
         };
         if nbr_frames_returned == 0 {
             return Ok(0);
         }
         if data_len_in_frames < nbr_frames_returned as usize {
-            unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
+            unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
             return Err(WasapiError::new(
                 format!(
                     "Wrong length of data, got {} frames, expected at least {} frames",
@@ -683,7 +619,7 @@ impl AudioCaptureClient {
         let bufferptr = unsafe { buffer.assume_init() };
         let bufferslice = unsafe { slice::from_raw_parts(bufferptr, len_in_bytes) };
         data[..len_in_bytes].copy_from_slice(bufferslice);
-        unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
+        unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
         trace!("read {} frames", nbr_frames_returned);
         Ok(nbr_frames_returned)
     }
@@ -697,15 +633,13 @@ impl AudioCaptureClient {
         let mut buffer = mem::MaybeUninit::uninit();
         let mut nbr_frames_returned = 0;
         unsafe {
-            self.client
-                .GetBuffer(
-                    buffer.as_mut_ptr(),
-                    &mut nbr_frames_returned,
-                    &mut 0,
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                )
-                .ok()?
+            self.client.GetBuffer(
+                buffer.as_mut_ptr(),
+                &mut nbr_frames_returned,
+                &mut 0,
+                ptr::null_mut(),
+                ptr::null_mut(),
+            )?
         };
         let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
         let bufferptr = unsafe { buffer.assume_init() };
@@ -713,7 +647,7 @@ impl AudioCaptureClient {
         for element in bufferslice.iter() {
             data.push_back(*element);
         }
-        unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
+        unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
         trace!("read {} frames", nbr_frames_returned);
         Ok(())
     }
