@@ -21,7 +21,8 @@ use crate::{
     Windows::Win32::Storage::StructuredStorage::STGM_READ,
     Windows::Win32::System::Com::CLSCTX_ALL,
     Windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
+        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+        COINIT_MULTITHREADED,
     },
     Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
     Windows::Win32::System::Threading::{CreateEventA, WaitForSingleObject, WAIT_OBJECT_0},
@@ -66,9 +67,14 @@ impl WasapiError {
     }
 }
 
-/// Helper to initialize COM in multithreaded mode
+/// Initializes COM for use by the calling thread for the multi-threaded apartment (MTA).
 pub fn initialize_mta() -> Result<(), windows::Error> {
     unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_MULTITHREADED) }
+}
+
+/// Initializes COM for use by the calling thread for a single-threaded apartment (STA).
+pub fn initialize_sta() -> Result<(), windows::Error> {
+    unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_APARTMENTTHREADED) }
 }
 
 /// Audio direction, playback or capture.
