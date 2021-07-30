@@ -20,6 +20,9 @@ use crate::{
     },
     Windows::Win32::Storage::StructuredStorage::STGM_READ,
     Windows::Win32::System::Com::CLSCTX_ALL,
+    Windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
+    },
     Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
     Windows::Win32::System::Threading::{CreateEventA, WaitForSingleObject, WAIT_OBJECT_0},
 };
@@ -63,6 +66,11 @@ impl WasapiError {
     }
 }
 
+/// Helper to initialize COM in multithreaded mode
+pub fn initialize_mta() -> Result<(), windows::Error> {
+    unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_MULTITHREADED) }
+}
+
 /// Audio direction, playback or capture.
 #[derive(Clone)]
 pub enum Direction {
@@ -91,7 +99,8 @@ pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
         Direction::Render => eRender,
     };
 
-    let enumerator: IMMDeviceEnumerator = windows::create_instance(&MMDeviceEnumerator)?;
+    let enumerator: IMMDeviceEnumerator =
+        unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_INPROC_SERVER)? };
     let device = unsafe { enumerator.GetDefaultAudioEndpoint(dir, eConsole)? };
     debug!("default device {:?}", device);
 
@@ -121,7 +130,8 @@ impl DeviceCollection {
             Direction::Capture => eCapture,
             Direction::Render => eRender,
         };
-        let enumerator: IMMDeviceEnumerator = windows::create_instance(&MMDeviceEnumerator)?;
+        let enumerator: IMMDeviceEnumerator =
+            unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_INPROC_SERVER)? };
         let devs = unsafe { enumerator.EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE)? };
         Ok(DeviceCollection {
             collection: devs,

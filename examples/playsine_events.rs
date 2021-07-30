@@ -1,6 +1,5 @@
 use std::f64::consts::PI;
 use wasapi::*;
-use windows::initialize_mta;
 
 #[macro_use]
 extern crate log;
