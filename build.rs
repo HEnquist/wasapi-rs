@@ -31,5 +31,7 @@ fn main() {
         Windows::Win32::System::PropertiesSystem::PROPERTYKEY,
         Windows::Win32::Storage::StructuredStorage::{STGM_READ},
         Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
+        Windows::Win32::System::Com::CoCreateInstance,
+        Windows::Win32::System::Com::CoInitializeEx,
     );
 }

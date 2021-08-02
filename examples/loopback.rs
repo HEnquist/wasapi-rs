@@ -3,7 +3,6 @@ use std::error;
 use std::sync::mpsc;
 use std::thread;
 use wasapi::*;
-use windows::initialize_mta;
 
 #[macro_use]
 extern crate log;
@@ -145,6 +144,7 @@ fn main() -> Res<()> {
     );
 
     initialize_mta()?;
+
     let (tx_play, rx_play): (
         std::sync::mpsc::SyncSender<Vec<u8>>,
         std::sync::mpsc::Receiver<Vec<u8>>,
