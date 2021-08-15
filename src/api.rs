@@ -285,37 +285,35 @@ impl AudioClient {
                 None
             }
             ShareMode::Shared => {
-                let mut supported_format: mem::MaybeUninit<*mut WAVEFORMATEX> =
-                    mem::MaybeUninit::zeroed();
+                let mut supported_format: *mut WAVEFORMATEX = ptr::null_mut();
                 unsafe {
                     self.client.IsFormatSupported(
                         AUDCLNT_SHAREMODE_SHARED,
                         wave_fmt.as_waveformatex_ptr(),
-                        supported_format.as_mut_ptr(),
+                        &mut supported_format,
                     )
                 }?;
-
-                let temp_fmt = unsafe { supported_format.assume_init().read() };
-                // Check if anything was written to the waveformatex structure
-                if temp_fmt.cbSize == 0 && temp_fmt.wFormatTag == 0 {
-                    // Nothing was written, thus the format is supported as is
+                // Check if we got a pointer to a WAVEFORMATEX structure.
+                if supported_format.is_null() {
+                    // The pointer is still null, thus the format is supported as is.
                     debug!("requested format is directly supported");
                     None
                 } else {
+                    // Read the structure
+                    let temp_fmt: WAVEFORMATEX = unsafe { supported_format.read() };
                     debug!("requested format is not directly supported");
                     let new_fmt = if temp_fmt.cbSize == 22
                         && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
                     {
-                        debug!("got a WAVEFORMATEXTENSIBLE");
-                        unsafe {
-                            WaveFormat {
-                                wave_fmt: (supported_format.assume_init() as *const _
-                                    as *const WAVEFORMATEXTENSIBLE)
-                                    .read(),
-                            }
+                        debug!("got the supported format as a WAVEFORMATEXTENSIBLE");
+                        let temp_fmt_ext: WAVEFORMATEXTENSIBLE = unsafe {
+                            (supported_format as *const _ as *const WAVEFORMATEXTENSIBLE).read()
+                        };
+                        WaveFormat {
+                            wave_fmt: temp_fmt_ext,
                         }
                     } else {
-                        debug!("got a WAVEFORMATEX, converting..");
+                        debug!("got the supported format as a WAVEFORMATEX, converting..");
                         WaveFormat::from_waveformatex(temp_fmt)?
                     };
                     Some(new_fmt)
