@@ -37,6 +37,7 @@ use windows::Guid;
 use windows::IUnknown;
 use windows::Interface;
 use windows::HRESULT;
+use windows::implement;
 
 type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
@@ -248,15 +249,14 @@ pub struct AudioClient {
 impl AudioClient {
     /// Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
-        let mut mix_format: mem::MaybeUninit<*mut WAVEFORMATEX> = mem::MaybeUninit::zeroed();
-        unsafe { self.client.GetMixFormat(mix_format.as_mut_ptr())? };
-        let temp_fmt = unsafe { mix_format.assume_init().read() };
+        let temp_fmt_ptr = unsafe { self.client.GetMixFormat()? };
+        let temp_fmt = unsafe {*temp_fmt_ptr};
         let mix_format = if temp_fmt.cbSize == 22
             && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
         {
             unsafe {
                 WaveFormat {
-                    wave_fmt: (mix_format.assume_init() as *const _ as *const WAVEFORMATEXTENSIBLE)
+                    wave_fmt: (temp_fmt_ptr as *const _ as *const WAVEFORMATEXTENSIBLE)
                         .read(),
                 }
             }
@@ -279,18 +279,15 @@ impl AudioClient {
                     self.client.IsFormatSupported(
                         AUDCLNT_SHAREMODE_EXCLUSIVE,
                         wave_fmt.as_waveformatex_ptr(),
-                        ptr::null_mut(),
                     )?
                 };
                 None
             }
             ShareMode::Shared => {
-                let mut supported_format: *mut WAVEFORMATEX = ptr::null_mut();
-                unsafe {
+                let supported_format = unsafe {
                     self.client.IsFormatSupported(
                         AUDCLNT_SHAREMODE_SHARED,
                         wave_fmt.as_waveformatex_ptr(),
-                        &mut supported_format,
                     )
                 }?;
                 // Check if we got a pointer to a WAVEFORMATEX structure.
@@ -536,12 +533,10 @@ impl AudioRenderClient {
             )
             .into());
         }
-        let mut buffer = mem::MaybeUninit::uninit();
-        unsafe {
+        let bufferptr = unsafe {
             self.client
-                .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr())?
+                .GetBuffer(nbr_frames as u32)?
         };
-        let bufferptr = unsafe { buffer.assume_init() };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         bufferslice.copy_from_slice(data);
         unsafe { self.client.ReleaseBuffer(nbr_frames as u32, 0)? };
@@ -565,12 +560,10 @@ impl AudioRenderClient {
             )
             .into());
         }
-        let mut buffer = mem::MaybeUninit::uninit();
-        unsafe {
+        let bufferptr = unsafe {
             self.client
-                .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr())?
+                .GetBuffer(nbr_frames as u32)?
         };
-        let bufferptr = unsafe { buffer.assume_init() };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         for element in bufferslice.iter_mut() {
             *element = data.pop_front().unwrap();
@@ -938,6 +931,7 @@ pub enum DisconnectReason {
 }
 
 /// Wrapper for IAudioSessionEvents
+//#[implement(Windows::Win32::Media::Audio::CoreAudio::IAudioSessionEvents)]
 struct AudioSessionEvents<'a> {
     _abi: Box<IAudioSessionEvents_abi>,
     ref_cnt: u32,
