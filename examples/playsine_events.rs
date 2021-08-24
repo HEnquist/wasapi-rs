@@ -1,5 +1,6 @@
 use std::f64::consts::PI;
 use wasapi::*;
+use std::rc::Rc;
 
 #[macro_use]
 extern crate log;
@@ -74,10 +75,8 @@ fn main() {
 
     let mut callbacks = EventCallbacks::new();
 
-    let mut prev_vol = 0.0;
     callbacks.set_simple_volume_callback(move |vol, mute, _guid| {
-        println!("New simple volume {} -> {}, mute {}", prev_vol, vol, mute);
-        prev_vol = vol;
+        println!("New simple volume {}, mute {}", vol, mute);
     });
     callbacks.set_state_callback(|state| println!("New state: {:?}", state));
     callbacks.set_channel_volume_callback(|index, vol, _guid| {
@@ -85,9 +84,12 @@ fn main() {
     });
     callbacks.set_disconnected_callback(|reason| println!("Disconnected, reason: {:?}", reason));
 
+    let callbacks_rc = Rc::new(callbacks);
+    let callbacks_weak = Rc::downgrade(&callbacks_rc);
+
     let sessioncontrol = audio_client.get_audiosessioncontrol().unwrap();
     sessioncontrol
-        .register_session_notification(&mut callbacks)
+        .register_session_notification(callbacks_weak)
         .unwrap();
 
     audio_client.start_stream().unwrap();
