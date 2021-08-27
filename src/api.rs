@@ -1,6 +1,6 @@
 use crate::{
     PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
-    Windows::Win32::Foundation::{BOOL, E_NOINTERFACE, HANDLE, PSTR, PWSTR, S_OK},
+    Windows::Win32::Foundation::{BOOL, HANDLE, PSTR, PWSTR, S_OK},
     Windows::Win32::Media::Audio::CoreAudio::{
         eCapture, eConsole, eRender, AudioSessionDisconnectReason, AudioSessionState,
         AudioSessionStateActive, AudioSessionStateExpired, AudioSessionStateInactive,
@@ -8,7 +8,7 @@ use crate::{
         DisconnectReasonFormatChanged, DisconnectReasonServerShutdown,
         DisconnectReasonSessionDisconnected, DisconnectReasonSessionLogoff, IAudioCaptureClient,
         IAudioClient, IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents,
-        IAudioSessionEvents_abi, IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator,
+        IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator,
         MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
         AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
@@ -32,11 +32,13 @@ use std::fmt;
 use std::mem;
 use std::ptr;
 use std::slice;
+use std::rc::Weak;
 use widestring::U16CString;
 use windows::Guid;
-use windows::IUnknown;
 use windows::Interface;
 use windows::HRESULT;
+use windows::implement;
+use crate::Windows;
 
 type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
@@ -248,15 +250,14 @@ pub struct AudioClient {
 impl AudioClient {
     /// Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
-        let mut mix_format: mem::MaybeUninit<*mut WAVEFORMATEX> = mem::MaybeUninit::zeroed();
-        unsafe { self.client.GetMixFormat(mix_format.as_mut_ptr())? };
-        let temp_fmt = unsafe { mix_format.assume_init().read() };
+        let temp_fmt_ptr = unsafe { self.client.GetMixFormat()? };
+        let temp_fmt = unsafe {*temp_fmt_ptr};
         let mix_format = if temp_fmt.cbSize == 22
             && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
         {
             unsafe {
                 WaveFormat {
-                    wave_fmt: (mix_format.assume_init() as *const _ as *const WAVEFORMATEXTENSIBLE)
+                    wave_fmt: (temp_fmt_ptr as *const _ as *const WAVEFORMATEXTENSIBLE)
                         .read(),
                 }
             }
@@ -279,43 +280,38 @@ impl AudioClient {
                     self.client.IsFormatSupported(
                         AUDCLNT_SHAREMODE_EXCLUSIVE,
                         wave_fmt.as_waveformatex_ptr(),
-                        ptr::null_mut(),
                     )?
                 };
                 None
             }
             ShareMode::Shared => {
-                let mut supported_format: mem::MaybeUninit<*mut WAVEFORMATEX> =
-                    mem::MaybeUninit::zeroed();
-                unsafe {
+                let supported_format = unsafe {
                     self.client.IsFormatSupported(
                         AUDCLNT_SHAREMODE_SHARED,
                         wave_fmt.as_waveformatex_ptr(),
-                        supported_format.as_mut_ptr(),
                     )
                 }?;
-
-                let temp_fmt = unsafe { supported_format.assume_init().read() };
-                // Check if anything was written to the waveformatex structure
-                if temp_fmt.cbSize == 0 && temp_fmt.wFormatTag == 0 {
-                    // Nothing was written, thus the format is supported as is
+                // Check if we got a pointer to a WAVEFORMATEX structure.
+                if supported_format.is_null() {
+                    // The pointer is still null, thus the format is supported as is.
                     debug!("requested format is directly supported");
                     None
                 } else {
+                    // Read the structure
+                    let temp_fmt: WAVEFORMATEX = unsafe { supported_format.read() };
                     debug!("requested format is not directly supported");
                     let new_fmt = if temp_fmt.cbSize == 22
                         && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
                     {
-                        debug!("got a WAVEFORMATEXTENSIBLE");
-                        unsafe {
-                            WaveFormat {
-                                wave_fmt: (supported_format.assume_init() as *const _
-                                    as *const WAVEFORMATEXTENSIBLE)
-                                    .read(),
-                            }
+                        debug!("got the supported format as a WAVEFORMATEXTENSIBLE");
+                        let temp_fmt_ext: WAVEFORMATEXTENSIBLE = unsafe {
+                            (supported_format as *const _ as *const WAVEFORMATEXTENSIBLE).read()
+                        };
+                        WaveFormat {
+                            wave_fmt: temp_fmt_ext,
                         }
                     } else {
-                        debug!("got a WAVEFORMATEX, converting..");
+                        debug!("got the supported format as a WAVEFORMATEX, converting..");
                         WaveFormat::from_waveformatex(temp_fmt)?
                     };
                     Some(new_fmt)
@@ -499,8 +495,8 @@ impl AudioSessionControl {
     }
 
     /// Register to receive notifications
-    pub fn register_session_notification(&self, callbacks: &mut EventCallbacks) -> WasapiRes<()> {
-        let events = AudioSessionEvents::new(callbacks);
+    pub fn register_session_notification(&self, callbacks: Weak<EventCallbacks>) -> WasapiRes<()> {
+        let events: IAudioSessionEvents = AudioSessionEvents::new(callbacks).into();
 
         match unsafe { self.control.RegisterAudioSessionNotification(events) } {
             Ok(()) => Ok(()),
@@ -538,12 +534,10 @@ impl AudioRenderClient {
             )
             .into());
         }
-        let mut buffer = mem::MaybeUninit::uninit();
-        unsafe {
+        let bufferptr = unsafe {
             self.client
-                .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr())?
+                .GetBuffer(nbr_frames as u32)?
         };
-        let bufferptr = unsafe { buffer.assume_init() };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         bufferslice.copy_from_slice(data);
         unsafe { self.client.ReleaseBuffer(nbr_frames as u32, 0)? };
@@ -567,12 +561,10 @@ impl AudioRenderClient {
             )
             .into());
         }
-        let mut buffer = mem::MaybeUninit::uninit();
-        unsafe {
+        let bufferptr = unsafe {
             self.client
-                .GetBuffer(nbr_frames as u32, buffer.as_mut_ptr())?
+                .GetBuffer(nbr_frames as u32)?
         };
-        let bufferptr = unsafe { buffer.assume_init() };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         for element in bufferslice.iter_mut() {
             *element = data.pop_front().unwrap();
@@ -834,13 +826,13 @@ type OptionBox<T> = Option<Box<T>>;
 
 /// A structure holding the callbacks for notifications
 pub struct EventCallbacks {
-    simple_volume: OptionBox<dyn FnMut(f32, bool, Guid)>,
-    channel_volume: OptionBox<dyn FnMut(usize, f32, Guid)>,
-    state: OptionBox<dyn FnMut(SessionState)>,
-    disconnected: OptionBox<dyn FnMut(DisconnectReason)>,
-    iconpath: OptionBox<dyn FnMut(String, Guid)>,
-    displayname: OptionBox<dyn FnMut(String, Guid)>,
-    groupingparam: OptionBox<dyn FnMut(Guid, Guid)>,
+    simple_volume: OptionBox<dyn Fn(f32, bool, Guid)>,
+    channel_volume: OptionBox<dyn Fn(usize, f32, Guid)>,
+    state: OptionBox<dyn Fn(SessionState)>,
+    disconnected: OptionBox<dyn Fn(DisconnectReason)>,
+    iconpath: OptionBox<dyn Fn(String, Guid)>,
+    displayname: OptionBox<dyn Fn(String, Guid)>,
+    groupingparam: OptionBox<dyn Fn(Guid, Guid)>,
 }
 
 impl Default for EventCallbacks {
@@ -864,7 +856,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnSimpleVolumeChanged notifications
-    pub fn set_simple_volume_callback(&mut self, c: impl FnMut(f32, bool, Guid) + 'static) {
+    pub fn set_simple_volume_callback(&mut self, c: impl Fn(f32, bool, Guid) + 'static) {
         self.simple_volume = Some(Box::new(c));
     }
     /// Remove a callback for OnSimpleVolumeChanged notifications
@@ -873,7 +865,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnChannelVolumeChanged notifications
-    pub fn set_channel_volume_callback(&mut self, c: impl FnMut(usize, f32, Guid) + 'static) {
+    pub fn set_channel_volume_callback(&mut self, c: impl Fn(usize, f32, Guid) + 'static) {
         self.channel_volume = Some(Box::new(c));
     }
     /// Remove a callback for OnChannelVolumeChanged notifications
@@ -882,7 +874,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnSessionDisconnected notifications
-    pub fn set_disconnected_callback(&mut self, c: impl FnMut(DisconnectReason) + 'static) {
+    pub fn set_disconnected_callback(&mut self, c: impl Fn(DisconnectReason) + 'static) {
         self.disconnected = Some(Box::new(c));
     }
     /// Remove a callback for OnSessionDisconnected notifications
@@ -891,7 +883,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnStateChanged notifications
-    pub fn set_state_callback(&mut self, c: impl FnMut(SessionState) + 'static) {
+    pub fn set_state_callback(&mut self, c: impl Fn(SessionState) + 'static) {
         self.state = Some(Box::new(c));
     }
     /// Remove a callback for OnStateChanged notifications
@@ -900,7 +892,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnIconPathChanged notifications
-    pub fn set_iconpath_callback(&mut self, c: impl FnMut(String, Guid) + 'static) {
+    pub fn set_iconpath_callback(&mut self, c: impl Fn(String, Guid) + 'static) {
         self.iconpath = Some(Box::new(c));
     }
     /// Remove a callback for OnIconPathChanged notifications
@@ -909,7 +901,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnDisplayNameChanged notifications
-    pub fn set_displayname_callback(&mut self, c: impl FnMut(String, Guid) + 'static) {
+    pub fn set_displayname_callback(&mut self, c: impl Fn(String, Guid) + 'static) {
         self.displayname = Some(Box::new(c));
     }
     /// Remove a callback for OnDisplayNameChanged notifications
@@ -918,7 +910,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnGroupingParamChanged notifications
-    pub fn set_groupingparam_callback(&mut self, c: impl FnMut(Guid, Guid) + 'static) {
+    pub fn set_groupingparam_callback(&mut self, c: impl Fn(Guid, Guid) + 'static) {
         self.groupingparam = Some(Box::new(c));
     }
     /// Remove a callback for OnGroupingParamChanged notifications
@@ -940,75 +932,22 @@ pub enum DisconnectReason {
 }
 
 /// Wrapper for IAudioSessionEvents
-struct AudioSessionEvents<'a> {
-    _abi: Box<IAudioSessionEvents_abi>,
-    ref_cnt: u32,
-    callbacks: &'a mut EventCallbacks,
+#[implement(Windows::Win32::Media::Audio::CoreAudio::IAudioSessionEvents)]
+struct AudioSessionEvents {
+    callbacks: Weak<EventCallbacks>,
 }
 
-#[allow(dead_code)]
-impl<'a> AudioSessionEvents<'a> {
+#[allow(non_snake_case)]
+impl AudioSessionEvents {
     /// Create a new AudioSessionEvents instance, returned as a IAudioSessionEvent.
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(callbacks: &'a mut EventCallbacks) -> IAudioSessionEvents {
-        let target = Box::new(Self {
-            _abi: Box::new(IAudioSessionEvents_abi(
-                Self::_query_interface,
-                Self::_add_ref,
-                Self::_release,
-                Self::_on_display_name_changed,
-                Self::_on_icon_path_changed,
-                Self::_on_simple_volume_changed,
-                Self::_on_channel_volume_changed,
-                Self::_on_grouping_param_changed,
-                Self::_on_state_changed,
-                Self::_on_session_disconnected,
-            )),
-            ref_cnt: 1,
+    pub fn new(callbacks: Weak<EventCallbacks>) -> Self {
+        Self {
             callbacks,
-        });
-
-        unsafe {
-            let ptr = Box::into_raw(target);
-            mem::transmute(ptr)
         }
     }
 
-    fn query_interface(
-        &mut self,
-        iid: &::windows::Guid,
-        interface: *mut ::windows::RawPtr,
-    ) -> HRESULT {
-        if iid == &IAudioSessionEvents::IID || iid == &IUnknown::IID {
-            unsafe {
-                *interface = self as *mut Self as *mut _;
-            }
-            self.add_ref();
-            S_OK
-        } else {
-            E_NOINTERFACE
-        }
-    }
-
-    fn add_ref(&mut self) -> u32 {
-        self.ref_cnt += 1;
-        self.ref_cnt
-    }
-
-    fn release(&mut self) -> u32 {
-        self.ref_cnt -= 1;
-        let res = self.ref_cnt;
-
-        if res == 0 {
-            unsafe {
-                Box::from_raw(self as *mut Self);
-            }
-        }
-
-        res
-    }
-
-    fn on_state_changed(&mut self, newstate: AudioSessionState) -> HRESULT {
+    fn OnStateChanged(&mut self, newstate: AudioSessionState) -> HRESULT {
         trace!("state change: {:?}", newstate);
         #[allow(non_upper_case_globals)]
         let sessionstate = match newstate {
@@ -1017,13 +956,15 @@ impl<'a> AudioSessionEvents<'a> {
             AudioSessionStateExpired => SessionState::Expired,
             _ => return S_OK,
         };
-        if let Some(callback) = &mut self.callbacks.state {
-            callback(sessionstate);
+        if let Some(callbacks) = &mut self.callbacks.upgrade() {
+            if let Some(callback) = &callbacks.state { 
+                callback(sessionstate);
+            }
         }
         S_OK
     }
 
-    fn on_session_disconnected(
+    fn OnSessionDisconnected(
         &mut self,
         disconnectreason: AudioSessionDisconnectReason,
     ) -> HRESULT {
@@ -1039,13 +980,15 @@ impl<'a> AudioSessionEvents<'a> {
             _ => DisconnectReason::Unknown,
         };
 
-        if let Some(callback) = &mut self.callbacks.disconnected {
-            callback(reason);
+        if let Some(callbacks) = &mut self.callbacks.upgrade() {
+            if let Some(callback) = &callbacks.disconnected {
+                callback(reason);
+            }
         }
         S_OK
     }
 
-    fn on_display_name_changed(
+    fn OnDisplayNameChanged(
         &mut self,
         newdisplayname: PWSTR,
         eventcontext: *const ::windows::Guid,
@@ -1053,14 +996,16 @@ impl<'a> AudioSessionEvents<'a> {
         let wide_name = unsafe { U16CString::from_ptr_str(newdisplayname.0) };
         let name = wide_name.to_string_lossy();
         trace!("New display name: {}", name);
-        if let Some(callback) = &mut self.callbacks.displayname {
-            let context = unsafe { *eventcontext };
-            callback(name, context);
+        if let Some(callbacks) = &mut self.callbacks.upgrade() {
+            if let Some(callback) = &callbacks.displayname {
+                let context = unsafe { *eventcontext };
+                callback(name, context);
+            }
         }
         S_OK
     }
 
-    fn on_icon_path_changed(
+    fn OnIconPathChanged(
         &mut self,
         newiconpath: PWSTR,
         eventcontext: *const ::windows::Guid,
@@ -1068,28 +1013,32 @@ impl<'a> AudioSessionEvents<'a> {
         let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
         let path = wide_path.to_string_lossy();
         trace!("New icon path: {}", path);
-        if let Some(callback) = &mut self.callbacks.iconpath {
-            let context = unsafe { *eventcontext };
-            callback(path, context);
+        if let Some(callbacks) = &mut self.callbacks.upgrade() {
+            if let Some(callback) = &callbacks.iconpath {
+                let context = unsafe { *eventcontext };
+                callback(path, context);
+            }
         }
         S_OK
     }
 
-    fn on_simple_volume_changed(
+    fn OnSimpleVolumeChanged(
         &mut self,
         newvolume: f32,
         newmute: BOOL,
         eventcontext: *const ::windows::Guid,
     ) -> ::windows::HRESULT {
         trace!("New volume: {}, mute: {:?}", newvolume, newmute);
-        if let Some(callback) = &mut self.callbacks.simple_volume {
-            let context = unsafe { *eventcontext };
-            callback(newvolume, bool::from(newmute), context);
+        if let Some(callbacks) = &mut self.callbacks.upgrade() {
+            if let Some(callback) = &callbacks.simple_volume {
+                let context = unsafe { *eventcontext };
+                callback(newvolume, bool::from(newmute), context);
+            }
         }
         S_OK
     }
 
-    fn on_channel_volume_changed(
+    fn OnChannelVolumeChanged(
         &mut self,
         channelcount: u32,
         newchannelvolumearray: *mut f32,
@@ -1100,102 +1049,29 @@ impl<'a> AudioSessionEvents<'a> {
         let volslice =
             unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
         let newvol = volslice[changedchannel as usize];
-        if let Some(callback) = &mut self.callbacks.channel_volume {
-            let context = unsafe { *eventcontext };
-            callback(changedchannel as usize, newvol, context);
+        if let Some(callbacks) = &mut self.callbacks.upgrade() {
+            if let Some(callback) = &callbacks.channel_volume {
+                let context = unsafe { *eventcontext };
+                callback(changedchannel as usize, newvol, context);
+            }
         }
         S_OK
     }
 
-    fn on_grouping_param_changed(
+    fn OnGroupingParamChanged(
         &mut self,
         newgroupingparam: *const ::windows::Guid,
         eventcontext: *const ::windows::Guid,
     ) -> ::windows::HRESULT {
         trace!("Grouping changed");
-        if let Some(callback) = &mut self.callbacks.groupingparam {
-            let context = unsafe { *eventcontext };
-            let grouping = unsafe { *newgroupingparam };
-            callback(grouping, context);
+        if let Some(callbacks) = &mut self.callbacks.upgrade() {
+            if let Some(callback) = &callbacks.groupingparam {
+                let context = unsafe { *eventcontext };
+                let grouping = unsafe { *newgroupingparam };
+                callback(grouping, context);
+            }
         }
         S_OK
     }
 
-    unsafe extern "system" fn _query_interface(
-        this: ::windows::RawPtr,
-        iid: &::windows::Guid,
-        interface: *mut ::windows::RawPtr,
-    ) -> ::windows::HRESULT {
-        (*(this as *mut Self)).query_interface(iid, interface)
-    }
-
-    unsafe extern "system" fn _add_ref(this: ::windows::RawPtr) -> u32 {
-        (*(this as *mut Self)).add_ref()
-    }
-
-    unsafe extern "system" fn _release(this: ::windows::RawPtr) -> u32 {
-        (*(this as *mut Self)).release()
-    }
-
-    unsafe extern "system" fn _on_display_name_changed(
-        this: ::windows::RawPtr,
-        newdisplayname: PWSTR,
-        eventcontext: *const ::windows::Guid,
-    ) -> ::windows::HRESULT {
-        (*(this as *mut Self)).on_display_name_changed(newdisplayname, eventcontext)
-    }
-
-    unsafe extern "system" fn _on_icon_path_changed(
-        this: ::windows::RawPtr,
-        newiconpath: PWSTR,
-        eventcontext: *const ::windows::Guid,
-    ) -> ::windows::HRESULT {
-        (*(this as *mut Self)).on_icon_path_changed(newiconpath, eventcontext)
-    }
-
-    unsafe extern "system" fn _on_simple_volume_changed(
-        this: ::windows::RawPtr,
-        newvolume: f32,
-        newmute: BOOL,
-        eventcontext: *const ::windows::Guid,
-    ) -> ::windows::HRESULT {
-        (*(this as *mut Self)).on_simple_volume_changed(newvolume, newmute, eventcontext)
-    }
-
-    unsafe extern "system" fn _on_channel_volume_changed(
-        this: ::windows::RawPtr,
-        channelcount: u32,
-        newchannelvolumearray: *mut f32,
-        changedchannel: u32,
-        eventcontext: *const ::windows::Guid,
-    ) -> ::windows::HRESULT {
-        (*(this as *mut Self)).on_channel_volume_changed(
-            channelcount,
-            newchannelvolumearray,
-            changedchannel,
-            eventcontext,
-        )
-    }
-
-    unsafe extern "system" fn _on_grouping_param_changed(
-        this: ::windows::RawPtr,
-        newgroupingparam: *const ::windows::Guid,
-        eventcontext: *const ::windows::Guid,
-    ) -> ::windows::HRESULT {
-        (*(this as *mut Self)).on_grouping_param_changed(newgroupingparam, eventcontext)
-    }
-
-    unsafe extern "system" fn _on_state_changed(
-        this: ::windows::RawPtr,
-        newstate: AudioSessionState,
-    ) -> ::windows::HRESULT {
-        (*(this as *mut Self)).on_state_changed(newstate)
-    }
-
-    unsafe extern "system" fn _on_session_disconnected(
-        this: ::windows::RawPtr,
-        disconnectreason: AudioSessionDisconnectReason,
-    ) -> ::windows::HRESULT {
-        (*(this as *mut Self)).on_session_disconnected(disconnectreason)
-    }
 }
