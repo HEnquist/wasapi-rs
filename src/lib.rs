@@ -26,32 +26,9 @@
 //! - The `loopback` example shows how to simultaneously capture and render sound, with separate threads for capture and render.
 
 windows_macros::include_bindings!();
-use Windows::Win32::System::PropertiesSystem::PROPERTYKEY;
 mod api;
 pub use api::*;
 pub use windows::runtime::GUID;
 
 #[macro_use]
 extern crate log;
-
-#[allow(non_upper_case_globals)]
-const PKEY_Device_FriendlyName: PROPERTYKEY = PROPERTYKEY {
-    fmtid: GUID::from_values(
-        0xA45C254E,
-        0xDF1C,
-        0x4EFD,
-        [0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0],
-    ),
-    pid: 14,
-};
-
-#[allow(non_upper_case_globals)]
-const PKEY_Device_DeviceDesc: PROPERTYKEY = PROPERTYKEY {
-    fmtid: GUID::from_values(
-        0xA45C254E,
-        0xDF1C,
-        0x4EFD,
-        [0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0],
-    ),
-    pid: 2,
-};
