@@ -1,7 +1,9 @@
-use crate::{
-    PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
-    Windows::Win32::Foundation::{BOOL, HANDLE, PSTR, PWSTR, S_OK},
-    Windows::Win32::Media::Audio::CoreAudio::{
+use Windows::{
+    Win32::System::SystemServices::{DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName},
+};
+use crate::Windows::{
+    Win32::Foundation::{BOOL, PWSTR, HANDLE, PSTR, S_OK},
+    Win32::Media::Audio::CoreAudio::{
         eCapture, eConsole, eRender, AudioSessionDisconnectReason, AudioSessionState,
         AudioSessionStateActive, AudioSessionStateExpired, AudioSessionStateInactive,
         DisconnectReasonDeviceRemoval, DisconnectReasonExclusiveModeOverride,
@@ -14,18 +16,19 @@ use crate::{
         AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
         WAVE_FORMAT_EXTENSIBLE,
     },
-    Windows::Win32::Media::Multimedia::{
+    Win32::Media::Multimedia::{
         KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVEFORMATEX,
         WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_PCM,
     },
-    Windows::Win32::Storage::StructuredStorage::STGM_READ,
-    Windows::Win32::System::Com::CLSCTX_ALL,
-    Windows::Win32::System::Com::{
+    Win32::Storage::StructuredStorage::STGM_READ,
+    Win32::System::Com::CLSCTX_ALL,
+    Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED,
     },
-    Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
-    Windows::Win32::System::Threading::{CreateEventA, WaitForSingleObject, WAIT_OBJECT_0},
+    Win32::System::PropertiesSystem::PropVariantToStringAlloc,
+    Win32::System::Threading::{CreateEventA, WaitForSingleObject},
 };
+use windows::Win32::System::Threading::WAIT_OBJECT_0;
 use std::collections::VecDeque;
 use std::error;
 use std::fmt;
@@ -34,11 +37,12 @@ use std::ptr;
 use std::slice;
 use std::rc::Weak;
 use widestring::U16CString;
-use windows::Guid;
-use windows::Interface;
-use windows::HRESULT;
-use windows::implement;
+use windows::runtime::GUID;
+use windows::runtime::Interface;
+use windows::runtime::HRESULT;
+use windows_macros::implement;
 use crate::Windows;
+
 
 type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
@@ -69,12 +73,12 @@ impl WasapiError {
 }
 
 /// Initializes COM for use by the calling thread for the multi-threaded apartment (MTA).
-pub fn initialize_mta() -> Result<(), windows::Error> {
+pub fn initialize_mta() -> Result<(), windows::runtime::Error> {
     unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_MULTITHREADED) }
 }
 
 /// Initializes COM for use by the calling thread for a single-threaded apartment (STA).
-pub fn initialize_sta() -> Result<(), windows::Error> {
+pub fn initialize_sta() -> Result<(), windows::runtime::Error> {
     unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_APARTMENTTHREADED) }
 }
 
@@ -211,7 +215,7 @@ impl Device {
     /// Read the FriendlyName of an IMMDevice
     pub fn get_friendlyname(&self) -> WasapiRes<String> {
         let store = unsafe { self.device.OpenPropertyStore(STGM_READ as u32)? };
-        let prop = unsafe { store.GetValue(&PKEY_Device_FriendlyName)? };
+        let prop = unsafe { store.GetValue(&DEVPKEY_Device_FriendlyName)? };
         let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
         let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
         let name = wide_name.to_string_lossy();
@@ -222,7 +226,7 @@ impl Device {
     /// Read the Description of an IMMDevice
     pub fn get_description(&self) -> WasapiRes<String> {
         let store = unsafe { self.device.OpenPropertyStore(STGM_READ as u32)? };
-        let prop = unsafe { store.GetValue(&PKEY_Device_DeviceDesc)? };
+        let prop = unsafe { store.GetValue(&DEVPKEY_Device_DeviceDesc)? };
         let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
         let wide_desc = unsafe { U16CString::from_ptr_str(propstr.0) };
         let desc = wide_desc.to_string_lossy();
@@ -436,32 +440,37 @@ impl AudioClient {
 
     /// Get a rendering (playback) client
     pub fn get_audiorenderclient(&self) -> WasapiRes<AudioRenderClient> {
-        let renderclient: Option<IAudioRenderClient> = unsafe { self.client.GetService().ok() };
-        match renderclient {
-            Some(client) => Ok(AudioRenderClient { client }),
-            None => Err(WasapiError::new("Failed getting IAudioRenderClient").into()),
+        let renderclient_ptr: *mut IAudioRenderClient = ptr::null_mut();
+        unsafe { self.client.GetService(&IAudioRenderClient::IID, renderclient_ptr as *mut _ )? };
+        if renderclient_ptr.is_null() {
+            return Err(WasapiError::new("Failed getting IAudioCaptureClient").into());
         }
+        let client = unsafe { mem::transmute(renderclient_ptr) };
+        Ok(AudioRenderClient { client })
     }
 
     /// Get a capture client
     pub fn get_audiocaptureclient(&self) -> WasapiRes<AudioCaptureClient> {
-        let renderclient: Option<IAudioCaptureClient> = unsafe { self.client.GetService().ok() };
-        match renderclient {
-            Some(client) => Ok(AudioCaptureClient {
-                client,
-                sharemode: self.sharemode.clone(),
-            }),
-            None => Err(WasapiError::new("Failed getting IAudioCaptureClient").into()),
+        let renderclient_ptr: *mut IAudioCaptureClient = ptr::null_mut();
+        unsafe { self.client.GetService(&IAudioCaptureClient::IID, renderclient_ptr as *mut _ )? };
+        if renderclient_ptr.is_null() {
+            return Err(WasapiError::new("Failed getting IAudioCaptureClient").into());
         }
+        let client = unsafe { mem::transmute(renderclient_ptr) };
+        Ok(AudioCaptureClient {
+            client,
+            sharemode: self.sharemode.clone() })
     }
 
     /// Get the AudioSessionControl
     pub fn get_audiosessioncontrol(&self) -> WasapiRes<AudioSessionControl> {
-        let sessioncontrol: Option<IAudioSessionControl> = unsafe { self.client.GetService().ok() };
-        match sessioncontrol {
-            Some(control) => Ok(AudioSessionControl { control }),
-            None => Err(WasapiError::new("Failed getting IAudioSessionControl").into()),
+        let sessioncontrol_ptr: *mut IAudioSessionControl = ptr::null_mut();
+        unsafe { self.client.GetService(&IAudioSessionControl::IID, sessioncontrol_ptr as *mut _ )? };
+        if sessioncontrol_ptr.is_null() {
+            return Err(WasapiError::new("Failed getting IAudioSessionControl").into());
         }
+        let control = unsafe { mem::transmute(sessioncontrol_ptr) };
+        Ok(AudioSessionControl { control })
     }
 }
 
@@ -826,13 +835,13 @@ type OptionBox<T> = Option<Box<T>>;
 
 /// A structure holding the callbacks for notifications
 pub struct EventCallbacks {
-    simple_volume: OptionBox<dyn Fn(f32, bool, Guid)>,
-    channel_volume: OptionBox<dyn Fn(usize, f32, Guid)>,
+    simple_volume: OptionBox<dyn Fn(f32, bool, GUID)>,
+    channel_volume: OptionBox<dyn Fn(usize, f32, GUID)>,
     state: OptionBox<dyn Fn(SessionState)>,
     disconnected: OptionBox<dyn Fn(DisconnectReason)>,
-    iconpath: OptionBox<dyn Fn(String, Guid)>,
-    displayname: OptionBox<dyn Fn(String, Guid)>,
-    groupingparam: OptionBox<dyn Fn(Guid, Guid)>,
+    iconpath: OptionBox<dyn Fn(String, GUID)>,
+    displayname: OptionBox<dyn Fn(String, GUID)>,
+    groupingparam: OptionBox<dyn Fn(GUID, GUID)>,
 }
 
 impl Default for EventCallbacks {
@@ -856,7 +865,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnSimpleVolumeChanged notifications
-    pub fn set_simple_volume_callback(&mut self, c: impl Fn(f32, bool, Guid) + 'static) {
+    pub fn set_simple_volume_callback(&mut self, c: impl Fn(f32, bool, GUID) + 'static) {
         self.simple_volume = Some(Box::new(c));
     }
     /// Remove a callback for OnSimpleVolumeChanged notifications
@@ -865,7 +874,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnChannelVolumeChanged notifications
-    pub fn set_channel_volume_callback(&mut self, c: impl Fn(usize, f32, Guid) + 'static) {
+    pub fn set_channel_volume_callback(&mut self, c: impl Fn(usize, f32, GUID) + 'static) {
         self.channel_volume = Some(Box::new(c));
     }
     /// Remove a callback for OnChannelVolumeChanged notifications
@@ -892,7 +901,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnIconPathChanged notifications
-    pub fn set_iconpath_callback(&mut self, c: impl Fn(String, Guid) + 'static) {
+    pub fn set_iconpath_callback(&mut self, c: impl Fn(String, GUID) + 'static) {
         self.iconpath = Some(Box::new(c));
     }
     /// Remove a callback for OnIconPathChanged notifications
@@ -901,7 +910,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnDisplayNameChanged notifications
-    pub fn set_displayname_callback(&mut self, c: impl Fn(String, Guid) + 'static) {
+    pub fn set_displayname_callback(&mut self, c: impl Fn(String, GUID) + 'static) {
         self.displayname = Some(Box::new(c));
     }
     /// Remove a callback for OnDisplayNameChanged notifications
@@ -910,7 +919,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnGroupingParamChanged notifications
-    pub fn set_groupingparam_callback(&mut self, c: impl Fn(Guid, Guid) + 'static) {
+    pub fn set_groupingparam_callback(&mut self, c: impl Fn(GUID, GUID) + 'static) {
         self.groupingparam = Some(Box::new(c));
     }
     /// Remove a callback for OnGroupingParamChanged notifications
@@ -991,8 +1000,8 @@ impl AudioSessionEvents {
     fn OnDisplayNameChanged(
         &mut self,
         newdisplayname: PWSTR,
-        eventcontext: *const ::windows::Guid,
-    ) -> ::windows::HRESULT {
+        eventcontext: *const GUID,
+    ) -> HRESULT {
         let wide_name = unsafe { U16CString::from_ptr_str(newdisplayname.0) };
         let name = wide_name.to_string_lossy();
         trace!("New display name: {}", name);
@@ -1008,8 +1017,8 @@ impl AudioSessionEvents {
     fn OnIconPathChanged(
         &mut self,
         newiconpath: PWSTR,
-        eventcontext: *const ::windows::Guid,
-    ) -> ::windows::HRESULT {
+        eventcontext: *const GUID,
+    ) -> HRESULT {
         let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
         let path = wide_path.to_string_lossy();
         trace!("New icon path: {}", path);
@@ -1026,8 +1035,8 @@ impl AudioSessionEvents {
         &mut self,
         newvolume: f32,
         newmute: BOOL,
-        eventcontext: *const ::windows::Guid,
-    ) -> ::windows::HRESULT {
+        eventcontext: *const GUID,
+    ) -> HRESULT {
         trace!("New volume: {}, mute: {:?}", newvolume, newmute);
         if let Some(callbacks) = &mut self.callbacks.upgrade() {
             if let Some(callback) = &callbacks.simple_volume {
@@ -1041,10 +1050,10 @@ impl AudioSessionEvents {
     fn OnChannelVolumeChanged(
         &mut self,
         channelcount: u32,
-        newchannelvolumearray: *mut f32,
+        newchannelvolumearray: *const f32,
         changedchannel: u32,
-        eventcontext: *const ::windows::Guid,
-    ) -> ::windows::HRESULT {
+        eventcontext: *const GUID,
+    ) -> HRESULT {
         trace!("New channel volume for channel: {}", changedchannel);
         let volslice =
             unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
@@ -1060,9 +1069,9 @@ impl AudioSessionEvents {
 
     fn OnGroupingParamChanged(
         &mut self,
-        newgroupingparam: *const ::windows::Guid,
-        eventcontext: *const ::windows::Guid,
-    ) -> ::windows::HRESULT {
+        newgroupingparam: *const GUID,
+        eventcontext: *const GUID,
+    ) -> HRESULT {
         trace!("Grouping changed");
         if let Some(callbacks) = &mut self.callbacks.upgrade() {
             if let Some(callback) = &callbacks.groupingparam {

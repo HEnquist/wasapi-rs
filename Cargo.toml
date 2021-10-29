@@ -1,6 +1,6 @@
 [package]
 name = "wasapi"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2018"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 description = "Bindings for the Wasapi API on Windows"
@@ -12,16 +12,33 @@ readme = "README.md"
 documentation = "https://henquist.github.io/wasapi-rs/docs/0.5.0/wasapi/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[dependencies.windows]
+version = "0.23.0"
+features = [
+    "Data_Xml_Dom",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Media_Audio_CoreAudio",
+    "Win32_Media_Multimedia",
+    "Win32_Storage_StructuredStorage",
+    "Win32_System_Com",
+    "Win32_System_PropertiesSystem",
+    "Win32_System_SystemServices",
+    "Win32_System_OleAutomation",
+]
+
 [dependencies]
-windows = "0.19.0"
 widestring = "0.4.3"
 log = "0.4.14"
-
-[build-dependencies]
-windows = "0.19.0"
+windows_macros = "0.23.0"
 
 [dev-dependencies]
 simplelog = "0.10.0"
+
+[build-dependencies]
+windows_macros = "0.23.0"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"
