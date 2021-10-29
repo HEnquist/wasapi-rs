@@ -440,8 +440,8 @@ impl AudioClient {
 
     /// Get a rendering (playback) client
     pub fn get_audiorenderclient(&self) -> WasapiRes<AudioRenderClient> {
-        let renderclient_ptr: *mut IAudioRenderClient = ptr::null_mut();
-        unsafe { self.client.GetService(&IAudioRenderClient::IID, renderclient_ptr as *mut _ )? };
+        let mut renderclient_ptr = ptr::null_mut();
+        unsafe { self.client.GetService(&IAudioRenderClient::IID, &mut renderclient_ptr)? };
         if renderclient_ptr.is_null() {
             return Err(WasapiError::new("Failed getting IAudioCaptureClient").into());
         }
@@ -451,8 +451,8 @@ impl AudioClient {
 
     /// Get a capture client
     pub fn get_audiocaptureclient(&self) -> WasapiRes<AudioCaptureClient> {
-        let renderclient_ptr: *mut IAudioCaptureClient = ptr::null_mut();
-        unsafe { self.client.GetService(&IAudioCaptureClient::IID, renderclient_ptr as *mut _ )? };
+        let mut renderclient_ptr = ptr::null_mut();
+        unsafe { self.client.GetService(&IAudioCaptureClient::IID, &mut renderclient_ptr)? };
         if renderclient_ptr.is_null() {
             return Err(WasapiError::new("Failed getting IAudioCaptureClient").into());
         }
@@ -464,8 +464,8 @@ impl AudioClient {
 
     /// Get the AudioSessionControl
     pub fn get_audiosessioncontrol(&self) -> WasapiRes<AudioSessionControl> {
-        let sessioncontrol_ptr: *mut IAudioSessionControl = ptr::null_mut();
-        unsafe { self.client.GetService(&IAudioSessionControl::IID, sessioncontrol_ptr as *mut _ )? };
+        let mut sessioncontrol_ptr = ptr::null_mut();
+        unsafe { self.client.GetService(&IAudioSessionControl::IID, &mut sessioncontrol_ptr)? };
         if sessioncontrol_ptr.is_null() {
             return Err(WasapiError::new("Failed getting IAudioSessionControl").into());
         }
