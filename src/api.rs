@@ -1,20 +1,17 @@
-use Windows::{
-    Win32::System::SystemServices::{DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName},
-};
+use crate::Windows;
 use crate::Windows::{
-    Win32::Foundation::{BOOL, PWSTR, HANDLE, PSTR, S_OK},
+    Win32::Foundation::{BOOL, HANDLE, PSTR, PWSTR, S_OK},
     Win32::Media::Audio::CoreAudio::{
         eCapture, eConsole, eRender, AudioSessionDisconnectReason, AudioSessionState,
         AudioSessionStateActive, AudioSessionStateExpired, AudioSessionStateInactive,
         DisconnectReasonDeviceRemoval, DisconnectReasonExclusiveModeOverride,
         DisconnectReasonFormatChanged, DisconnectReasonServerShutdown,
         DisconnectReasonSessionDisconnected, DisconnectReasonSessionLogoff, IAudioCaptureClient,
-        IAudioClient, IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents,
-        IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator,
-        MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
-        WAVE_FORMAT_EXTENSIBLE,
+        IAudioClient, IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
+        IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE,
+        AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK,
+        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
     },
     Win32::Media::Multimedia::{
         KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVEFORMATEX,
@@ -28,21 +25,22 @@ use crate::Windows::{
     Win32::System::PropertiesSystem::PropVariantToStringAlloc,
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
 };
-use windows::Win32::System::Threading::WAIT_OBJECT_0;
 use std::collections::VecDeque;
 use std::error;
 use std::fmt;
 use std::mem;
 use std::ptr;
-use std::slice;
 use std::rc::Weak;
+use std::slice;
 use widestring::U16CString;
-use windows::runtime::GUID;
 use windows::runtime::Interface;
+use windows::runtime::GUID;
 use windows::runtime::HRESULT;
+use windows::Win32::System::Threading::WAIT_OBJECT_0;
 use windows_macros::implement;
-use crate::Windows;
-
+use Windows::Win32::System::SystemServices::{
+    DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName,
+};
 
 type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
@@ -255,19 +253,17 @@ impl AudioClient {
     /// Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
         let temp_fmt_ptr = unsafe { self.client.GetMixFormat()? };
-        let temp_fmt = unsafe {*temp_fmt_ptr};
-        let mix_format = if temp_fmt.cbSize == 22
-            && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
-        {
-            unsafe {
-                WaveFormat {
-                    wave_fmt: (temp_fmt_ptr as *const _ as *const WAVEFORMATEXTENSIBLE)
-                        .read(),
+        let temp_fmt = unsafe { *temp_fmt_ptr };
+        let mix_format =
+            if temp_fmt.cbSize == 22 && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE {
+                unsafe {
+                    WaveFormat {
+                        wave_fmt: (temp_fmt_ptr as *const _ as *const WAVEFORMATEXTENSIBLE).read(),
+                    }
                 }
-            }
-        } else {
-            WaveFormat::from_waveformatex(temp_fmt)?
-        };
+            } else {
+                WaveFormat::from_waveformatex(temp_fmt)?
+            };
         Ok(mix_format)
     }
 
@@ -290,10 +286,8 @@ impl AudioClient {
             }
             ShareMode::Shared => {
                 let supported_format = unsafe {
-                    self.client.IsFormatSupported(
-                        AUDCLNT_SHAREMODE_SHARED,
-                        wave_fmt.as_waveformatex_ptr(),
-                    )
+                    self.client
+                        .IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, wave_fmt.as_waveformatex_ptr())
                 }?;
                 // Check if we got a pointer to a WAVEFORMATEX structure.
                 if supported_format.is_null() {
@@ -441,7 +435,10 @@ impl AudioClient {
     /// Get a rendering (playback) client
     pub fn get_audiorenderclient(&self) -> WasapiRes<AudioRenderClient> {
         let mut renderclient_ptr = ptr::null_mut();
-        unsafe { self.client.GetService(&IAudioRenderClient::IID, &mut renderclient_ptr)? };
+        unsafe {
+            self.client
+                .GetService(&IAudioRenderClient::IID, &mut renderclient_ptr)?
+        };
         if renderclient_ptr.is_null() {
             return Err(WasapiError::new("Failed getting IAudioCaptureClient").into());
         }
@@ -452,20 +449,27 @@ impl AudioClient {
     /// Get a capture client
     pub fn get_audiocaptureclient(&self) -> WasapiRes<AudioCaptureClient> {
         let mut renderclient_ptr = ptr::null_mut();
-        unsafe { self.client.GetService(&IAudioCaptureClient::IID, &mut renderclient_ptr)? };
+        unsafe {
+            self.client
+                .GetService(&IAudioCaptureClient::IID, &mut renderclient_ptr)?
+        };
         if renderclient_ptr.is_null() {
             return Err(WasapiError::new("Failed getting IAudioCaptureClient").into());
         }
         let client = unsafe { mem::transmute(renderclient_ptr) };
         Ok(AudioCaptureClient {
             client,
-            sharemode: self.sharemode.clone() })
+            sharemode: self.sharemode.clone(),
+        })
     }
 
     /// Get the AudioSessionControl
     pub fn get_audiosessioncontrol(&self) -> WasapiRes<AudioSessionControl> {
         let mut sessioncontrol_ptr = ptr::null_mut();
-        unsafe { self.client.GetService(&IAudioSessionControl::IID, &mut sessioncontrol_ptr)? };
+        unsafe {
+            self.client
+                .GetService(&IAudioSessionControl::IID, &mut sessioncontrol_ptr)?
+        };
         if sessioncontrol_ptr.is_null() {
             return Err(WasapiError::new("Failed getting IAudioSessionControl").into());
         }
@@ -543,10 +547,7 @@ impl AudioRenderClient {
             )
             .into());
         }
-        let bufferptr = unsafe {
-            self.client
-                .GetBuffer(nbr_frames as u32)?
-        };
+        let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         bufferslice.copy_from_slice(data);
         unsafe { self.client.ReleaseBuffer(nbr_frames as u32, 0)? };
@@ -570,10 +571,7 @@ impl AudioRenderClient {
             )
             .into());
         }
-        let bufferptr = unsafe {
-            self.client
-                .GetBuffer(nbr_frames as u32)?
-        };
+        let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         for element in bufferslice.iter_mut() {
             *element = data.pop_front().unwrap();
@@ -951,9 +949,7 @@ impl AudioSessionEvents {
     /// Create a new AudioSessionEvents instance, returned as a IAudioSessionEvent.
     #[allow(clippy::new_ret_no_self)]
     pub fn new(callbacks: Weak<EventCallbacks>) -> Self {
-        Self {
-            callbacks,
-        }
+        Self { callbacks }
     }
 
     fn OnStateChanged(&mut self, newstate: AudioSessionState) -> HRESULT {
@@ -966,17 +962,14 @@ impl AudioSessionEvents {
             _ => return S_OK,
         };
         if let Some(callbacks) = &mut self.callbacks.upgrade() {
-            if let Some(callback) = &callbacks.state { 
+            if let Some(callback) = &callbacks.state {
                 callback(sessionstate);
             }
         }
         S_OK
     }
 
-    fn OnSessionDisconnected(
-        &mut self,
-        disconnectreason: AudioSessionDisconnectReason,
-    ) -> HRESULT {
+    fn OnSessionDisconnected(&mut self, disconnectreason: AudioSessionDisconnectReason) -> HRESULT {
         trace!("Disconnected");
         #[allow(non_upper_case_globals)]
         let reason = match disconnectreason {
@@ -1014,11 +1007,7 @@ impl AudioSessionEvents {
         S_OK
     }
 
-    fn OnIconPathChanged(
-        &mut self,
-        newiconpath: PWSTR,
-        eventcontext: *const GUID,
-    ) -> HRESULT {
+    fn OnIconPathChanged(&mut self, newiconpath: PWSTR, eventcontext: *const GUID) -> HRESULT {
         let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
         let path = wide_path.to_string_lossy();
         trace!("New icon path: {}", path);
@@ -1082,5 +1071,4 @@ impl AudioSessionEvents {
         }
         S_OK
     }
-
 }
