@@ -28,8 +28,10 @@
 windows_macros::include_bindings!();
 mod api;
 mod events;
+mod waveformat;
 pub use api::*;
 pub use events::*;
+pub use waveformat::*;
 pub use windows::runtime::GUID;
 
 #[macro_use]
