@@ -27,7 +27,9 @@
 
 windows_macros::include_bindings!();
 mod api;
+mod events;
 pub use api::*;
+pub use events::*;
 pub use windows::runtime::GUID;
 
 #[macro_use]
