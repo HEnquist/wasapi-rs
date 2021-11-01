@@ -142,7 +142,14 @@ impl AudioSessionEvents {
     }
 
     fn OnStateChanged(&mut self, newstate: AudioSessionState) -> HRESULT {
-        trace!("state change: {:?}", newstate);
+        #[allow(non_upper_case_globals)]
+        let state_name = match newstate {
+            AudioSessionStateActive => "Active",
+            AudioSessionStateInactive => "Inactive",
+            AudioSessionStateExpired => "Expired",
+            _ => "Unknown",
+        };
+        trace!("state change to: {}", state_name);
         #[allow(non_upper_case_globals)]
         let sessionstate = match newstate {
             AudioSessionStateActive => SessionState::Active,

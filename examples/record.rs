@@ -16,7 +16,7 @@ type Res<T> = Result<T, Box<dyn error::Error>>;
 fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize) -> Res<()> {
     // Use `Direction::Capture` for normal capture,
     // or `Direction::Render` for loopback mode (for capturing from a playback device).
-    let device = get_default_device(&Direction::Capture)?;
+    let device = get_default_device(&Direction::Render)?;
 
     let mut audio_client = device.get_iaudioclient()?;
 
@@ -45,7 +45,12 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
     let mut sample_queue: VecDeque<u8> = VecDeque::with_capacity(
         100 * blockalign as usize * (1024 + 2 * buffer_frame_count as usize),
     );
+    let session_control = audio_client.get_audiosessioncontrol()?;
+
+    debug!("state before start: {:?}", session_control.get_state());
     audio_client.start_stream()?;
+    debug!("state after start: {:?}", session_control.get_state());
+
     loop {
         while sample_queue.len() > (blockalign as usize * chunksize as usize) {
             debug!("pushing samples");
@@ -57,8 +62,8 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
         }
         trace!("capturing");
         render_client.read_from_device_to_deque(blockalign as usize, &mut sample_queue)?;
-        if h_event.wait_for_event(1000000).is_err() {
-            error!("error, stopping capture");
+        if h_event.wait_for_event(3000).is_err() {
+            error!("timeout error, stopping capture");
             audio_client.stop_stream()?;
             break;
         }
@@ -102,7 +107,10 @@ fn main() -> Res<()> {
                 debug!("writing to file");
                 outfile.write_all(&chunk)?;
             }
-            Err(err) => error!("Some error {}", err),
+            Err(err) => {
+                error!("Some error {}", err);
+                return Ok(());
+            }
         }
     }
 }

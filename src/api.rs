@@ -105,19 +105,13 @@ pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
     let enumerator: IMMDeviceEnumerator =
         unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
     let device = unsafe { enumerator.GetDefaultAudioEndpoint(dir, eConsole)? };
-    debug!("default device {:?}", device);
-
-    //match device {
-    //    Some(dev) => Ok(Device {
-    //        device: dev,
-    //        direction: direction.clone(),
-    //    }),
-    //    None => Err(WasapiError::new("Failed to get default device").into()),
-    //}
-    Ok(Device {
+    
+    let dev = Device {
         device,
         direction: direction.clone(),
-    })
+    };
+    debug!("default device {:?}", dev.get_friendlyname());
+    Ok(dev)
 }
 
 /// Struct wrapping an IMMDeviceCollection.
