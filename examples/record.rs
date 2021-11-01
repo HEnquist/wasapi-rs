@@ -16,7 +16,7 @@ type Res<T> = Result<T, Box<dyn error::Error>>;
 fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize) -> Res<()> {
     // Use `Direction::Capture` for normal capture,
     // or `Direction::Render` for loopback mode (for capturing from a playback device).
-    let device = get_default_device(&Direction::Render)?;
+    let device = get_default_device(&Direction::Capture)?;
 
     let mut audio_client = device.get_iaudioclient()?;
 

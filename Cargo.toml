@@ -13,21 +13,19 @@ documentation = "https://henquist.github.io/wasapi-rs/docs/0.5.0/wasapi/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.windows]
-version = "0.23.0"
-features = [
-    "Win32_System_Threading",
-]
+version = "0.24.0"
+features = []
 
 [dependencies]
 widestring = "0.4.3"
 log = "0.4.14"
-windows_macros = "0.23.0"
+windows_macros = "0.24.0"
 
 [dev-dependencies]
 simplelog = "0.10.0"
 
 [build-dependencies]
-windows_macros = "0.23.0"
+windows_macros = "0.24.0"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"

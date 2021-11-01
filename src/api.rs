@@ -11,7 +11,7 @@ use crate::Windows::{
         AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
     },
     Win32::Media::Multimedia::{WAVEFORMATEX, WAVEFORMATEXTENSIBLE},
-    Win32::Storage::StructuredStorage::STGM_READ,
+    Win32::System::Com::StructuredStorage::STGM_READ,
     Win32::System::Com::CLSCTX_ALL,
     Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED,
@@ -28,10 +28,10 @@ use std::rc::Weak;
 use std::slice;
 use widestring::U16CString;
 use windows::runtime::Interface;
-use windows::Win32::System::Threading::WAIT_OBJECT_0;
 use Windows::Win32::System::SystemServices::{
     DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName,
 };
+use Windows::Win32::System::Threading::WAIT_OBJECT_0;
 
 use crate::WaveFormat;
 use crate::{AudioSessionEvents, EventCallbacks};
@@ -105,7 +105,7 @@ pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
     let enumerator: IMMDeviceEnumerator =
         unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
     let device = unsafe { enumerator.GetDefaultAudioEndpoint(dir, eConsole)? };
-    
+
     let dev = Device {
         device,
         direction: direction.clone(),
