@@ -17,13 +17,14 @@ These things have been implemented so far:
 - Loopback capture
 - Notifications for volume change, device disconnect etc
 
-## Examples
+## Included examples
 
-- The `playsine` example plays a sine wave in shared mode on the default output device.
-
-- The `playsine_events` example is similar to `playsine` but also listens to notifications.
-
-- The `loopback` example shows how to simultaneously capture and render sound, with separate threads for capture and render.
+| Example    | Description                                                    |
+| ---------- | ---------------------------------------------------------------|
+| `playsine` | Plays a sine wave in shared mode on the default output device. |
+| `playsine_events` | Similar to `playsine` but also listens to notifications. |
+| `loopback` | Shows how to simultaneously capture and render sound, with separate threads for capture and render. |
+| `record` | Records audio from the default device, and saves the raw samples to a file. |
 
 ## Documentation
 The generated documentation is hosted on [GitHub Pages](https://henquist.github.io/wasapi-rs/). This is because the documentation must be built on Windows, and [docs.rs](https://docs.rs/crate/wasapi) only builds on Linux.
