@@ -1,6 +1,6 @@
 use std::f64::consts::PI;
-use wasapi::*;
 use std::rc::Rc;
+use wasapi::*;
 
 #[macro_use]
 extern crate log;

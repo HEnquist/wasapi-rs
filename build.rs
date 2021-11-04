@@ -1,5 +1,5 @@
 fn main() {
-    windows::build!(
+    windows_macros::build!(
         Windows::Win32::Media::Audio::CoreAudio::{
             AudioSessionState, IAudioSessionEvents, AudioSessionDisconnectReason,
             IAudioClient, IAudioSessionControl, IAudioRenderClient, IAudioCaptureClient,
@@ -24,12 +24,13 @@ fn main() {
         Windows::Win32::System::Com::CLSCTX,
         Windows::Win32::System::Threading::{
             CreateEventA,
-            WAIT_RETURN_CAUSE,
             WaitForSingleObject,
+            WAIT_OBJECT_0,
         },
         Windows::Win32::Foundation::{BOOL, E_NOINTERFACE, HANDLE, PSTR, PWSTR, S_OK},
         Windows::Win32::System::PropertiesSystem::PROPERTYKEY,
-        Windows::Win32::Storage::StructuredStorage::{STGM_READ},
+        Windows::Win32::System::SystemServices::{DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName},
+        Windows::Win32::System::Com::StructuredStorage::STGM_READ,
         Windows::Win32::System::PropertiesSystem::PropVariantToStringAlloc,
         Windows::Win32::System::Com::CoCreateInstance,
         Windows::Win32::System::Com::CoInitializeEx,
