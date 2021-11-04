@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["BSTRBLOB",""],["CHAR",""],["CLIPDATA",""],["CY_0",""],["DECIMAL",""],["DECIMAL_0_0",""],["DECIMAL_1_0",""],["IServiceProvider",""]],"union":[["CY",""],["DECIMAL_0",""],["DECIMAL_1",""]]});
+initSidebarItems({"constant":[["DEVPKEY_Device_DeviceDesc",""],["DEVPKEY_Device_FriendlyName",""]]});

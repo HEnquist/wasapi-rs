@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["Com",""],["OleAutomation",""],["PropertiesSystem",""],["SystemServices",""],["Threading",""]]});
+initSidebarItems({"mod":[["Com",""],["Ole",""],["PropertiesSystem",""],["SystemServices",""],["Threading",""]]});

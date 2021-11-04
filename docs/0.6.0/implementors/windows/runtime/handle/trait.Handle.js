@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["wasapi"] = [{"text":"impl Handle for <a class=\"struct\" href=\"wasapi/Windows/Win32/Foundation/struct.CHAR.html\" title=\"struct wasapi::Windows::Win32::Foundation::CHAR\">CHAR</a>","synthetic":false,"types":["wasapi::Windows::Win32::Foundation::CHAR"]},{"text":"impl Handle for <a class=\"struct\" href=\"wasapi/Windows/Win32/Foundation/struct.HANDLE.html\" title=\"struct wasapi::Windows::Win32::Foundation::HANDLE\">HANDLE</a>","synthetic":false,"types":["wasapi::Windows::Win32::Foundation::HANDLE"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
