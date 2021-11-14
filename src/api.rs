@@ -10,18 +10,15 @@ use crate::Windows::{
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK,
         AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
     },
+    Win32::Media::Audio::{WAVEFORMATEX, WAVEFORMATEXTENSIBLE},
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
-    Win32::Media::Audio::{
-        WAVEFORMATEX,
-        WAVEFORMATEXTENSIBLE,
-    },
     Win32::System::Com::StructuredStorage::STGM_READ,
     Win32::System::Com::CLSCTX_ALL,
     Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED,
     },
-    Win32::UI::Shell::PropertiesSystem::PropVariantToStringAlloc,
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
+    Win32::UI::Shell::PropertiesSystem::PropVariantToStringAlloc,
 };
 use std::collections::VecDeque;
 use std::error;
