@@ -1,22 +1,26 @@
 use crate::Windows;
 use crate::Windows::{
     Win32::Foundation::{HANDLE, PSTR},
-    Win32::Media::Audio::CoreAudio::{
+    Win32::Media::Audio::{
         eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
         AudioSessionStateInactive, IAudioCaptureClient, IAudioClient, IAudioRenderClient,
         IAudioSessionControl, IAudioSessionEvents, IMMDevice, IMMDeviceCollection,
         IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE,
         AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK,
-        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
+        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
     },
-    Win32::Media::Multimedia::{WAVEFORMATEX, WAVEFORMATEXTENSIBLE},
+    Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
+    Win32::Media::Audio::{
+        WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE,
+    },
     Win32::System::Com::StructuredStorage::STGM_READ,
     Win32::System::Com::CLSCTX_ALL,
     Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED,
     },
-    Win32::System::PropertiesSystem::PropVariantToStringAlloc,
+    Win32::UI::Shell::PropertiesSystem::PropVariantToStringAlloc,
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
 };
 use std::collections::VecDeque;
@@ -28,9 +32,7 @@ use std::rc::Weak;
 use std::slice;
 use widestring::U16CString;
 use windows::runtime::Interface;
-use Windows::Win32::System::SystemServices::{
-    DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName,
-};
+use Windows::Win32::Devices::Properties::{DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName};
 use Windows::Win32::System::Threading::WAIT_OBJECT_0;
 
 use crate::WaveFormat;

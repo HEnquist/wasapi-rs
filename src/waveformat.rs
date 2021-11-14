@@ -1,9 +1,13 @@
 use crate::Windows::{
-    Win32::Media::Audio::CoreAudio::WAVE_FORMAT_EXTENSIBLE,
-    Win32::Media::Multimedia::{
-        KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVEFORMATEX,
-        WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_PCM,
+    Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
+    Win32::Media::Audio::{
+        WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE,
+        WAVEFORMATEXTENSIBLE_0,
+        WAVE_FORMAT_PCM,
     },
+    Win32::Media::Multimedia::{WAVE_FORMAT_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT},
+    Win32::Media::KernelStreaming::KSDATAFORMAT_SUBTYPE_PCM,
 };
 use std::error;
 use std::fmt;

@@ -1,7 +1,7 @@
 use crate::Windows;
 use crate::Windows::{
     Win32::Foundation::{BOOL, PWSTR, S_OK},
-    Win32::Media::Audio::CoreAudio::{
+    Win32::Media::Audio::{
         AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
         AudioSessionStateExpired, AudioSessionStateInactive, DisconnectReasonDeviceRemoval,
         DisconnectReasonExclusiveModeOverride, DisconnectReasonFormatChanged,
@@ -128,7 +128,7 @@ pub enum DisconnectReason {
 }
 
 /// Wrapper for IAudioSessionEvents
-#[implement(Windows::Win32::Media::Audio::CoreAudio::IAudioSessionEvents)]
+#[implement(Windows::Win32::Media::Audio::IAudioSessionEvents)]
 pub(crate) struct AudioSessionEvents {
     callbacks: Weak<EventCallbacks>,
 }
