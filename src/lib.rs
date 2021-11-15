@@ -26,7 +26,7 @@
 //! | `loopback` | Shows how to simultaneously capture and render sound, with separate threads for capture and render. |
 //! | `record` | Records audio from the default device, and saves the raw samples to a file. |
 
-windows_macros::include_bindings!();
+//windows_macros::include_bindings!();
 mod api;
 mod events;
 mod waveformat;

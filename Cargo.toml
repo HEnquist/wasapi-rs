@@ -14,7 +14,18 @@ documentation = "https://henquist.github.io/wasapi-rs/docs/0.6.0/wasapi/"
 
 [dependencies.windows]
 version = "0.26.0"
-features = ["std"]
+features = ["Foundation",
+            "Win32_Media_Audio", 
+            "Win32_Foundation",
+            "Win32_Devices_Properties",
+            "Win32_UI_Shell_PropertiesSystem",
+            "Win32_System_Com",
+            "Win32_System_Com_StructuredStorage",
+            "Win32_Media_KernelStreaming",
+            "Win32_Media_Multimedia",
+            "Win32_System_Threading",
+            "Win32_Security",
+            "std"]
 
 [dependencies]
 widestring = "0.4.3"
@@ -23,9 +34,6 @@ windows_macros = "0.26.0"
 
 [dev-dependencies]
 simplelog = "0.10.0"
-
-[build-dependencies]
-windows_macros = "0.26.0"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"

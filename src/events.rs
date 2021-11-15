@@ -1,5 +1,8 @@
-use crate::Windows;
-use crate::Windows::{
+use std::rc::Weak;
+use std::slice;
+use widestring::U16CString;
+use windows::{
+    runtime::{GUID, HRESULT},
     Win32::Foundation::{BOOL, PWSTR, S_OK},
     Win32::Media::Audio::{
         AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
@@ -9,12 +12,9 @@ use crate::Windows::{
         DisconnectReasonSessionLogoff,
     },
 };
-use std::rc::Weak;
-use std::slice;
-use widestring::U16CString;
-use windows::runtime::GUID;
-use windows::runtime::HRESULT;
 use windows_macros::implement;
+// Workaround for implement macro
+use windows as Windows;
 
 use crate::SessionState;
 

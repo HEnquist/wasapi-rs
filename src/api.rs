@@ -1,4 +1,9 @@
-use crate::Windows::{
+use std::collections::VecDeque;
+use std::rc::Weak;
+use std::{error, fmt, mem, ptr, slice};
+use widestring::U16CString;
+use windows::{
+    runtime::Interface,
     Win32::Devices::Properties::{DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName},
     Win32::Foundation::{HANDLE, PSTR},
     Win32::Media::Audio::{
@@ -20,18 +25,8 @@ use crate::Windows::{
     Win32::System::Threading::{CreateEventA, WaitForSingleObject, WAIT_OBJECT_0},
     Win32::UI::Shell::PropertiesSystem::PropVariantToStringAlloc,
 };
-use std::collections::VecDeque;
-use std::error;
-use std::fmt;
-use std::mem;
-use std::ptr;
-use std::rc::Weak;
-use std::slice;
-use widestring::U16CString;
-use windows::runtime::Interface;
 
-use crate::WaveFormat;
-use crate::{AudioSessionEvents, EventCallbacks};
+use crate::{AudioSessionEvents, EventCallbacks, WaveFormat};
 
 pub(crate) type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
