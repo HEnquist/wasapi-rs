@@ -2,7 +2,7 @@ use std::rc::Weak;
 use std::slice;
 use widestring::U16CString;
 use windows::{
-    runtime::{GUID, HRESULT},
+    core::{GUID, HRESULT},
     Win32::Foundation::{BOOL, PWSTR, S_OK},
     Win32::Media::Audio::{
         AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
