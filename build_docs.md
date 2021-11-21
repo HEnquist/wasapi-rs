@@ -14,6 +14,8 @@
 
 - copy `target\doc` folder to `docs\x.y.z`
 
+  `Xcopy /E /I target\doc docs\x.y.z\`
+
 - update `index.md` with a link to the new version
 
 - add, commit and push

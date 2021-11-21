@@ -8,4 +8,5 @@ Published versions:
 - [v0.4.0](docs/0.4.0/wasapi/index.html)
 - [v0.5.0](docs/0.5.0/wasapi/index.html)
 - [v0.6.0](docs/0.6.0/wasapi/index.html)
+- [v0.7.0](docs/0.7.0/wasapi/index.html)
 
