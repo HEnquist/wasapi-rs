@@ -1,40 +1,32 @@
-use crate::Windows;
-use crate::Windows::{
+use std::collections::VecDeque;
+use std::rc::Weak;
+use std::{error, fmt, mem, ptr, slice};
+use widestring::U16CString;
+use windows::{
+    core::Interface,
+    Win32::Devices::Properties::{DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName},
     Win32::Foundation::{HANDLE, PSTR},
-    Win32::Media::Audio::CoreAudio::{
+    Win32::Media::Audio::{
         eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
         AudioSessionStateInactive, IAudioCaptureClient, IAudioClient, IAudioRenderClient,
         IAudioSessionControl, IAudioSessionEvents, IMMDevice, IMMDeviceCollection,
         IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE,
         AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK,
-        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE, WAVE_FORMAT_EXTENSIBLE,
+        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE, WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE,
     },
-    Win32::Media::Multimedia::{WAVEFORMATEX, WAVEFORMATEXTENSIBLE},
+    Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
     Win32::System::Com::StructuredStorage::STGM_READ,
-    Win32::System::Com::CLSCTX_ALL,
     Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED,
+        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+        COINIT_MULTITHREADED,
     },
-    Win32::System::PropertiesSystem::PropVariantToStringAlloc,
-    Win32::System::Threading::{CreateEventA, WaitForSingleObject},
+    Win32::System::Threading::{CreateEventA, WaitForSingleObject, WAIT_OBJECT_0},
+    Win32::UI::Shell::PropertiesSystem::PropVariantToStringAlloc,
 };
-use std::collections::VecDeque;
-use std::error;
-use std::fmt;
-use std::mem;
-use std::ptr;
-use std::rc::Weak;
-use std::slice;
-use widestring::U16CString;
-use windows::runtime::Interface;
-use Windows::Win32::System::SystemServices::{
-    DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName,
-};
-use Windows::Win32::System::Threading::WAIT_OBJECT_0;
 
-use crate::WaveFormat;
-use crate::{AudioSessionEvents, EventCallbacks};
+use crate::{AudioSessionEvents, EventCallbacks, WaveFormat};
 
 pub(crate) type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
@@ -65,12 +57,12 @@ impl WasapiError {
 }
 
 /// Initializes COM for use by the calling thread for the multi-threaded apartment (MTA).
-pub fn initialize_mta() -> Result<(), windows::runtime::Error> {
+pub fn initialize_mta() -> Result<(), windows::core::Error> {
     unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_MULTITHREADED) }
 }
 
 /// Initializes COM for use by the calling thread for a single-threaded apartment (STA).
-pub fn initialize_sta() -> Result<(), windows::runtime::Error> {
+pub fn initialize_sta() -> Result<(), windows::core::Error> {
     unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_APARTMENTTHREADED) }
 }
 

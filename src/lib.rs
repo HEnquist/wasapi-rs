@@ -17,22 +17,22 @@
 //! - Loopback capture
 //! - Notifications for volume change, device disconnect etc
 //!
-//! ## Examples
+//! ## Included examples
 //!
-//! - The `playsine` example plays a sine wave in shared mode on the default output device.
-//!
-//! - The `playsine_events` example is similar to `playsine` but also listens to notifications.
-//!
-//! - The `loopback` example shows how to simultaneously capture and render sound, with separate threads for capture and render.
+//! | Example    | Description                                                    |
+//! | ---------- | ---------------------------------------------------------------|
+//! | `playsine` | Plays a sine wave in shared mode on the default output device. |
+//! | `playsine_events` | Similar to `playsine` but also listens to notifications. |
+//! | `loopback` | Shows how to simultaneously capture and render sound, with separate threads for capture and render. |
+//! | `record` | Records audio from the default device, and saves the raw samples to a file. |
 
-windows_macros::include_bindings!();
 mod api;
 mod events;
 mod waveformat;
 pub use api::*;
 pub use events::*;
 pub use waveformat::*;
-pub use windows::runtime::GUID;
+pub use windows::core::GUID;
 
 #[macro_use]
 extern crate log;

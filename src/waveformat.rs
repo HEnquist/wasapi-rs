@@ -1,16 +1,13 @@
-use crate::Windows::{
-    Win32::Media::Audio::CoreAudio::WAVE_FORMAT_EXTENSIBLE,
-    Win32::Media::Multimedia::{
-        KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVEFORMATEX,
-        WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_PCM,
-    },
-};
-use std::error;
 use std::fmt;
+use windows::{
+    Win32::Media::Audio::{
+        WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0, WAVE_FORMAT_PCM,
+    },
+    Win32::Media::KernelStreaming::{KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE},
+    Win32::Media::Multimedia::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, WAVE_FORMAT_IEEE_FLOAT},
+};
 
-use crate::{SampleType, WasapiError};
-
-pub(crate) type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
+use crate::{SampleType, WasapiError, WasapiRes};
 
 /// Struct wrapping a WAVEFORMATEXTENSIBLE format descriptor.
 #[derive(Clone)]
