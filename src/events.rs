@@ -1,7 +1,10 @@
-use crate::Windows;
-use crate::Windows::{
+use std::rc::Weak;
+use std::slice;
+use widestring::U16CString;
+use windows::{
+    core::{GUID, HRESULT},
     Win32::Foundation::{BOOL, PWSTR, S_OK},
-    Win32::Media::Audio::CoreAudio::{
+    Win32::Media::Audio::{
         AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
         AudioSessionStateExpired, AudioSessionStateInactive, DisconnectReasonDeviceRemoval,
         DisconnectReasonExclusiveModeOverride, DisconnectReasonFormatChanged,
@@ -9,12 +12,9 @@ use crate::Windows::{
         DisconnectReasonSessionLogoff,
     },
 };
-use std::rc::Weak;
-use std::slice;
-use widestring::U16CString;
-use windows::runtime::GUID;
-use windows::runtime::HRESULT;
 use windows_macros::implement;
+// Workaround for implement macro
+use windows as Windows;
 
 use crate::SessionState;
 
@@ -128,7 +128,7 @@ pub enum DisconnectReason {
 }
 
 /// Wrapper for IAudioSessionEvents
-#[implement(Windows::Win32::Media::Audio::CoreAudio::IAudioSessionEvents)]
+#[implement(Windows::Win32::Media::Audio::IAudioSessionEvents)]
 pub(crate) struct AudioSessionEvents {
     callbacks: Weak<EventCallbacks>,
 }
