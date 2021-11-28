@@ -127,7 +127,7 @@ pub enum DisconnectReason {
     Unknown,
 }
 
-/// Wrapper for IAudioSessionEvents
+/// Wrapper for [IAudioSessionEvents](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionevents).
 #[implement(Windows::Win32::Media::Audio::IAudioSessionEvents)]
 pub(crate) struct AudioSessionEvents {
     callbacks: Weak<EventCallbacks>,
