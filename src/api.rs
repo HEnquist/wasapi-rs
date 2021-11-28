@@ -8,9 +8,9 @@ use windows::{
     Win32::Foundation::{HANDLE, PSTR},
     Win32::Media::Audio::{
         eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
-        AudioSessionStateInactive, IAudioCaptureClient, IAudioClient, IAudioRenderClient,
-        IAudioSessionControl, IAudioSessionEvents, IMMDevice, IMMDeviceCollection,
-        IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE,
+        AudioSessionStateInactive, IAudioCaptureClient, IAudioClient, IAudioClock,
+        IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
+        IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE,
         AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK,
         AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE, WAVEFORMATEX,
@@ -106,7 +106,7 @@ pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
     Ok(dev)
 }
 
-/// Struct wrapping an IMMDeviceCollection.
+/// Struct wrapping an [IMMDeviceCollection](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevicecollection).
 pub struct DeviceCollection {
     collection: IMMDeviceCollection,
     direction: Direction,
@@ -158,7 +158,7 @@ impl DeviceCollection {
     }
 }
 
-/// Struct wrapping an IMMDevice.
+/// Struct wrapping an [IMMDevice](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevice).
 pub struct Device {
     device: IMMDevice,
     direction: Direction,
@@ -222,7 +222,7 @@ impl Device {
     }
 }
 
-/// Struct wrapping an IAudioClient.
+/// Struct wrapping an [IAudioClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclient).
 pub struct AudioClient {
     client: IAudioClient,
     direction: Direction,
@@ -456,9 +456,20 @@ impl AudioClient {
         let control = unsafe { mem::transmute(sessioncontrol_ptr) };
         Ok(AudioSessionControl { control })
     }
+
+    /// Get the AudioClock
+    pub fn get_audioclock(&self) -> WasapiRes<AudioClock> {
+        let mut clock_ptr = ptr::null_mut();
+        unsafe { self.client.GetService(&IAudioClock::IID, &mut clock_ptr)? };
+        if clock_ptr.is_null() {
+            return Err(WasapiError::new("Failed getting IAudioClock").into());
+        }
+        let clock = unsafe { mem::transmute(clock_ptr) };
+        Ok(AudioClock { clock })
+    }
 }
 
-/// Struct wrapping an IAudioSessionControl.
+/// Struct wrapping an [IAudioSessionControl](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessioncontrol).
 pub struct AudioSessionControl {
     control: IAudioSessionControl,
 }
@@ -500,7 +511,32 @@ impl AudioSessionControl {
     }
 }
 
-/// Struct wrapping an IAudioRenderClient.
+/// Struct wrapping an [IAudioClock](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclock).
+pub struct AudioClock {
+    clock: IAudioClock,
+}
+
+impl AudioClock {
+    /// Get the frequency for this AudioClock.
+    /// Note that the unit for the value is undefined.
+    pub fn get_frequency(&self) -> WasapiRes<u64> {
+        let freq = unsafe { self.clock.GetFrequency()? };
+        Ok(freq)
+    }
+
+    /// Get the current device position. Returns the position, as well as the value of the
+    /// performance counter at the time the position values was taken.
+    /// The unit for the position value is undefined, but the frequency and position values are
+    /// in the same unit. Dividing the position with the frequency gets the position in seconds.
+    pub fn get_position(&self) -> WasapiRes<(u64, u64)> {
+        let mut pos = 0;
+        let mut timer = 0;
+        unsafe { self.clock.GetPosition(&mut pos, &mut timer)? };
+        Ok((pos, timer))
+    }
+}
+
+/// Struct wrapping an [IAudioRenderClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudiorenderclient).
 pub struct AudioRenderClient {
     client: IAudioRenderClient,
 }
@@ -562,7 +598,7 @@ impl AudioRenderClient {
     }
 }
 
-/// Struct wrapping an IAudioCaptureClient.
+/// Struct wrapping an [IAudioCaptureClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudiocaptureclient).
 pub struct AudioCaptureClient {
     client: IAudioCaptureClient,
     sharemode: Option<ShareMode>,
@@ -648,7 +684,7 @@ impl AudioCaptureClient {
     }
 }
 
-/// Struct wrapping a HANDLE (event handle).
+/// Struct wrapping a HANDLE to an [Event Object](https://docs.microsoft.com/en-us/windows/win32/sync/event-objects).
 pub struct Handle {
     handle: HANDLE,
 }

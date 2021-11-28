@@ -9,7 +9,7 @@ use windows::{
 
 use crate::{SampleType, WasapiError, WasapiRes};
 
-/// Struct wrapping a WAVEFORMATEXTENSIBLE format descriptor.
+/// Struct wrapping a [WAVEFORMATEXTENSIBLE](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible) format descriptor.
 #[derive(Clone)]
 pub struct WaveFormat {
     pub wave_fmt: WAVEFORMATEXTENSIBLE,
