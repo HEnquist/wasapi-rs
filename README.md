@@ -26,8 +26,3 @@ These things have been implemented so far:
 | `loopback` | Shows how to simultaneously capture and render sound, with separate threads for capture and render. |
 | `record` | Records audio from the default device, and saves the raw samples to a file. |
 
-## Documentation
-The generated documentation is hosted on [GitHub Pages](https://henquist.github.io/wasapi-rs/). This is because the documentation must be built on Windows, and [docs.rs](https://docs.rs/crate/wasapi) only builds on Linux.
-
-The pages are generated from the branch `docs`.
-
