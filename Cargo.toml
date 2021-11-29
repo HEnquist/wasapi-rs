@@ -1,6 +1,6 @@
 [package]
 name = "wasapi"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2018"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 description = "Bindings for the Wasapi API on Windows"

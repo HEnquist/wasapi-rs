@@ -10,11 +10,12 @@ use windows::{
         eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
         AudioSessionStateInactive, IAudioCaptureClient, IAudioClient, IAudioClock,
         IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
-        IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE,
-        AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
-        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_LOOPBACK,
-        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE, WAVEFORMATEX,
-        WAVEFORMATEXTENSIBLE,
+        IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator,
+        AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
+        AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
+        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
+        WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
     Win32::System::Com::StructuredStorage::STGM_READ,
@@ -545,11 +546,13 @@ impl AudioRenderClient {
     /// Write raw bytes data to a device from a slice.
     /// The number of frames to write should first be checked with the
     /// `get_available_space_in_frames()` method on the `AudioClient`.
+    /// The buffer_flags argument can be used to mark a buffer as silent.
     pub fn write_to_device(
         &self,
         nbr_frames: usize,
         byte_per_frame: usize,
         data: &[u8],
+        buffer_flags: Option<BufferFlags>,
     ) -> WasapiRes<()> {
         let nbr_bytes = nbr_frames * byte_per_frame;
         if nbr_bytes != data.len() {
@@ -566,7 +569,11 @@ impl AudioRenderClient {
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         bufferslice.copy_from_slice(data);
-        unsafe { self.client.ReleaseBuffer(nbr_frames as u32, 0)? };
+        let flags = match buffer_flags {
+            Some(bflags) => bflags.to_u32(),
+            None => 0,
+        };
+        unsafe { self.client.ReleaseBuffer(nbr_frames as u32, flags)? };
         trace!("wrote {} frames", nbr_frames);
         Ok(())
     }
@@ -574,11 +581,13 @@ impl AudioRenderClient {
     /// Write raw bytes data to a device from a deque.
     /// The number of frames to write should first be checked with the
     /// `get_available_space_in_frames()` method on the `AudioClient`.
+    /// The buffer_flags argument can be used to mark a buffer as silent.
     pub fn write_to_device_from_deque(
         &self,
         nbr_frames: usize,
         byte_per_frame: usize,
         data: &mut VecDeque<u8>,
+        buffer_flags: Option<BufferFlags>,
     ) -> WasapiRes<()> {
         let nbr_bytes = nbr_frames * byte_per_frame;
         if nbr_bytes > data.len() {
@@ -592,9 +601,49 @@ impl AudioRenderClient {
         for element in bufferslice.iter_mut() {
             *element = data.pop_front().unwrap();
         }
-        unsafe { self.client.ReleaseBuffer(nbr_frames as u32, 0)? };
+        let flags = match buffer_flags {
+            Some(bflags) => bflags.to_u32(),
+            None => 0,
+        };
+        unsafe { self.client.ReleaseBuffer(nbr_frames as u32, flags)? };
         trace!("wrote {} frames", nbr_frames);
         Ok(())
+    }
+}
+
+/// Struct representing the [ _AUDCLNT_BUFFERFLAGS enums](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-_audclnt_bufferflags).
+pub struct BufferFlags {
+    /// AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY
+    pub data_discontinuity: bool,
+    /// AUDCLNT_BUFFERFLAGS_SILENT
+    pub silent: bool,
+    /// AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR
+    pub timestamp_error: bool,
+}
+
+impl BufferFlags {
+    /// Create a new BufferFlags struct from a u32 value.
+    pub fn new(flags: u32) -> Self {
+        BufferFlags {
+            data_discontinuity: flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32 > 0,
+            silent: flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 > 0,
+            timestamp_error: flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR.0 as u32 > 0,
+        }
+    }
+
+    /// Convert a BufferFlags struct to a u32 value.
+    pub fn to_u32(&self) -> u32 {
+        let mut value = 0;
+        if self.data_discontinuity {
+            value += AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32;
+        }
+        if self.silent {
+            value += AUDCLNT_BUFFERFLAGS_SILENT.0 as u32;
+        }
+        if self.timestamp_error {
+            value += AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR.0 as u32;
+        }
+        value
     }
 }
 
@@ -615,25 +664,32 @@ impl AudioCaptureClient {
         Ok(Some(nbr_frames))
     }
 
-    /// Read raw bytes from a device into a slice, returns the number of frames read.
+    /// Read raw bytes from a device into a slice. Returns the number of frames
+    /// that was read, and the BufferFlags describing the buffer that the data was read from.
     /// The slice must be large enough to hold all data.
     /// If it is longer that needed, the unused elements will not be modified.
-    pub fn read_from_device(&self, bytes_per_frame: usize, data: &mut [u8]) -> WasapiRes<u32> {
+    pub fn read_from_device(
+        &self,
+        bytes_per_frame: usize,
+        data: &mut [u8],
+    ) -> WasapiRes<(u32, BufferFlags)> {
         let data_len_in_frames = data.len() / bytes_per_frame;
         let mut buffer = mem::MaybeUninit::uninit();
         let mut nbr_frames_returned = 0;
+        let mut flags = 0;
         unsafe {
             self.client.GetBuffer(
                 buffer.as_mut_ptr(),
                 &mut nbr_frames_returned,
-                &mut 0,
+                &mut flags,
                 ptr::null_mut(),
                 ptr::null_mut(),
             )?
         };
+        let bufferflags = BufferFlags::new(flags);
         if nbr_frames_returned == 0 {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
-            return Ok(0);
+            return Ok((0, bufferflags));
         }
         if data_len_in_frames < nbr_frames_returned as usize {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
@@ -652,26 +708,29 @@ impl AudioCaptureClient {
         data[..len_in_bytes].copy_from_slice(bufferslice);
         unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
         trace!("read {} frames", nbr_frames_returned);
-        Ok(nbr_frames_returned)
+        Ok((nbr_frames_returned, bufferflags))
     }
 
     /// Read raw bytes data from a device into a deque.
+    /// Returns the BufferFlags describing the buffer that the data was read from.
     pub fn read_from_device_to_deque(
         &self,
         bytes_per_frame: usize,
         data: &mut VecDeque<u8>,
-    ) -> WasapiRes<()> {
+    ) -> WasapiRes<BufferFlags> {
         let mut buffer = mem::MaybeUninit::uninit();
         let mut nbr_frames_returned = 0;
+        let mut flags = 0;
         unsafe {
             self.client.GetBuffer(
                 buffer.as_mut_ptr(),
                 &mut nbr_frames_returned,
-                &mut 0,
+                &mut flags,
                 ptr::null_mut(),
                 ptr::null_mut(),
             )?
         };
+        let bufferflags = BufferFlags::new(flags);
         let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
         let bufferptr = unsafe { buffer.assume_init() };
         let bufferslice = unsafe { slice::from_raw_parts(bufferptr, len_in_bytes) };
@@ -680,7 +739,7 @@ impl AudioCaptureClient {
         }
         unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
         trace!("read {} frames", nbr_frames_returned);
-        Ok(())
+        Ok(bufferflags)
     }
 }
 

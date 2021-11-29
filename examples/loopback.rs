@@ -72,6 +72,7 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
             buffer_frame_count as usize,
             blockalign as usize,
             &mut sample_queue,
+            None,
         )?;
         trace!("write ok");
         if h_event.wait_for_event(100000).is_err() {
