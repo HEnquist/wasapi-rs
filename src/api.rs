@@ -172,7 +172,7 @@ impl Device {
         unsafe {
             self.device.Activate(
                 &IAudioClient::IID,
-                CLSCTX_ALL.0,
+                CLSCTX_ALL,
                 ptr::null_mut(),
                 audio_client.as_mut_ptr() as *mut _,
             )?;
@@ -625,9 +625,9 @@ impl BufferFlags {
     /// Create a new BufferFlags struct from a u32 value.
     pub fn new(flags: u32) -> Self {
         BufferFlags {
-            data_discontinuity: flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32 > 0,
-            silent: flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 > 0,
-            timestamp_error: flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR.0 as u32 > 0,
+            data_discontinuity: flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY as u32 > 0,
+            silent: flags & AUDCLNT_BUFFERFLAGS_SILENT as u32 > 0,
+            timestamp_error: flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR as u32 > 0,
         }
     }
 
@@ -635,13 +635,13 @@ impl BufferFlags {
     pub fn to_u32(&self) -> u32 {
         let mut value = 0;
         if self.data_discontinuity {
-            value += AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32;
+            value += AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY as u32;
         }
         if self.silent {
-            value += AUDCLNT_BUFFERFLAGS_SILENT.0 as u32;
+            value += AUDCLNT_BUFFERFLAGS_SILENT as u32;
         }
         if self.timestamp_error {
-            value += AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR.0 as u32;
+            value += AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR as u32;
         }
         value
     }
