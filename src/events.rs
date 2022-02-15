@@ -2,19 +2,16 @@ use std::rc::Weak;
 use std::slice;
 use widestring::U16CString;
 use windows::{
-    core::{GUID, HRESULT},
-    Win32::Foundation::{BOOL, PWSTR, S_OK},
+    core::{implement, Result, GUID},
+    Win32::Foundation::{BOOL, PWSTR},
     Win32::Media::Audio::{
         AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
         AudioSessionStateExpired, AudioSessionStateInactive, DisconnectReasonDeviceRemoval,
         DisconnectReasonExclusiveModeOverride, DisconnectReasonFormatChanged,
         DisconnectReasonServerShutdown, DisconnectReasonSessionDisconnected,
-        DisconnectReasonSessionLogoff,
+        DisconnectReasonSessionLogoff, IAudioSessionEvents, IAudioSessionEvents_Impl,
     },
 };
-use windows_macros::implement;
-// Workaround for implement macro
-use windows as Windows;
 
 use crate::SessionState;
 
@@ -128,20 +125,20 @@ pub enum DisconnectReason {
 }
 
 /// Wrapper for [IAudioSessionEvents](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionevents).
-#[implement(Windows::Win32::Media::Audio::IAudioSessionEvents)]
+#[implement(IAudioSessionEvents)]
 pub(crate) struct AudioSessionEvents {
     callbacks: Weak<EventCallbacks>,
 }
 
-#[allow(non_snake_case)]
 impl AudioSessionEvents {
     /// Create a new AudioSessionEvents instance, returned as a IAudioSessionEvent.
-    #[allow(clippy::new_ret_no_self)]
     pub fn new(callbacks: Weak<EventCallbacks>) -> Self {
         Self { callbacks }
     }
+}
 
-    fn OnStateChanged(&mut self, newstate: AudioSessionState) -> HRESULT {
+impl IAudioSessionEvents_Impl for AudioSessionEvents {
+    fn OnStateChanged(&mut self, newstate: AudioSessionState) -> Result<()> {
         #[allow(non_upper_case_globals)]
         let state_name = match newstate {
             AudioSessionStateActive => "Active",
@@ -155,17 +152,20 @@ impl AudioSessionEvents {
             AudioSessionStateActive => SessionState::Active,
             AudioSessionStateInactive => SessionState::Inactive,
             AudioSessionStateExpired => SessionState::Expired,
-            _ => return S_OK,
+            _ => return Ok(()),
         };
         if let Some(callbacks) = &mut self.callbacks.upgrade() {
             if let Some(callback) = &callbacks.state {
                 callback(sessionstate);
             }
         }
-        S_OK
+        Ok(())
     }
 
-    fn OnSessionDisconnected(&mut self, disconnectreason: AudioSessionDisconnectReason) -> HRESULT {
+    fn OnSessionDisconnected(
+        &mut self,
+        disconnectreason: AudioSessionDisconnectReason,
+    ) -> Result<()> {
         trace!("Disconnected");
         #[allow(non_upper_case_globals)]
         let reason = match disconnectreason {
@@ -183,14 +183,14 @@ impl AudioSessionEvents {
                 callback(reason);
             }
         }
-        S_OK
+        Ok(())
     }
 
     fn OnDisplayNameChanged(
         &mut self,
         newdisplayname: PWSTR,
         eventcontext: *const GUID,
-    ) -> HRESULT {
+    ) -> Result<()> {
         let wide_name = unsafe { U16CString::from_ptr_str(newdisplayname.0) };
         let name = wide_name.to_string_lossy();
         trace!("New display name: {}", name);
@@ -200,10 +200,10 @@ impl AudioSessionEvents {
                 callback(name, context);
             }
         }
-        S_OK
+        Ok(())
     }
 
-    fn OnIconPathChanged(&mut self, newiconpath: PWSTR, eventcontext: *const GUID) -> HRESULT {
+    fn OnIconPathChanged(&mut self, newiconpath: PWSTR, eventcontext: *const GUID) -> Result<()> {
         let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
         let path = wide_path.to_string_lossy();
         trace!("New icon path: {}", path);
@@ -213,7 +213,7 @@ impl AudioSessionEvents {
                 callback(path, context);
             }
         }
-        S_OK
+        Ok(())
     }
 
     fn OnSimpleVolumeChanged(
@@ -221,7 +221,7 @@ impl AudioSessionEvents {
         newvolume: f32,
         newmute: BOOL,
         eventcontext: *const GUID,
-    ) -> HRESULT {
+    ) -> Result<()> {
         trace!("New volume: {}, mute: {:?}", newvolume, newmute);
         if let Some(callbacks) = &mut self.callbacks.upgrade() {
             if let Some(callback) = &callbacks.simple_volume {
@@ -229,7 +229,7 @@ impl AudioSessionEvents {
                 callback(newvolume, bool::from(newmute), context);
             }
         }
-        S_OK
+        Ok(())
     }
 
     fn OnChannelVolumeChanged(
@@ -238,7 +238,7 @@ impl AudioSessionEvents {
         newchannelvolumearray: *const f32,
         changedchannel: u32,
         eventcontext: *const GUID,
-    ) -> HRESULT {
+    ) -> Result<()> {
         trace!("New channel volume for channel: {}", changedchannel);
         let volslice =
             unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
@@ -249,14 +249,14 @@ impl AudioSessionEvents {
                 callback(changedchannel as usize, newvol, context);
             }
         }
-        S_OK
+        Ok(())
     }
 
     fn OnGroupingParamChanged(
         &mut self,
         newgroupingparam: *const GUID,
         eventcontext: *const GUID,
-    ) -> HRESULT {
+    ) -> Result<()> {
         trace!("Grouping changed");
         if let Some(callbacks) = &mut self.callbacks.upgrade() {
             if let Some(callback) = &callbacks.groupingparam {
@@ -265,6 +265,6 @@ impl AudioSessionEvents {
                 callback(grouping, context);
             }
         }
-        S_OK
+        Ok(())
     }
 }

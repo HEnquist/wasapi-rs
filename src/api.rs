@@ -193,7 +193,7 @@ impl Device {
 
     /// Read the FriendlyName of an IMMDevice
     pub fn get_friendlyname(&self) -> WasapiRes<String> {
-        let store = unsafe { self.device.OpenPropertyStore(STGM_READ as u32)? };
+        let store = unsafe { self.device.OpenPropertyStore(STGM_READ)? };
         let prop = unsafe { store.GetValue(&DEVPKEY_Device_FriendlyName)? };
         let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
         let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
@@ -204,7 +204,7 @@ impl Device {
 
     /// Read the Description of an IMMDevice
     pub fn get_description(&self) -> WasapiRes<String> {
-        let store = unsafe { self.device.OpenPropertyStore(STGM_READ as u32)? };
+        let store = unsafe { self.device.OpenPropertyStore(STGM_READ)? };
         let prop = unsafe { store.GetValue(&DEVPKEY_Device_DeviceDesc)? };
         let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
         let wide_desc = unsafe { U16CString::from_ptr_str(propstr.0) };
@@ -625,9 +625,9 @@ impl BufferFlags {
     /// Create a new BufferFlags struct from a u32 value.
     pub fn new(flags: u32) -> Self {
         BufferFlags {
-            data_discontinuity: flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY as u32 > 0,
-            silent: flags & AUDCLNT_BUFFERFLAGS_SILENT as u32 > 0,
-            timestamp_error: flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR as u32 > 0,
+            data_discontinuity: flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32 > 0,
+            silent: flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 > 0,
+            timestamp_error: flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR.0 as u32 > 0,
         }
     }
 
@@ -635,13 +635,13 @@ impl BufferFlags {
     pub fn to_u32(&self) -> u32 {
         let mut value = 0;
         if self.data_discontinuity {
-            value += AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY as u32;
+            value += AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32;
         }
         if self.silent {
-            value += AUDCLNT_BUFFERFLAGS_SILENT as u32;
+            value += AUDCLNT_BUFFERFLAGS_SILENT.0 as u32;
         }
         if self.timestamp_error {
-            value += AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR as u32;
+            value += AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR.0 as u32;
         }
         value
     }
