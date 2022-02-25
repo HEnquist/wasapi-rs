@@ -3,9 +3,9 @@ use std::rc::Weak;
 use std::{error, fmt, mem, ptr, slice};
 use widestring::U16CString;
 use windows::{
-    core::Interface,
+    core::{Interface, PCSTR},
     Win32::Devices::Properties::{DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName},
-    Win32::Foundation::{HANDLE, PSTR},
+    Win32::Foundation::HANDLE,
     Win32::Media::Audio::{
         eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
         AudioSessionStateInactive, IAudioCaptureClient, IAudioClient, IAudioClock,
@@ -355,7 +355,7 @@ impl AudioClient {
 
     /// Create and return an event handle for an IAudioClient
     pub fn set_get_eventhandle(&self) -> WasapiRes<Handle> {
-        let h_event = unsafe { CreateEventA(std::ptr::null_mut(), false, false, PSTR::default()) };
+        let h_event = unsafe { CreateEventA(std::ptr::null_mut(), false, false, PCSTR::default()) };
         unsafe { self.client.SetEventHandle(h_event)? };
         Ok(Handle { handle: h_event })
     }

@@ -2,8 +2,8 @@ use std::rc::Weak;
 use std::slice;
 use widestring::U16CString;
 use windows::{
-    core::{implement, Result, GUID},
-    Win32::Foundation::{BOOL, PWSTR},
+    core::{implement, Result, GUID, PCWSTR},
+    Win32::Foundation::BOOL,
     Win32::Media::Audio::{
         AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
         AudioSessionStateExpired, AudioSessionStateInactive, DisconnectReasonDeviceRemoval,
@@ -138,7 +138,7 @@ impl AudioSessionEvents {
 }
 
 impl IAudioSessionEvents_Impl for AudioSessionEvents {
-    fn OnStateChanged(&mut self, newstate: AudioSessionState) -> Result<()> {
+    fn OnStateChanged(&self, newstate: AudioSessionState) -> Result<()> {
         #[allow(non_upper_case_globals)]
         let state_name = match newstate {
             AudioSessionStateActive => "Active",
@@ -162,10 +162,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents {
         Ok(())
     }
 
-    fn OnSessionDisconnected(
-        &mut self,
-        disconnectreason: AudioSessionDisconnectReason,
-    ) -> Result<()> {
+    fn OnSessionDisconnected(&self, disconnectreason: AudioSessionDisconnectReason) -> Result<()> {
         trace!("Disconnected");
         #[allow(non_upper_case_globals)]
         let reason = match disconnectreason {
@@ -187,8 +184,8 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents {
     }
 
     fn OnDisplayNameChanged(
-        &mut self,
-        newdisplayname: PWSTR,
+        &self,
+        newdisplayname: &PCWSTR,
         eventcontext: *const GUID,
     ) -> Result<()> {
         let wide_name = unsafe { U16CString::from_ptr_str(newdisplayname.0) };
@@ -203,7 +200,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents {
         Ok(())
     }
 
-    fn OnIconPathChanged(&mut self, newiconpath: PWSTR, eventcontext: *const GUID) -> Result<()> {
+    fn OnIconPathChanged(&self, newiconpath: &PCWSTR, eventcontext: *const GUID) -> Result<()> {
         let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
         let path = wide_path.to_string_lossy();
         trace!("New icon path: {}", path);
@@ -217,7 +214,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents {
     }
 
     fn OnSimpleVolumeChanged(
-        &mut self,
+        &self,
         newvolume: f32,
         newmute: BOOL,
         eventcontext: *const GUID,
@@ -233,7 +230,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents {
     }
 
     fn OnChannelVolumeChanged(
-        &mut self,
+        &self,
         channelcount: u32,
         newchannelvolumearray: *const f32,
         changedchannel: u32,
@@ -253,7 +250,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents {
     }
 
     fn OnGroupingParamChanged(
-        &mut self,
+        &self,
         newgroupingparam: *const GUID,
         eventcontext: *const GUID,
     ) -> Result<()> {
