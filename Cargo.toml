@@ -1,6 +1,6 @@
 [package]
 name = "wasapi"
-version = "0.11.0"
+version = "0.12.0"
 edition = "2018"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 description = "Bindings for the Wasapi API on Windows"
@@ -12,7 +12,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.windows]
-version = "0.33.0"
+version = "0.34.0"
 features = ["Foundation",
             "implement",
             "Win32_Media_Audio",
