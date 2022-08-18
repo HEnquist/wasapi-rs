@@ -68,21 +68,30 @@ pub fn initialize_sta() -> Result<(), windows::core::Error> {
 }
 
 /// Audio direction, playback or capture.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Direction {
     Render,
     Capture,
 }
 
+impl fmt::Display for Direction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Direction::Render => write!(f, "Render"),
+            Direction::Capture => write!(f, "Capture"),
+        }
+    }
+}
+
 /// Sharemode for device
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ShareMode {
     Shared,
     Exclusive,
 }
 
 /// Sample type, float or integer
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SampleType {
     Float,
     Int,
@@ -162,7 +171,7 @@ impl DeviceCollection {
 /// Struct wrapping an [IMMDevice](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevice).
 pub struct Device {
     device: IMMDevice,
-    direction: Direction,
+    pub direction: Direction,
 }
 
 impl Device {
@@ -480,7 +489,7 @@ pub struct AudioSessionControl {
 }
 
 /// States of an AudioSession
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SessionState {
     Active,
     Inactive,
@@ -616,6 +625,7 @@ impl AudioRenderClient {
 }
 
 /// Struct representing the [ _AUDCLNT_BUFFERFLAGS enums](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-_audclnt_bufferflags).
+#[derive(Debug)]
 pub struct BufferFlags {
     /// AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY
     pub data_discontinuity: bool,
