@@ -339,13 +339,17 @@ impl AudioClient {
             ShareMode::Exclusive => AUDCLNT_SHAREMODE_EXCLUSIVE,
             ShareMode::Shared => AUDCLNT_SHAREMODE_SHARED,
         };
+        let device_period = match sharemode {
+            ShareMode::Exclusive => period,
+            ShareMode::Shared => 0,
+        };
         self.sharemode = Some(sharemode.clone());
         unsafe {
             self.client.Initialize(
                 mode,
                 streamflags,
                 period,
-                period,
+                device_period,
                 wavefmt.as_waveformatex_ptr(),
                 std::ptr::null(),
             )?;
