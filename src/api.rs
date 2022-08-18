@@ -68,7 +68,7 @@ pub fn initialize_sta() -> Result<(), windows::core::Error> {
 }
 
 /// Audio direction, playback or capture.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Direction {
     Render,
     Capture,
@@ -84,14 +84,14 @@ impl fmt::Display for Direction {
 }
 
 /// Sharemode for device
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ShareMode {
     Shared,
     Exclusive,
 }
 
 /// Sample type, float or integer
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SampleType {
     Float,
     Int,
@@ -501,7 +501,7 @@ pub struct AudioSessionControl {
 }
 
 /// States of an AudioSession
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum SessionState {
     Active,
     Inactive,
