@@ -239,11 +239,27 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents {
         trace!("New channel volume for channel: {}", changedchannel);
         let volslice =
             unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
-        let newvol = volslice[changedchannel as usize];
         if let Some(callbacks) = &mut self.callbacks.upgrade() {
             if let Some(callback) = &callbacks.channel_volume {
                 let context = unsafe { *eventcontext };
-                callback(changedchannel as usize, newvol, context);
+                if changedchannel == u32::MAX {
+                    // special meaning by specs: (DWORD)(-1) - "more than one channel have changed"
+                    // using all channels
+                    for  (idx, newvol) in volslice.iter().enumerate() {
+                        callback(idx, *newvol, context);
+                    }
+                }
+                if (changedchannel as usize) < volslice.len() {
+                    let newvol = volslice[changedchannel as usize];
+                    callback(changedchannel as usize, newvol, context);
+                } else {
+                    warn!(
+                        "OnChannelVolumeChanged: received unsupported changedchannel value {} for volume array length of {}",
+                        changedchannel,
+                        volslice.len()
+                    );
+                    return Ok(());
+                }
             }
         }
         Ok(())

@@ -62,10 +62,14 @@ impl WaveFormat {
             SampleType::Float => KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
             SampleType::Int => KSDATAFORMAT_SUBTYPE_PCM,
         };
-        let mut mask = 0;
-        for n in 0..channels {
-            mask += 1 << n;
-        }
+        // only max 18 mask channel positions are defined (https://www.ambisonic.net/mulchaud.html#_Toc446153101)
+        let mask = match channels {
+            ch if ch <= 18 => {
+                // setting bit for each channel
+                (1 << ch) - 1
+            }
+            _ => 0,
+        };
         let wave_fmt = WAVEFORMATEXTENSIBLE {
             Format: wave_format,
             Samples: sample,
