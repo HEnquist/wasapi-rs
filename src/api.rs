@@ -259,6 +259,18 @@ impl AudioClient {
 
     /// Check if a format is supported.
     /// If it's directly supported, this returns Ok(None). If not, but a similar format is, then the supported format is returned as Ok(Some(WaveFormat)).
+    ///
+    /// NOTE: For exclusive mode, this function may not always give the right result for 1- and 2-channel formats.
+    /// From the [Microsoft documentation](https://docs.microsoft.com/en-us/windows/win32/coreaudio/device-formats#specifying-the-device-format):
+    /// > For exclusive-mode formats, the method queries the device driver.
+    /// > Some device drivers will report that they support a 1-channel or 2-channel PCM format if the format is specified by a stand-alone WAVEFORMATEX structure,
+    /// > but will reject the same format if it is specified by a WAVEFORMATEXTENSIBLE structure.
+    /// > To obtain reliable results from these drivers, exclusive-mode applications should call IsFormatSupported twice for each 1-channel or 2-channel PCM format.
+    /// > One call should use a stand-alone WAVEFORMATEX structure to specify the format, and the other call should use a WAVEFORMATEXTENSIBLE structure to specify the same format.
+    ///
+    /// If the first call fails, use [WaveFormat::to_waveformatex] to get a copy of the WaveFormat in the simpler WAVEFORMATEX representation.
+    /// Then call this function again with the new WafeFormat structure.
+    /// If the driver then reports that the format is supported, use the original WaveFormat structure when calling [AudioClient::initialize_client].
     pub fn is_supported(
         &self,
         wave_fmt: &WaveFormat,

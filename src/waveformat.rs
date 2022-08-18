@@ -1,5 +1,6 @@
 use std::fmt;
 use windows::{
+    core::GUID,
     Win32::Media::Audio::{
         WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0, WAVE_FORMAT_PCM,
     },
@@ -35,13 +36,17 @@ impl fmt::Debug for WaveFormat {
 }
 
 impl WaveFormat {
-    /// Build a WAVEFORMATEXTENSIBLE struct for the given parameters
+    /// Build a [WAVEFORMATEXTENSIBLE](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible) struct for the given parameters.
+    /// `channel_mask` is optional. If a mask is provided, it will be used. If not, a default mask will be created.
+    /// This can be used to work around quirks for some device drivers.
+    /// If the default is not accepted, try again using a zero mask, `Some(0)`.
     pub fn new(
         storebits: usize,
         validbits: usize,
         sample_type: &SampleType,
         samplerate: usize,
         channels: usize,
+        channel_mask: Option<u32>,
     ) -> Self {
         let blockalign = channels * storebits / 8;
         let byterate = samplerate * blockalign;
@@ -62,13 +67,18 @@ impl WaveFormat {
             SampleType::Float => KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
             SampleType::Int => KSDATAFORMAT_SUBTYPE_PCM,
         };
-        // only max 18 mask channel positions are defined (https://www.ambisonic.net/mulchaud.html#_Toc446153101)
-        let mask = match channels {
-            ch if ch <= 18 => {
-                // setting bit for each channel
-                (1 << ch) - 1
+        // Only max 18 mask channel positions are defined,
+        // https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible
+        let mask = if let Some(given_mask) = channel_mask {
+            given_mask
+        } else {
+            match channels {
+                ch if ch <= 18 => {
+                    // setting bit for each channel
+                    (1 << ch) - 1
+                }
+                _ => 0,
             }
-            _ => 0,
         };
         let wave_fmt = WAVEFORMATEXTENSIBLE {
             Format: wave_format,
@@ -79,7 +89,7 @@ impl WaveFormat {
         WaveFormat { wave_fmt }
     }
 
-    /// Create from a WAVEFORMATEX structure
+    /// Create from a [WAVEFORMATEX](https://docs.microsoft.com/en-us/previous-versions/dd757713(v=vs.85)) structure
     pub fn from_waveformatex(wavefmt: WAVEFORMATEX) -> WasapiRes<Self> {
         let validbits = wavefmt.wBitsPerSample as usize;
         let blockalign = wavefmt.nBlockAlign as usize;
@@ -100,7 +110,45 @@ impl WaveFormat {
             &sample_type,
             samplerate,
             channels,
+            None,
         ))
+    }
+
+    /// Return a copy in the simpler [WAVEFORMATEX](https://docs.microsoft.com/en-us/previous-versions/dd757713(v=vs.85)) format.
+    pub fn to_waveformatex(&self) -> WasapiRes<Self> {
+        let blockalign = self.wave_fmt.Format.nBlockAlign;
+        let samplerate = self.wave_fmt.Format.nSamplesPerSec;
+        let channels = self.wave_fmt.Format.nChannels;
+        let byterate = self.wave_fmt.Format.nAvgBytesPerSec;
+        let storebits = self.wave_fmt.Format.wBitsPerSample;
+        let sample_type = match self.wave_fmt.SubFormat {
+            KSDATAFORMAT_SUBTYPE_IEEE_FLOAT => WAVE_FORMAT_IEEE_FLOAT,
+            KSDATAFORMAT_SUBTYPE_PCM => WAVE_FORMAT_PCM,
+            _ => {
+                return Err(WasapiError::new("Unsupported format").into());
+            }
+        };
+        let wave_format = WAVEFORMATEX {
+            cbSize: 0,
+            nAvgBytesPerSec: byterate,
+            nBlockAlign: blockalign,
+            nChannels: channels,
+            nSamplesPerSec: samplerate,
+            wBitsPerSample: storebits,
+            wFormatTag: sample_type as u16,
+        };
+        let sample = WAVEFORMATEXTENSIBLE_0 {
+            wValidBitsPerSample: 0,
+        };
+        let subformat = GUID::zeroed();
+        let mask = 0;
+        let wave_fmt = WAVEFORMATEXTENSIBLE {
+            Format: wave_format,
+            Samples: sample,
+            SubFormat: subformat,
+            dwChannelMask: mask,
+        };
+        Ok(WaveFormat { wave_fmt })
     }
 
     /// get a pointer of type WAVEFORMATEX, used internally
