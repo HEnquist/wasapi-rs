@@ -49,7 +49,7 @@ fn main() {
     let channels = 2;
     let device = get_default_device(&Direction::Render).unwrap();
     let mut audio_client = device.get_iaudioclient().unwrap();
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, channels);
+    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, channels, None);
 
     // Blockalign is the number of bytes per frame
     let blockalign = desired_format.get_blockalign();

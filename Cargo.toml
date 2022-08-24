@@ -13,11 +13,12 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.windows]
-version = "0.34.0"
+version = "0.39.0"
 features = ["Foundation",
             "implement",
             "Win32_Media_Audio",
             "Win32_Foundation",
+            "Win32_Devices_FunctionDiscovery",
             "Win32_Devices_Properties",
             "Win32_UI_Shell_PropertiesSystem",
             "Win32_System_Com",
@@ -33,6 +34,7 @@ log = "0.4.14"
 
 [dev-dependencies]
 simplelog = "0.11.2"
+rand = "0.8.4"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"

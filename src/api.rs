@@ -3,9 +3,10 @@ use std::rc::Weak;
 use std::{error, fmt, mem, ptr, slice};
 use widestring::U16CString;
 use windows::{
-    core::{Interface, PCSTR},
-    Win32::Devices::Properties::{DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName},
-    Win32::Foundation::HANDLE,
+    core::PCSTR,
+    Win32::Devices::FunctionDiscovery::{PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName},
+    //Win32::Devices::Properties::{DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName},
+    Win32::Foundation::{HANDLE, WAIT_OBJECT_0},
     Win32::Media::Audio::{
         eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
         AudioSessionStateInactive, IAudioCaptureClient, IAudioClient, IAudioClock,
@@ -23,7 +24,7 @@ use windows::{
         CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
         COINIT_MULTITHREADED,
     },
-    Win32::System::Threading::{CreateEventA, WaitForSingleObject, WAIT_OBJECT_0},
+    Win32::System::Threading::{CreateEventA, WaitForSingleObject},
     Win32::UI::Shell::PropertiesSystem::PropVariantToStringAlloc,
 };
 
@@ -177,20 +178,15 @@ pub struct Device {
 impl Device {
     /// Get an IAudioClient from an IMMDevice
     pub fn get_iaudioclient(&self) -> WasapiRes<AudioClient> {
-        let mut audio_client: mem::MaybeUninit<IAudioClient> = mem::MaybeUninit::zeroed();
-        unsafe {
-            self.device.Activate(
-                &IAudioClient::IID,
-                CLSCTX_ALL,
-                ptr::null_mut(),
-                audio_client.as_mut_ptr() as *mut _,
-            )?;
-            Ok(AudioClient {
-                client: audio_client.assume_init(),
-                direction: self.direction.clone(),
-                sharemode: None,
-            })
-        }
+        let audio_client = unsafe {
+            self.device
+                .Activate::<IAudioClient>(CLSCTX_ALL, std::ptr::null())?
+        };
+        Ok(AudioClient {
+            client: audio_client,
+            direction: self.direction.clone(),
+            sharemode: None,
+        })
     }
 
     /// Read state from an IMMDevice
@@ -203,7 +199,7 @@ impl Device {
     /// Read the FriendlyName of an IMMDevice
     pub fn get_friendlyname(&self) -> WasapiRes<String> {
         let store = unsafe { self.device.OpenPropertyStore(STGM_READ)? };
-        let prop = unsafe { store.GetValue(&DEVPKEY_Device_FriendlyName)? };
+        let prop = unsafe { store.GetValue(&PKEY_Device_FriendlyName)? };
         let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
         let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
         let name = wide_name.to_string_lossy();
@@ -214,7 +210,7 @@ impl Device {
     /// Read the Description of an IMMDevice
     pub fn get_description(&self) -> WasapiRes<String> {
         let store = unsafe { self.device.OpenPropertyStore(STGM_READ)? };
-        let prop = unsafe { store.GetValue(&DEVPKEY_Device_DeviceDesc)? };
+        let prop = unsafe { store.GetValue(&PKEY_Device_DeviceDesc)? };
         let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
         let wide_desc = unsafe { U16CString::from_ptr_str(propstr.0) };
         let desc = wide_desc.to_string_lossy();
@@ -258,7 +254,7 @@ impl AudioClient {
     }
 
     /// Check if a format is supported.
-    /// If it's directly supported, this returns Ok(None). If not, but a similar format is, then the supported format is returned as Ok(Some(WaveFormat)).
+    /// If it's directly supported, this returns Ok(None). If not, but a similar format is, then the nearest matching supported format is returned as Ok(Some(WaveFormat)).
     ///
     /// NOTE: For exclusive mode, this function may not always give the right result for 1- and 2-channel formats.
     /// From the [Microsoft documentation](https://docs.microsoft.com/en-us/windows/win32/coreaudio/device-formats#specifying-the-device-format):
@@ -279,31 +275,40 @@ impl AudioClient {
         let supported = match sharemode {
             ShareMode::Exclusive => {
                 unsafe {
-                    self.client.IsFormatSupported(
-                        AUDCLNT_SHAREMODE_EXCLUSIVE,
-                        wave_fmt.as_waveformatex_ptr(),
-                    )?
+                    self.client
+                        .IsFormatSupported(
+                            AUDCLNT_SHAREMODE_EXCLUSIVE,
+                            wave_fmt.as_waveformatex_ptr(),
+                            ptr::null_mut(),
+                        )
+                        .ok()?
                 };
                 None
             }
             ShareMode::Shared => {
-                let supported_format = unsafe {
+                let mut supported_format: *mut WAVEFORMATEX = std::ptr::null_mut();
+                unsafe {
                     self.client
-                        .IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, wave_fmt.as_waveformatex_ptr())
-                }?;
+                        .IsFormatSupported(
+                            AUDCLNT_SHAREMODE_SHARED,
+                            wave_fmt.as_waveformatex_ptr(),
+                            &mut supported_format,
+                        )
+                        .ok()?
+                };
                 // Check if we got a pointer to a WAVEFORMATEX structure.
                 if supported_format.is_null() {
                     // The pointer is still null, thus the format is supported as is.
-                    debug!("requested format is directly supported");
+                    debug!("The requested format is supported");
                     None
                 } else {
                     // Read the structure
                     let temp_fmt: WAVEFORMATEX = unsafe { supported_format.read() };
-                    debug!("requested format is not directly supported");
+                    debug!("The requested format is not supported but a simular one is");
                     let new_fmt = if temp_fmt.cbSize == 22
                         && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
                     {
-                        debug!("got the supported format as a WAVEFORMATEXTENSIBLE");
+                        debug!("got the nearest matching format as a WAVEFORMATEXTENSIBLE");
                         let temp_fmt_ext: WAVEFORMATEXTENSIBLE = unsafe {
                             (supported_format as *const _ as *const WAVEFORMATEXTENSIBLE).read()
                         };
@@ -311,7 +316,7 @@ impl AudioClient {
                             wave_fmt: temp_fmt_ext,
                         }
                     } else {
-                        debug!("got the supported format as a WAVEFORMATEX, converting..");
+                        debug!("got the nearest matching format as a WAVEFORMATEX, converting..");
                         WaveFormat::from_waveformatex(temp_fmt)?
                     };
                     Some(new_fmt)
@@ -340,6 +345,11 @@ impl AudioClient {
         sharemode: &ShareMode,
         convert: bool,
     ) -> WasapiRes<()> {
+        if sharemode == &ShareMode::Exclusive && convert {
+            return Err(
+                WasapiError::new("Cant use automatic format conversion in exclusive mode").into(),
+            );
+        }
         let mut streamflags = match (&self.direction, direction, sharemode) {
             (Direction::Render, Direction::Capture, ShareMode::Shared) => {
                 AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_LOOPBACK
@@ -380,7 +390,7 @@ impl AudioClient {
 
     /// Create and return an event handle for an IAudioClient
     pub fn set_get_eventhandle(&self) -> WasapiRes<Handle> {
-        let h_event = unsafe { CreateEventA(std::ptr::null_mut(), false, false, PCSTR::default()) };
+        let h_event = unsafe { CreateEventA(std::ptr::null_mut(), false, false, PCSTR::null())? };
         unsafe { self.client.SetEventHandle(h_event)? };
         Ok(Handle { handle: h_event })
     }
@@ -440,29 +450,13 @@ impl AudioClient {
 
     /// Get a rendering (playback) client
     pub fn get_audiorenderclient(&self) -> WasapiRes<AudioRenderClient> {
-        let mut renderclient_ptr = ptr::null_mut();
-        unsafe {
-            self.client
-                .GetService(&IAudioRenderClient::IID, &mut renderclient_ptr)?
-        };
-        if renderclient_ptr.is_null() {
-            return Err(WasapiError::new("Failed getting IAudioCaptureClient").into());
-        }
-        let client = unsafe { mem::transmute(renderclient_ptr) };
+        let client = unsafe { self.client.GetService::<IAudioRenderClient>()? };
         Ok(AudioRenderClient { client })
     }
 
     /// Get a capture client
     pub fn get_audiocaptureclient(&self) -> WasapiRes<AudioCaptureClient> {
-        let mut renderclient_ptr = ptr::null_mut();
-        unsafe {
-            self.client
-                .GetService(&IAudioCaptureClient::IID, &mut renderclient_ptr)?
-        };
-        if renderclient_ptr.is_null() {
-            return Err(WasapiError::new("Failed getting IAudioCaptureClient").into());
-        }
-        let client = unsafe { mem::transmute(renderclient_ptr) };
+        let client = unsafe { self.client.GetService::<IAudioCaptureClient>()? };
         Ok(AudioCaptureClient {
             client,
             sharemode: self.sharemode.clone(),
@@ -471,26 +465,13 @@ impl AudioClient {
 
     /// Get the AudioSessionControl
     pub fn get_audiosessioncontrol(&self) -> WasapiRes<AudioSessionControl> {
-        let mut sessioncontrol_ptr = ptr::null_mut();
-        unsafe {
-            self.client
-                .GetService(&IAudioSessionControl::IID, &mut sessioncontrol_ptr)?
-        };
-        if sessioncontrol_ptr.is_null() {
-            return Err(WasapiError::new("Failed getting IAudioSessionControl").into());
-        }
-        let control = unsafe { mem::transmute(sessioncontrol_ptr) };
+        let control = unsafe { self.client.GetService::<IAudioSessionControl>()? };
         Ok(AudioSessionControl { control })
     }
 
     /// Get the AudioClock
     pub fn get_audioclock(&self) -> WasapiRes<AudioClock> {
-        let mut clock_ptr = ptr::null_mut();
-        unsafe { self.client.GetService(&IAudioClock::IID, &mut clock_ptr)? };
-        if clock_ptr.is_null() {
-            return Err(WasapiError::new("Failed getting IAudioClock").into());
-        }
-        let clock = unsafe { mem::transmute(clock_ptr) };
+        let clock = unsafe { self.client.GetService::<IAudioClock>()? };
         Ok(AudioClock { clock })
     }
 }
@@ -528,7 +509,7 @@ impl AudioSessionControl {
     pub fn register_session_notification(&self, callbacks: Weak<EventCallbacks>) -> WasapiRes<()> {
         let events: IAudioSessionEvents = AudioSessionEvents::new(callbacks).into();
 
-        match unsafe { self.control.RegisterAudioSessionNotification(events) } {
+        match unsafe { self.control.RegisterAudioSessionNotification(&events) } {
             Ok(()) => Ok(()),
             Err(err) => {
                 Err(WasapiError::new(&format!("Failed to register notifications, {}", err)).into())
@@ -778,7 +759,7 @@ impl Handle {
     /// Wait for an event on a handle, with a timeout given in ms
     pub fn wait_for_event(&self, timeout_ms: u32) -> WasapiRes<()> {
         let retval = unsafe { WaitForSingleObject(self.handle, timeout_ms) };
-        if retval != WAIT_OBJECT_0 {
+        if retval != WAIT_OBJECT_0.0 {
             return Err(WasapiError::new("Wait timed out").into());
         }
         Ok(())

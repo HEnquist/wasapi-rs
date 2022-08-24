@@ -14,7 +14,7 @@ type Res<T> = Result<T, Box<dyn error::Error>>;
 fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
     let device = get_default_device(&Direction::Render)?;
     let mut audio_client = device.get_iaudioclient()?;
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2);
+    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
 
     let blockalign = desired_format.get_blockalign();
     debug!("Desired playback format: {:?}", desired_format);
@@ -89,7 +89,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
     let device = get_default_device(&Direction::Capture)?;
     let mut audio_client = device.get_iaudioclient()?;
 
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2);
+    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
 
     let blockalign = desired_format.get_blockalign();
     debug!("Desired capture format: {:?}", desired_format);

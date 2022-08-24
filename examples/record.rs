@@ -20,7 +20,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
 
     let mut audio_client = device.get_iaudioclient()?;
 
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2);
+    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
 
     let blockalign = desired_format.get_blockalign();
     debug!("Desired capture format: {:?}", desired_format);
