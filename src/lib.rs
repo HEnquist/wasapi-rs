@@ -37,3 +37,5 @@ pub use windows::core::GUID;
 
 #[macro_use]
 extern crate log;
+
+extern crate num_integer;

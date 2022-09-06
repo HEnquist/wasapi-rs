@@ -1,5 +1,4 @@
 use rand::prelude::*;
-use std::f64::consts::PI;
 use wasapi::*;
 
 #[macro_use]
@@ -30,42 +29,10 @@ fn main() {
     // Check if the desired format is supported.
     // Since we have convert = true in the initialize_client call later,
     // it's ok to run with an unsupported format.
-    match audio_client.is_supported(&desired_format, &ShareMode::Exclusive) {
-        Ok(None) => {
-            debug!("Device supports format {:?}", desired_format);
-        }
-        Ok(Some(modified)) => {
-            debug!(
-                "Device doesn't support format:\n{:#?}\nClosest match is:\n{:#?}",
-                desired_format, modified
-            )
-        }
-        Err(err) => {
-            debug!(
-                "Device doesn't support format:\n{:#?}\nError: {}",
-                desired_format, err
-            );
-            debug!("Repeating query with format as WAVEFORMATEX");
-            let desired_formatex = desired_format.to_waveformatex().unwrap();
-            match audio_client.is_supported(&desired_formatex, &ShareMode::Shared) {
-                Ok(None) => {
-                    debug!("Device supports format {:?}", desired_formatex);
-                }
-                Ok(Some(modified)) => {
-                    debug!(
-                        "Device doesn't support format:\n{:#?}\nClosest match is:\n{:#?}",
-                        desired_formatex, modified
-                    );
-                }
-                Err(err) => {
-                    debug!(
-                        "Device doesn't support format:\n{:#?}\nError: {}",
-                        desired_formatex, err
-                    );
-                }
-            }
-        }
-    }
+
+    let desired_format = audio_client
+        .is_supported_exclusive_with_quirks(&desired_format)
+        .unwrap();
 
     // Blockalign is the number of bytes per frame
     let blockalign = desired_format.get_blockalign();

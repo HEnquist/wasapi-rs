@@ -1,3 +1,4 @@
+use num_integer::Integer;
 use std::collections::VecDeque;
 use std::rc::Weak;
 use std::{error, fmt, mem, ptr, slice};
@@ -5,7 +6,6 @@ use widestring::U16CString;
 use windows::{
     core::PCSTR,
     Win32::Devices::FunctionDiscovery::{PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName},
-    //Win32::Devices::Properties::{DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_FriendlyName},
     Win32::Foundation::{HANDLE, WAIT_OBJECT_0},
     Win32::Media::Audio::{
         eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
@@ -28,7 +28,7 @@ use windows::{
     Win32::UI::Shell::PropertiesSystem::PropVariantToStringAlloc,
 };
 
-use crate::{AudioSessionEvents, EventCallbacks, WaveFormat};
+use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WaveFormat};
 
 pub(crate) type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
 
@@ -267,6 +267,8 @@ impl AudioClient {
     /// If the first call fails, use [WaveFormat::to_waveformatex] to get a copy of the WaveFormat in the simpler WAVEFORMATEX representation.
     /// Then call this function again with the new WafeFormat structure.
     /// If the driver then reports that the format is supported, use the original WaveFormat structure when calling [AudioClient::initialize_client].
+    ///
+    /// See also the helper function [is_supported_exclusive_with_quirks](AudioClient::is_supported_exclusive_with_quirks).
     pub fn is_supported(
         &self,
         wave_fmt: &WaveFormat,
@@ -326,6 +328,56 @@ impl AudioClient {
         Ok(supported)
     }
 
+    /// A helper function for checking if a format is supported.
+    /// It calls `is_supported` several times with different options
+    /// in order to find a format that the device accepts.
+    ///
+    /// The alternatives it tries are:
+    /// - The format as given.
+    /// - If one or two channels, try with the format as WAVEFORMATEX.
+    /// - Try with different channel masks:
+    ///   - If channels <= 8: Recommended mask(s) from ksmedia.h.
+    ///   - If channels <= 18: Simple mask.
+    ///   - Zero mask.
+    ///
+    /// If an accepted format is found, this is returned.
+    /// An error means no accepted format was found.
+    pub fn is_supported_exclusive_with_quirks(
+        &self,
+        wave_fmt: &WaveFormat,
+    ) -> WasapiRes<WaveFormat> {
+        let mut wave_fmt = wave_fmt.clone();
+        let supported_direct = self.is_supported(&wave_fmt, &ShareMode::Exclusive);
+        if supported_direct.is_ok() {
+            debug!("The requested format is supported as provided");
+            return Ok(wave_fmt);
+        }
+        if wave_fmt.get_nchannels() <= 2 {
+            debug!("Repeating query with format as WAVEFORMATEX");
+            let wave_formatex = wave_fmt.to_waveformatex().unwrap();
+            if self
+                .is_supported(&wave_formatex, &ShareMode::Exclusive)
+                .is_ok()
+            {
+                debug!("The requested format is supported as WAVEFORMATEX");
+                return Ok(wave_formatex);
+            }
+        }
+        let masks = make_channelmasks(wave_fmt.get_nchannels() as usize);
+        for mask in masks {
+            debug!("Repeating query with channel mask: {:#010b}", mask);
+            wave_fmt.wave_fmt.dwChannelMask = mask;
+            if self.is_supported(&wave_fmt, &ShareMode::Exclusive).is_ok() {
+                debug!(
+                    "The requested format is supported with a modified mask: {:#010b}",
+                    mask
+                );
+                return Ok(wave_fmt);
+            }
+        }
+        Err(WasapiError::new("Unable to find a supported format").into())
+    }
+
     /// Get default and minimum periods in 100-nanosecond units
     pub fn get_periods(&self) -> WasapiRes<(i64, i64)> {
         let mut def_time = 0;
@@ -333,6 +385,38 @@ impl AudioClient {
         unsafe { self.client.GetDevicePeriod(&mut def_time, &mut min_time)? };
         trace!("default period {}, min period {}", def_time, min_time);
         Ok((def_time, min_time))
+    }
+
+    /// Helper function for calculating a period size in 100-nanosecond units that is near a desired value.
+    /// The returned value leads to a device buffer size that is aligned both to the frame size of the format, and the provided align_bytes value.
+    /// This is required for some devices that require the buffer size to be a multiple of a certain value.
+    /// An example is Intel HDA that requires buffer sizes in multiples of 128 bytes.
+    pub fn calculate_aligned_period_near(
+        &self,
+        desired_period: i64,
+        align_bytes: u32,
+        wave_fmt: &WaveFormat,
+    ) -> WasapiRes<i64> {
+        if desired_period == 0 || align_bytes == 0 {
+            return Err(WasapiError::new(
+                "Invalid input, both desired_period and align_bytes must be > 0",
+            )
+            .into());
+        }
+        let (_default_period, min_period) = self.get_periods()?;
+        let frame_bytes = wave_fmt.get_blockalign();
+        let period_alignment_bytes = frame_bytes.lcm(&align_bytes);
+        let period_alignment_100ns =
+            period_alignment_bytes as f64 * 10_000_000.0 / wave_fmt.get_samplespersec() as f64;
+
+        // aligning
+        let nbr_segments = (desired_period as f64 / period_alignment_100ns).round() as i64;
+        let mut aligned_period = (nbr_segments as f64 * period_alignment_100ns).round();
+        while aligned_period < min_period as f64 {
+            // add segments until we are over the minimum
+            aligned_period += period_alignment_100ns;
+        }
+        Ok(aligned_period.round() as i64)
     }
 
     /// Initialize an IAudioClient for the given direction, sharemode and format.

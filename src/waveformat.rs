@@ -4,11 +4,64 @@ use windows::{
     Win32::Media::Audio::{
         WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0, WAVE_FORMAT_PCM,
     },
-    Win32::Media::KernelStreaming::{KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE},
+    Win32::Media::KernelStreaming::{
+        KSDATAFORMAT_SUBTYPE_PCM, SPEAKER_BACK_CENTER, SPEAKER_BACK_LEFT, SPEAKER_BACK_RIGHT,
+        SPEAKER_FRONT_CENTER, SPEAKER_FRONT_LEFT, SPEAKER_FRONT_LEFT_OF_CENTER,
+        SPEAKER_FRONT_RIGHT, SPEAKER_FRONT_RIGHT_OF_CENTER, SPEAKER_LOW_FREQUENCY,
+        SPEAKER_SIDE_LEFT, SPEAKER_SIDE_RIGHT, WAVE_FORMAT_EXTENSIBLE,
+    },
     Win32::Media::Multimedia::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, WAVE_FORMAT_IEEE_FLOAT},
 };
 
 use crate::{SampleType, WasapiError, WasapiRes};
+
+// Definitions from ksmedia.h of the windows sdk.
+// Covers 1, 2, 4, 6 and 8 channels.
+const KSAUDIO_SPEAKER_MONO: u32 = SPEAKER_FRONT_CENTER;
+const KSAUDIO_SPEAKER_STEREO: u32 = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+const KSAUDIO_SPEAKER_QUAD: u32 =
+    SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_BACK_LEFT | SPEAKER_BACK_RIGHT;
+const KSAUDIO_SPEAKER_SURROUND: u32 =
+    SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_FRONT_CENTER | SPEAKER_BACK_CENTER;
+
+// Marked as obsolete in ksmedia.h, kept for compatibility
+const KSAUDIO_SPEAKER_5POINT1: u32 = SPEAKER_FRONT_LEFT
+    | SPEAKER_FRONT_RIGHT
+    | SPEAKER_FRONT_CENTER
+    | SPEAKER_LOW_FREQUENCY
+    | SPEAKER_BACK_LEFT
+    | SPEAKER_BACK_RIGHT;
+const KSAUDIO_SPEAKER_7POINT1: u32 = SPEAKER_FRONT_LEFT
+    | SPEAKER_FRONT_RIGHT
+    | SPEAKER_FRONT_CENTER
+    | SPEAKER_LOW_FREQUENCY
+    | SPEAKER_BACK_LEFT
+    | SPEAKER_BACK_RIGHT
+    | SPEAKER_FRONT_LEFT_OF_CENTER
+    | SPEAKER_FRONT_RIGHT_OF_CENTER;
+
+// Recommended 6 and 8 channel layouts from ksmedia.h
+const KSAUDIO_SPEAKER_5POINT1_SURROUND: u32 = SPEAKER_FRONT_LEFT
+    | SPEAKER_FRONT_RIGHT
+    | SPEAKER_FRONT_CENTER
+    | SPEAKER_LOW_FREQUENCY
+    | SPEAKER_SIDE_LEFT
+    | SPEAKER_SIDE_RIGHT;
+const KSAUDIO_SPEAKER_7POINT1_SURROUND: u32 = SPEAKER_FRONT_LEFT
+    | SPEAKER_FRONT_RIGHT
+    | SPEAKER_FRONT_CENTER
+    | SPEAKER_LOW_FREQUENCY
+    | SPEAKER_BACK_LEFT
+    | SPEAKER_BACK_RIGHT
+    | SPEAKER_SIDE_LEFT
+    | SPEAKER_SIDE_RIGHT;
+
+// Custom layouts for 3, 5 and 7 channels, not part of ksmedia.h
+const CUSTOM_SPEAKER_2POINT1: u32 = KSAUDIO_SPEAKER_STEREO | SPEAKER_LOW_FREQUENCY;
+const CUSTOM_SPEAKER_4POINT1: u32 = KSAUDIO_SPEAKER_QUAD | SPEAKER_LOW_FREQUENCY;
+const CUSTOM_SPEAKER_4POINT1_SURROUND: u32 = KSAUDIO_SPEAKER_SURROUND | SPEAKER_LOW_FREQUENCY;
+const CUSTOM_SPEAKER_6POINT1: u32 = KSAUDIO_SPEAKER_5POINT1 | SPEAKER_BACK_CENTER;
+const CUSTOM_SPEAKER_6POINT1_SURROUND: u32 = KSAUDIO_SPEAKER_5POINT1_SURROUND | SPEAKER_BACK_CENTER;
 
 /// Struct wrapping a [WAVEFORMATEXTENSIBLE](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible) format descriptor.
 #[derive(Clone)]
@@ -204,5 +257,61 @@ impl WaveFormat {
             }
         };
         Ok(subfmt)
+    }
+}
+
+/// Return a vector with suggested channel masks for the given number of channels.
+/// Used to find a format that a device accepts in exclusive mode.
+/// The values are sorted according to how likely they are to be accepted, with the most likely first.
+pub fn make_channelmasks(channels: usize) -> Vec<u32> {
+    match channels {
+        1 => vec![KSAUDIO_SPEAKER_MONO, make_simple_channelmask(channels), 0],
+        2 => vec![KSAUDIO_SPEAKER_STEREO, 0],
+        3 => vec![CUSTOM_SPEAKER_2POINT1, make_simple_channelmask(channels), 0],
+        4 => vec![
+            KSAUDIO_SPEAKER_QUAD,
+            KSAUDIO_SPEAKER_SURROUND,
+            make_simple_channelmask(channels),
+            0,
+        ],
+        5 => vec![
+            CUSTOM_SPEAKER_4POINT1,
+            CUSTOM_SPEAKER_4POINT1_SURROUND,
+            make_simple_channelmask(channels),
+            0,
+        ],
+        6 => vec![
+            KSAUDIO_SPEAKER_5POINT1_SURROUND,
+            KSAUDIO_SPEAKER_5POINT1,
+            make_simple_channelmask(channels),
+            0,
+        ],
+        7 => vec![
+            CUSTOM_SPEAKER_6POINT1_SURROUND,
+            CUSTOM_SPEAKER_6POINT1,
+            make_simple_channelmask(channels),
+            0,
+        ],
+        8 => vec![
+            KSAUDIO_SPEAKER_7POINT1_SURROUND,
+            KSAUDIO_SPEAKER_7POINT1,
+            make_simple_channelmask(channels),
+            0,
+        ],
+        9..=18 => vec![make_simple_channelmask(channels), 0],
+        _ => vec![0],
+    }
+}
+
+/// Make a simple channel mask by adding the correct number of bits.
+/// Above the 18 channel positions [that are defined](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)
+/// it returns a zero.
+pub fn make_simple_channelmask(channels: usize) -> u32 {
+    match channels {
+        1..=18 => {
+            // setting bit for each channel
+            (1 << channels) - 1
+        }
+        _ => 0,
     }
 }
