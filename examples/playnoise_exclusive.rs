@@ -38,10 +38,14 @@ fn main() {
     let (def_period, min_period) = audio_client.get_periods().unwrap();
 
     // Set some period as an example, using 128 byte alignment to satisfy for example Intel HDA
-    let desired_period = audio_client.calculate_aligned_period_near(3*min_period/2, Some(128), &desired_format).unwrap();
+    let desired_period = audio_client
+        .calculate_aligned_period_near(3 * min_period / 2, Some(128), &desired_format)
+        .unwrap();
 
-    debug!("periods in 100ns units {}, minimum {}, wanted {}", def_period, min_period, desired_period);
-
+    debug!(
+        "periods in 100ns units {}, minimum {}, wanted {}",
+        def_period, min_period, desired_period
+    );
 
     audio_client
         .initialize_client(

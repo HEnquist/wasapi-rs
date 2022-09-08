@@ -412,15 +412,20 @@ impl AudioClient {
             None => frame_bytes,
         };
         let period_alignment_frames = period_alignment_bytes as i64 / frame_bytes as i64;
-        let desired_period_frames = (adjusted_desired_period  as f64 * wave_fmt.get_samplespersec() as f64 / 10000000.0).round() as i64;
-        let min_period_frames = (min_period as f64 * wave_fmt.get_samplespersec() as f64 / 10000000.0).ceil() as i64;
+        let desired_period_frames =
+            (adjusted_desired_period as f64 * wave_fmt.get_samplespersec() as f64 / 10000000.0)
+                .round() as i64;
+        let min_period_frames =
+            (min_period as f64 * wave_fmt.get_samplespersec() as f64 / 10000000.0).ceil() as i64;
         let mut nbr_segments = desired_period_frames / period_alignment_frames;
         if nbr_segments * period_alignment_frames < min_period_frames {
             // Add one segment if the value got rounded down below the minimum
             nbr_segments += 1;
         }
         // Adapted from Microsoft docs:
-        let aligned_period = ((10000.0 * 1000.0 / wave_fmt.get_samplespersec() as f64 * (period_alignment_frames * nbr_segments) as f64) + 0.5) as i64;
+        let aligned_period = ((10000.0 * 1000.0 / wave_fmt.get_samplespersec() as f64
+            * (period_alignment_frames * nbr_segments) as f64)
+            + 0.5) as i64;
         Ok(aligned_period)
     }
 
