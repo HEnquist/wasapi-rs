@@ -1,4 +1,5 @@
 use num_integer::Integer;
+use std::cmp;
 use std::collections::VecDeque;
 use std::rc::Weak;
 use std::{error, fmt, mem, ptr, slice};
@@ -387,36 +388,40 @@ impl AudioClient {
         Ok((def_time, min_time))
     }
 
-    /// Helper function for calculating a period size in 100-nanosecond units that is near a desired value.
-    /// The returned value leads to a device buffer size that is aligned both to the frame size of the format, and the provided align_bytes value.
-    /// This is required for some devices that require the buffer size to be a multiple of a certain value.
+    /// Helper function for calculating a period size in 100-nanosecond units that is near a desired value,
+    /// and always larger than the minimum value supported by the device.
+    /// The returned value leads to a device buffer size that is aligned both to the frame size of the format,
+    /// and the optional align_bytes value.
+    /// This parameter is used for devices that require the buffer size to be a multiple of a certain number of bytes.
+    /// Give None, Some(0) or Some(1) if the device has no special requirements for the alignment.
     /// An example is Intel HDA that requires buffer sizes in multiples of 128 bytes.
+    ///
+    /// See also https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize#examples
     pub fn calculate_aligned_period_near(
         &self,
         desired_period: i64,
-        align_bytes: u32,
+        align_bytes: Option<u32>,
         wave_fmt: &WaveFormat,
     ) -> WasapiRes<i64> {
-        if desired_period == 0 || align_bytes == 0 {
-            return Err(WasapiError::new(
-                "Invalid input, both desired_period and align_bytes must be > 0",
-            )
-            .into());
-        }
         let (_default_period, min_period) = self.get_periods()?;
+        let adjusted_desired_period = cmp::max(desired_period, min_period);
         let frame_bytes = wave_fmt.get_blockalign();
-        let period_alignment_bytes = frame_bytes.lcm(&align_bytes);
-        let period_alignment_100ns =
-            period_alignment_bytes as f64 * 10_000_000.0 / wave_fmt.get_samplespersec() as f64;
-
-        // aligning
-        let nbr_segments = (desired_period as f64 / period_alignment_100ns).round() as i64;
-        let mut aligned_period = (nbr_segments as f64 * period_alignment_100ns).round();
-        while aligned_period < min_period as f64 {
-            // add segments until we are over the minimum
-            aligned_period += period_alignment_100ns;
+        let period_alignment_bytes = match align_bytes {
+            Some(0) => frame_bytes,
+            Some(bytes) => frame_bytes.lcm(&bytes),
+            None => frame_bytes,
+        };
+        let period_alignment_frames = period_alignment_bytes as i64 / frame_bytes as i64;
+        let desired_period_frames = (adjusted_desired_period  as f64 * wave_fmt.get_samplespersec() as f64 / 10000000.0).round() as i64;
+        let min_period_frames = (min_period as f64 * wave_fmt.get_samplespersec() as f64 / 10000000.0).ceil() as i64;
+        let mut nbr_segments = desired_period_frames / period_alignment_frames;
+        if nbr_segments * period_alignment_frames < min_period_frames {
+            // Add one segment if the value got rounded down below the minimum
+            nbr_segments += 1;
         }
-        Ok(aligned_period.round() as i64)
+        // Adapted from Microsoft docs:
+        let aligned_period = ((10000.0 * 1000.0 / wave_fmt.get_samplespersec() as f64 * (period_alignment_frames * nbr_segments) as f64) + 0.5) as i64;
+        Ok(aligned_period)
     }
 
     /// Initialize an IAudioClient for the given direction, sharemode and format.

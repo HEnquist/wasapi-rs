@@ -26,10 +26,7 @@ fn main() {
     //desired_format.wave_fmt.Format.wFormatTag = WAVE_FORMAT_PCM as u16;
     //desired_format.wave_fmt.dwChannelMask = 0;
 
-    // Check if the desired format is supported.
-    // Since we have convert = true in the initialize_client call later,
-    // it's ok to run with an unsupported format.
-
+    // Make sure the format is supported, panic if not.
     let desired_format = audio_client
         .is_supported_exclusive_with_quirks(&desired_format)
         .unwrap();
@@ -38,13 +35,18 @@ fn main() {
     let blockalign = desired_format.get_blockalign();
     debug!("Desired playback format: {:?}", desired_format);
 
-    let (def_time, min_time) = audio_client.get_periods().unwrap();
-    debug!("default period {}, min period {}", def_time, min_time);
+    let (def_period, min_period) = audio_client.get_periods().unwrap();
+
+    // Set some period as an example, using 128 byte alignment to satisfy for example Intel HDA
+    let desired_period = audio_client.calculate_aligned_period_near(3*min_period/2, Some(128), &desired_format).unwrap();
+
+    debug!("periods in 100ns units {}, minimum {}, wanted {}", def_period, min_period, desired_period);
+
 
     audio_client
         .initialize_client(
             &desired_format,
-            def_time as i64,
+            desired_period as i64,
             &Direction::Render,
             &ShareMode::Exclusive,
             false,
