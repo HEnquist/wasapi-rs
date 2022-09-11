@@ -23,7 +23,7 @@ These things have been implemented so far:
 | --------------------- | --------------------------------------------------------------------------------------------------- |
 | `playsine`            | Plays a sine wave in shared mode on the default output device.                                      |
 | `playsine_events`     | Similar to `playsine` but also listens to notifications.                                            |
-| `playnoise_exclusive` | Plays white noise in exclusive mode on the default output device.                                   |
+| `playnoise_exclusive` | Plays white noise in exclusive mode on the default output device. Shows how to get HRESULT errors.  |
 | `loopback`            | Shows how to simultaneously capture and render sound, with separate threads for capture and render. |
 | `record`              | Records audio from the default device, and saves the raw samples to a file.                         |
 

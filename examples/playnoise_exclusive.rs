@@ -4,6 +4,14 @@ use wasapi::*;
 #[macro_use]
 extern crate log;
 use simplelog::*;
+use windows::core::Error;
+
+// A selection of the possible errors
+use windows::Win32::Foundation::E_INVALIDARG;
+use windows::Win32::Media::Audio::{
+    AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_DEVICE_IN_USE, AUDCLNT_E_ENDPOINT_CREATE_FAILED,
+    AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED, AUDCLNT_E_UNSUPPORTED_FORMAT,
+};
 
 // Main loop
 fn main() {
@@ -20,11 +28,6 @@ fn main() {
     let device = get_default_device(&Direction::Render).unwrap();
     let mut audio_client = device.get_iaudioclient().unwrap();
     let desired_format = WaveFormat::new(24, 24, &SampleType::Int, 44100, channels, None);
-    //let desired_format = desired_format.to_waveformatex().unwrap();
-
-    //desired_format.wave_fmt.Format.cbSize = 0;
-    //desired_format.wave_fmt.Format.wFormatTag = WAVE_FORMAT_PCM as u16;
-    //desired_format.wave_fmt.dwChannelMask = 0;
 
     // Make sure the format is supported, panic if not.
     let desired_format = audio_client
@@ -47,16 +50,48 @@ fn main() {
         def_period, min_period, desired_period
     );
 
-    audio_client
-        .initialize_client(
-            &desired_format,
-            desired_period as i64,
-            &Direction::Render,
-            &ShareMode::Exclusive,
-            false,
-        )
-        .unwrap();
-    debug!("initialized playback");
+    let init_result = audio_client.initialize_client(
+        &desired_format,
+        desired_period as i64,
+        &Direction::Render,
+        &ShareMode::Exclusive,
+        false,
+    );
+    match init_result {
+        Ok(()) => debug!("IAudioClient::Initialize ok"),
+        Err(e) => {
+            if let Some(werr) = e.downcast_ref::<Error>() {
+                // Some of the possible errors. See the documentation for the full list and descriptions.
+                // https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize
+                match werr.code() {
+                    E_INVALIDARG => error!("IAudioClient::Initialize: Invalid argument"),
+                    AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED => {
+                        error!("IAudioClient::Initialize: Unaligned buffer, adjust the period")
+                    }
+                    AUDCLNT_E_DEVICE_IN_USE => {
+                        error!("IAudioClient::Initialize: The device is already in use")
+                    }
+                    AUDCLNT_E_UNSUPPORTED_FORMAT => error!(
+                        "IAudioClient::Initialize The device does not support the audio format"
+                    ),
+                    AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED => {
+                        error!("IAudioClient::Initialize: Exclusive mode is not allowed")
+                    }
+                    AUDCLNT_E_ENDPOINT_CREATE_FAILED => {
+                        error!("IAudioClient::Initialize: Failed to create endpoint")
+                    }
+                    _ => error!(
+                        "IAudioClient::Initialize: Other error, HRESULT: {:#010x}, info: {:?}",
+                        werr.code().0,
+                        werr.info()
+                    ),
+                };
+                panic!("IAudioClient::Initialize failed")
+            } else {
+                panic!("IAudioClient::Initialize: Other error {:?}", e);
+            }
+        }
+    };
 
     let mut rng = rand::thread_rng();
 
