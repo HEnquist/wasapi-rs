@@ -118,6 +118,12 @@ pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
     Ok(dev)
 }
 
+/// Calculate a period in units of 100ns that corresponds to the given number of buffer frames at the given sample rate.
+/// See the [IAudioClient documentation](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize#remarks).
+pub fn calculate_period_100ns(frames: i64, samplerate: i64) -> i64 {
+    ((10000.0 * 1000.0 / samplerate as f64 * frames as f64) + 0.5) as i64
+}
+
 /// Struct wrapping an [IMMDeviceCollection](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevicecollection).
 pub struct DeviceCollection {
     collection: IMMDeviceCollection,
@@ -396,7 +402,7 @@ impl AudioClient {
     /// Give None, Some(0) or Some(1) if the device has no special requirements for the alignment.
     /// An example is Intel HDA that requires buffer sizes in multiples of 128 bytes.
     ///
-    /// See also https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize#examples
+    /// See also the `playnoise_exclusive` example.
     pub fn calculate_aligned_period_near(
         &self,
         desired_period: i64,
@@ -422,10 +428,10 @@ impl AudioClient {
             // Add one segment if the value got rounded down below the minimum
             nbr_segments += 1;
         }
-        // Adapted from Microsoft docs:
-        let aligned_period = ((10000.0 * 1000.0 / wave_fmt.get_samplespersec() as f64
-            * (period_alignment_frames * nbr_segments) as f64)
-            + 0.5) as i64;
+        let aligned_period = calculate_period_100ns(
+            period_alignment_frames * nbr_segments,
+            wave_fmt.get_samplespersec() as i64,
+        );
         Ok(aligned_period)
     }
 

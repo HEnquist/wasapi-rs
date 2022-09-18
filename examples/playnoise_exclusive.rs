@@ -40,7 +40,7 @@ fn main() {
 
     let (def_period, min_period) = audio_client.get_periods().unwrap();
 
-    // Set some period as an example, using 128 byte alignment to satisfy for example Intel HDA
+    // Set some period as an example, using 128 byte alignment to satisfy for example Intel HDA and Realtek ALC887.
     let desired_period = audio_client
         .calculate_aligned_period_near(3 * min_period / 2, Some(128), &desired_format)
         .unwrap();
@@ -66,27 +66,64 @@ fn main() {
                 match werr.code() {
                     E_INVALIDARG => error!("IAudioClient::Initialize: Invalid argument"),
                     AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED => {
-                        error!("IAudioClient::Initialize: Unaligned buffer, adjust the period")
+                        warn!("IAudioClient::Initialize: Unaligned buffer, trying to adjust the period.");
+                        // Try to recover following the example in the docs.
+                        // https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize#examples
+                        // Just panic on errors to keep it short and simple.
+                        // 1. Call IAudioClient::GetBufferSize and receive the next-highest-aligned buffer size (in frames).
+                        let buffersize = audio_client.get_bufferframecount().unwrap();
+                        info!(
+                            "Client next-highest-aligned buffer size: {} frames",
+                            buffersize
+                        );
+                        // 2. Call IAudioClient::Release, skipped since this will happen automatically when we drop the client.
+                        // 3. Calculate the aligned buffer size in 100-nanosecond units.
+                        let aligned_period = calculate_period_100ns(
+                            buffersize as i64,
+                            desired_format.get_samplespersec() as i64,
+                        );
+                        info!("Aligned period in 100ns units: {}", aligned_period);
+                        // 4. Get a new IAudioClient
+                        audio_client = device.get_iaudioclient().unwrap();
+                        // 5. Call Initialize again on the created audio client.
+                        audio_client
+                            .initialize_client(
+                                &desired_format,
+                                aligned_period as i64,
+                                &Direction::Render,
+                                &ShareMode::Exclusive,
+                                false,
+                            )
+                            .unwrap();
+                        debug!("IAudioClient::Initialize ok");
                     }
                     AUDCLNT_E_DEVICE_IN_USE => {
-                        error!("IAudioClient::Initialize: The device is already in use")
+                        error!("IAudioClient::Initialize: The device is already in use");
+                        panic!("IAudioClient::Initialize failed");
                     }
-                    AUDCLNT_E_UNSUPPORTED_FORMAT => error!(
-                        "IAudioClient::Initialize The device does not support the audio format"
-                    ),
+                    AUDCLNT_E_UNSUPPORTED_FORMAT => {
+                        error!(
+                            "IAudioClient::Initialize The device does not support the audio format"
+                        );
+                        panic!("IAudioClient::Initialize failed");
+                    }
                     AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED => {
-                        error!("IAudioClient::Initialize: Exclusive mode is not allowed")
+                        error!("IAudioClient::Initialize: Exclusive mode is not allowed");
+                        panic!("IAudioClient::Initialize failed");
                     }
                     AUDCLNT_E_ENDPOINT_CREATE_FAILED => {
-                        error!("IAudioClient::Initialize: Failed to create endpoint")
+                        error!("IAudioClient::Initialize: Failed to create endpoint");
+                        panic!("IAudioClient::Initialize failed");
                     }
-                    _ => error!(
-                        "IAudioClient::Initialize: Other error, HRESULT: {:#010x}, info: {:?}",
-                        werr.code().0,
-                        werr.info()
-                    ),
+                    _ => {
+                        error!(
+                            "IAudioClient::Initialize: Other error, HRESULT: {:#010x}, info: {:?}",
+                            werr.code().0,
+                            werr.info()
+                        );
+                        panic!("IAudioClient::Initialize failed");
+                    }
                 };
-                panic!("IAudioClient::Initialize failed")
             } else {
                 panic!("IAudioClient::Initialize: Other error {:?}", e);
             }
