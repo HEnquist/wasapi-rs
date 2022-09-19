@@ -27,7 +27,7 @@ fn main() {
     let channels = 2;
     let device = get_default_device(&Direction::Render).unwrap();
     let mut audio_client = device.get_iaudioclient().unwrap();
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Int, 44100, channels, None);
+    let desired_format = WaveFormat::new(24, 24, &SampleType::Int, 44100, channels, None);
 
     // Make sure the format is supported, panic if not.
     let desired_format = audio_client

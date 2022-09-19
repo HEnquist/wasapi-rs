@@ -206,7 +206,7 @@ impl WaveFormat {
 
     /// get a reference of type &WAVEFORMATEX, used internally
     pub fn as_waveformatex_ref(&self) -> &WAVEFORMATEX {
-        unsafe { &*(&self.wave_fmt as *const _ as *const WAVEFORMATEX) }
+        &self.wave_fmt.Format
     }
 
     /// Read nBlockAlign.
