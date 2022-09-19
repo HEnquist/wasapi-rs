@@ -204,13 +204,8 @@ impl WaveFormat {
         Ok(WaveFormat { wave_fmt })
     }
 
-    /// get a pointer of type WAVEFORMATEX, used internally
-    pub fn as_waveformatex_ptr(&self) -> *const WAVEFORMATEX {
-        &self.wave_fmt as *const _ as *const WAVEFORMATEX
-    }
-
-    /// get a pointer of type WAVEFORMATEX, used internally
-    pub fn as_waveformatex(&self) -> &WAVEFORMATEX {
+    /// get a reference of type &WAVEFORMATEX, used internally
+    pub fn as_waveformatex_ref(&self) -> &WAVEFORMATEX {
         unsafe { &*(&self.wave_fmt as *const _ as *const WAVEFORMATEX) }
     }
 

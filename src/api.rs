@@ -185,10 +185,7 @@ pub struct Device {
 impl Device {
     /// Get an IAudioClient from an IMMDevice
     pub fn get_iaudioclient(&self) -> WasapiRes<AudioClient> {
-        let audio_client = unsafe {
-            self.device
-                .Activate::<IAudioClient>(CLSCTX_ALL, None)?
-        };
+        let audio_client = unsafe { self.device.Activate::<IAudioClient>(CLSCTX_ALL, None)? };
         Ok(AudioClient {
             client: audio_client,
             direction: self.direction.clone(),
@@ -287,7 +284,7 @@ impl AudioClient {
                     self.client
                         .IsFormatSupported(
                             AUDCLNT_SHAREMODE_EXCLUSIVE,
-                            wave_fmt.as_waveformatex(),
+                            wave_fmt.as_waveformatex_ref(),
                             None,
                         )
                         .ok()?
@@ -300,7 +297,7 @@ impl AudioClient {
                     self.client
                         .IsFormatSupported(
                             AUDCLNT_SHAREMODE_SHARED,
-                            wave_fmt.as_waveformatex(),
+                            wave_fmt.as_waveformatex_ref(),
                             Some(&mut supported_format),
                         )
                         .ok()?
@@ -389,7 +386,10 @@ impl AudioClient {
     pub fn get_periods(&self) -> WasapiRes<(i64, i64)> {
         let mut def_time = 0;
         let mut min_time = 0;
-        unsafe { self.client.GetDevicePeriod(Some(&mut def_time), Some(&mut min_time))? };
+        unsafe {
+            self.client
+                .GetDevicePeriod(Some(&mut def_time), Some(&mut min_time))?
+        };
         trace!("default period {}, min period {}", def_time, min_time);
         Ok((def_time, min_time))
     }
@@ -481,7 +481,7 @@ impl AudioClient {
                 streamflags,
                 period,
                 device_period,
-                wavefmt.as_waveformatex(),
+                wavefmt.as_waveformatex_ref(),
                 None,
             )?;
         }
