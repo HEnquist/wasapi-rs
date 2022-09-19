@@ -209,6 +209,11 @@ impl WaveFormat {
         &self.wave_fmt as *const _ as *const WAVEFORMATEX
     }
 
+    /// get a pointer of type WAVEFORMATEX, used internally
+    pub fn as_waveformatex(&self) -> &WAVEFORMATEX {
+        unsafe { &*(&self.wave_fmt as *const _ as *const WAVEFORMATEX) }
+    }
+
     /// Read nBlockAlign.
     pub fn get_blockalign(&self) -> u32 {
         self.wave_fmt.Format.nBlockAlign as u32

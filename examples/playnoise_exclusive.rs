@@ -27,7 +27,7 @@ fn main() {
     let channels = 2;
     let device = get_default_device(&Direction::Render).unwrap();
     let mut audio_client = device.get_iaudioclient().unwrap();
-    let desired_format = WaveFormat::new(24, 24, &SampleType::Int, 44100, channels, None);
+    let desired_format = WaveFormat::new(32, 32, &SampleType::Int, 44100, channels, None);
 
     // Make sure the format is supported, panic if not.
     let desired_format = audio_client
@@ -40,7 +40,7 @@ fn main() {
 
     let (def_period, min_period) = audio_client.get_periods().unwrap();
 
-    // Set some period as an example, using 128 byte alignment to satisfy for example Intel HDA and Realtek ALC887.
+    // Set some period as an example, using 128 byte alignment to satisfy for example Intel HDA devices.
     let desired_period = audio_client
         .calculate_aligned_period_near(3 * min_period / 2, Some(128), &desired_format)
         .unwrap();
@@ -119,7 +119,7 @@ fn main() {
                         error!(
                             "IAudioClient::Initialize: Other error, HRESULT: {:#010x}, info: {:?}",
                             werr.code().0,
-                            werr.info()
+                            werr.message()
                         );
                         panic!("IAudioClient::Initialize failed");
                     }

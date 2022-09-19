@@ -2,7 +2,7 @@ use num_integer::Integer;
 use std::cmp;
 use std::collections::VecDeque;
 use std::rc::Weak;
-use std::{error, fmt, mem, ptr, slice};
+use std::{error, fmt, ptr, slice};
 use widestring::U16CString;
 use windows::{
     core::PCSTR,
@@ -20,7 +20,7 @@ use windows::{
         WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
-    Win32::System::Com::StructuredStorage::STGM_READ,
+    Win32::System::Com::STGM_READ,
     Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
         COINIT_MULTITHREADED,
@@ -187,7 +187,7 @@ impl Device {
     pub fn get_iaudioclient(&self) -> WasapiRes<AudioClient> {
         let audio_client = unsafe {
             self.device
-                .Activate::<IAudioClient>(CLSCTX_ALL, std::ptr::null())?
+                .Activate::<IAudioClient>(CLSCTX_ALL, None)?
         };
         Ok(AudioClient {
             client: audio_client,
@@ -287,8 +287,8 @@ impl AudioClient {
                     self.client
                         .IsFormatSupported(
                             AUDCLNT_SHAREMODE_EXCLUSIVE,
-                            wave_fmt.as_waveformatex_ptr(),
-                            ptr::null_mut(),
+                            wave_fmt.as_waveformatex(),
+                            None,
                         )
                         .ok()?
                 };
@@ -300,8 +300,8 @@ impl AudioClient {
                     self.client
                         .IsFormatSupported(
                             AUDCLNT_SHAREMODE_SHARED,
-                            wave_fmt.as_waveformatex_ptr(),
-                            &mut supported_format,
+                            wave_fmt.as_waveformatex(),
+                            Some(&mut supported_format),
                         )
                         .ok()?
                 };
@@ -389,7 +389,7 @@ impl AudioClient {
     pub fn get_periods(&self) -> WasapiRes<(i64, i64)> {
         let mut def_time = 0;
         let mut min_time = 0;
-        unsafe { self.client.GetDevicePeriod(&mut def_time, &mut min_time)? };
+        unsafe { self.client.GetDevicePeriod(Some(&mut def_time), Some(&mut min_time))? };
         trace!("default period {}, min period {}", def_time, min_time);
         Ok((def_time, min_time))
     }
@@ -400,7 +400,7 @@ impl AudioClient {
     /// and the optional align_bytes value.
     /// This parameter is used for devices that require the buffer size to be a multiple of a certain number of bytes.
     /// Give None, Some(0) or Some(1) if the device has no special requirements for the alignment.
-    /// An example is Intel HDA that requires buffer sizes in multiples of 128 bytes.
+    /// For example, all devices following the Intel High Definition Audio specification require buffer sizes in multiples of 128 bytes.
     ///
     /// See also the `playnoise_exclusive` example.
     pub fn calculate_aligned_period_near(
@@ -481,8 +481,8 @@ impl AudioClient {
                 streamflags,
                 period,
                 device_period,
-                wavefmt.as_waveformatex_ptr(),
-                std::ptr::null(),
+                wavefmt.as_waveformatex(),
+                None,
             )?;
         }
         Ok(())
@@ -490,7 +490,7 @@ impl AudioClient {
 
     /// Create and return an event handle for an IAudioClient
     pub fn set_get_eventhandle(&self) -> WasapiRes<Handle> {
-        let h_event = unsafe { CreateEventA(std::ptr::null_mut(), false, false, PCSTR::null())? };
+        let h_event = unsafe { CreateEventA(None, false, false, PCSTR::null())? };
         unsafe { self.client.SetEventHandle(h_event)? };
         Ok(Handle { handle: h_event })
     }
@@ -638,7 +638,7 @@ impl AudioClock {
     pub fn get_position(&self) -> WasapiRes<(u64, u64)> {
         let mut pos = 0;
         let mut timer = 0;
-        unsafe { self.clock.GetPosition(&mut pos, &mut timer)? };
+        unsafe { self.clock.GetPosition(&mut pos, Some(&mut timer))? };
         Ok((pos, timer))
     }
 }
@@ -781,16 +781,16 @@ impl AudioCaptureClient {
         data: &mut [u8],
     ) -> WasapiRes<(u32, BufferFlags)> {
         let data_len_in_frames = data.len() / bytes_per_frame;
-        let mut buffer = mem::MaybeUninit::uninit();
+        let mut buffer_ptr = ptr::null_mut();
         let mut nbr_frames_returned = 0;
         let mut flags = 0;
         unsafe {
             self.client.GetBuffer(
-                buffer.as_mut_ptr(),
+                &mut buffer_ptr,
                 &mut nbr_frames_returned,
                 &mut flags,
-                ptr::null_mut(),
-                ptr::null_mut(),
+                None,
+                None,
             )?
         };
         let bufferflags = BufferFlags::new(flags);
@@ -810,8 +810,7 @@ impl AudioCaptureClient {
             .into());
         }
         let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
-        let bufferptr = unsafe { buffer.assume_init() };
-        let bufferslice = unsafe { slice::from_raw_parts(bufferptr, len_in_bytes) };
+        let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
         data[..len_in_bytes].copy_from_slice(bufferslice);
         unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
         trace!("read {} frames", nbr_frames_returned);
@@ -825,22 +824,21 @@ impl AudioCaptureClient {
         bytes_per_frame: usize,
         data: &mut VecDeque<u8>,
     ) -> WasapiRes<BufferFlags> {
-        let mut buffer = mem::MaybeUninit::uninit();
+        let mut buffer_ptr = ptr::null_mut();
         let mut nbr_frames_returned = 0;
         let mut flags = 0;
         unsafe {
             self.client.GetBuffer(
-                buffer.as_mut_ptr(),
+                &mut buffer_ptr,
                 &mut nbr_frames_returned,
                 &mut flags,
-                ptr::null_mut(),
-                ptr::null_mut(),
+                None,
+                None,
             )?
         };
         let bufferflags = BufferFlags::new(flags);
         let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
-        let bufferptr = unsafe { buffer.assume_init() };
-        let bufferslice = unsafe { slice::from_raw_parts(bufferptr, len_in_bytes) };
+        let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
         for element in bufferslice.iter() {
             data.push_back(*element);
         }
@@ -859,7 +857,7 @@ impl Handle {
     /// Wait for an event on a handle, with a timeout given in ms
     pub fn wait_for_event(&self, timeout_ms: u32) -> WasapiRes<()> {
         let retval = unsafe { WaitForSingleObject(self.handle, timeout_ms) };
-        if retval != WAIT_OBJECT_0.0 {
+        if retval.0 != WAIT_OBJECT_0.0 {
             return Err(WasapiError::new("Wait timed out").into());
         }
         Ok(())
