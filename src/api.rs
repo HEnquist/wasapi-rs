@@ -61,12 +61,12 @@ impl WasapiError {
 
 /// Initializes COM for use by the calling thread for the multi-threaded apartment (MTA).
 pub fn initialize_mta() -> Result<(), windows::core::Error> {
-    unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_MULTITHREADED) }
+    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
 }
 
 /// Initializes COM for use by the calling thread for a single-threaded apartment (STA).
 pub fn initialize_sta() -> Result<(), windows::core::Error> {
-    unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_APARTMENTTHREADED) }
+    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
 }
 
 /// Audio direction, playback or capture.
