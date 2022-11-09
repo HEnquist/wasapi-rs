@@ -70,7 +70,7 @@ pub fn initialize_sta() -> Result<(), windows::core::Error> {
 }
 
 /// Audio direction, playback or capture.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Direction {
     Render,
     Capture,
@@ -86,17 +86,53 @@ impl fmt::Display for Direction {
 }
 
 /// Sharemode for device
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShareMode {
     Shared,
     Exclusive,
 }
 
+impl fmt::Display for ShareMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            ShareMode::Shared => write!(f, "Shared"),
+            ShareMode::Exclusive => write!(f, "Exclusive"),
+        }
+    }
+}
+
 /// Sample type, float or integer
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SampleType {
     Float,
     Int,
+}
+
+impl fmt::Display for SampleType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            SampleType::Float => write!(f, "Float"),
+            SampleType::Int => write!(f, "Int"),
+        }
+    }
+}
+
+/// States of an AudioSession
+#[derive(Debug, Eq, PartialEq)]
+pub enum SessionState {
+    Active,
+    Inactive,
+    Expired,
+}
+
+impl fmt::Display for SessionState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            SessionState::Active => write!(f, "Active"),
+            SessionState::Inactive => write!(f, "Inactive"),
+            SessionState::Expired => write!(f, "Expired"),
+        }
+    }
 }
 
 /// Get the default playback or capture device
@@ -174,12 +210,17 @@ impl DeviceCollection {
         }
         Err(WasapiError::new(format!("Unable to find device {}", name).as_str()).into())
     }
+
+    /// Get the direction for this DeviceCollection
+    pub fn get_direction(&self) -> Direction {
+        self.direction
+    }
 }
 
 /// Struct wrapping an [IMMDevice](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevice).
 pub struct Device {
     device: IMMDevice,
-    pub direction: Direction,
+    direction: Direction,
 }
 
 impl Device {
@@ -229,6 +270,11 @@ impl Device {
         let id = wide_id.to_string_lossy();
         trace!("id: {}", id);
         Ok(id)
+    }
+
+    /// Get the direction for this Device
+    pub fn get_direction(&self) -> Direction {
+        self.direction
     }
 }
 
@@ -574,19 +620,22 @@ impl AudioClient {
         let clock = unsafe { self.client.GetService::<IAudioClock>()? };
         Ok(AudioClock { clock })
     }
+
+    /// Get the direction for this AudioClient
+    pub fn get_direction(&self) -> Direction {
+        self.direction
+    }
+
+    /// Get the sharemode for this AudioClient.
+    /// The sharemode is decided when the client is initialized.
+    pub fn get_sharemode(&self) -> Option<ShareMode> {
+        self.sharemode
+    }
 }
 
 /// Struct wrapping an [IAudioSessionControl](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessioncontrol).
 pub struct AudioSessionControl {
     control: IAudioSessionControl,
-}
-
-/// States of an AudioSession
-#[derive(Debug, Eq, PartialEq)]
-pub enum SessionState {
-    Active,
-    Inactive,
-    Expired,
 }
 
 impl AudioSessionControl {
@@ -845,6 +894,12 @@ impl AudioCaptureClient {
         unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
         trace!("read {} frames", nbr_frames_returned);
         Ok(bufferflags)
+    }
+
+    /// Get the sharemode for this AudioCaptureClient.
+    /// The sharemode is decided when the client is initialized.
+    pub fn get_sharemode(&self) -> Option<ShareMode> {
+        self.sharemode
     }
 }
 
