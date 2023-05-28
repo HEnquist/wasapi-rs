@@ -29,13 +29,13 @@ features = ["Foundation",
             "Win32_Security",]
 
 [dependencies]
-widestring = "0.5.1"
-log = "0.4.14"
+widestring = "1.0.2"
+log = "0.4.18"
 num-integer = "0.1"
 
 [dev-dependencies]
-simplelog = "0.11.2"
-rand = "0.8.4"
+simplelog = "0.12.1"
+rand = "0.8.5"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"

@@ -37,7 +37,8 @@ fn main() {
     let _ = SimpleLogger::init(
         LevelFilter::Debug,
         ConfigBuilder::new()
-            .set_time_format_str("%H:%M:%S%.3f")
+            .set_time_format_rfc3339()
+            .set_time_offset_to_local().unwrap()
             .build(),
     );
 
