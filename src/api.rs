@@ -1,4 +1,5 @@
 use num_integer::Integer;
+use windows::Win32::UI::Shell::PropertiesSystem::PROPERTYKEY;
 use std::cmp;
 use std::collections::VecDeque;
 use std::rc::Weak;
@@ -6,7 +7,7 @@ use std::{error, fmt, ptr, slice};
 use widestring::U16CString;
 use windows::{
     core::PCSTR,
-    Win32::Devices::FunctionDiscovery::{PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName},
+    Win32::Devices::FunctionDiscovery::{PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName, PKEY_DeviceInterface_FriendlyName},
     Win32::Foundation::{HANDLE, WAIT_OBJECT_0},
     Win32::Media::Audio::{
         eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
@@ -241,26 +242,30 @@ impl Device {
         Ok(state)
     }
 
-    /// Read the FriendlyName of an IMMDevice
+    /// Read the friendly name of the endpoint device (for example, "Speakers (XYZ Audio Adapter)")
     pub fn get_friendlyname(&self) -> WasapiRes<String> {
+        self.get_string_property(&PKEY_Device_FriendlyName)
+    }
+
+    /// Read the friendly name of the audio adapter to which the endpoint device is attached (for example, "XYZ Audio Adapter")
+    pub fn get_interface_friendlyname(&self) -> WasapiRes<String> {
+        self.get_string_property(&PKEY_DeviceInterface_FriendlyName)
+    }
+
+    /// Read the device description of the endpoint device (for example, "Speakers")
+    pub fn get_description(&self) -> WasapiRes<String> {
+        self.get_string_property(&PKEY_Device_DeviceDesc)
+    }
+
+    /// Read the FriendlyName of an IMMDevice
+    fn get_string_property(&self, key: &PROPERTYKEY) -> WasapiRes<String> {
         let store = unsafe { self.device.OpenPropertyStore(STGM_READ)? };
-        let prop = unsafe { store.GetValue(&PKEY_Device_FriendlyName)? };
+        let prop = unsafe { store.GetValue(key)? };
         let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
         let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
         let name = wide_name.to_string_lossy();
         trace!("name: {}", name);
         Ok(name)
-    }
-
-    /// Read the Description of an IMMDevice
-    pub fn get_description(&self) -> WasapiRes<String> {
-        let store = unsafe { self.device.OpenPropertyStore(STGM_READ)? };
-        let prop = unsafe { store.GetValue(&PKEY_Device_DeviceDesc)? };
-        let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
-        let wide_desc = unsafe { U16CString::from_ptr_str(propstr.0) };
-        let desc = wide_desc.to_string_lossy();
-        trace!("description: {}", desc);
-        Ok(desc)
     }
 
     /// Get the Id of an IMMDevice
