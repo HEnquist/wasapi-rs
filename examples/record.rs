@@ -20,7 +20,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
 
     let mut audio_client = device.get_iaudioclient()?;
 
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2);
+    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
 
     let blockalign = desired_format.get_blockalign();
     debug!("Desired capture format: {:?}", desired_format);
@@ -76,7 +76,9 @@ fn main() -> Res<()> {
     let _ = SimpleLogger::init(
         LevelFilter::Trace,
         ConfigBuilder::new()
-            .set_time_format_str("%H:%M:%S%.3f")
+            .set_time_format_rfc3339()
+            .set_time_offset_to_local()
+            .unwrap()
             .build(),
     );
 

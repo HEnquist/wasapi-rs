@@ -37,7 +37,9 @@ fn main() {
     let _ = SimpleLogger::init(
         LevelFilter::Debug,
         ConfigBuilder::new()
-            .set_time_format_str("%H:%M:%S%.3f")
+            .set_time_format_rfc3339()
+            .set_time_offset_to_local()
+            .unwrap()
             .build(),
     );
 
@@ -48,28 +50,50 @@ fn main() {
     let channels = 2;
     let device = get_default_device(&Direction::Render).unwrap();
     let mut audio_client = device.get_iaudioclient().unwrap();
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, channels);
+    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, channels, None);
 
     // Check if the desired format is supported.
-    // Since we have convert = true in the initialize_client call later,
-    // it's ok to run with an unsupported format.
-    match audio_client.is_supported(&desired_format, &ShareMode::Shared) {
+    let needs_convert = match audio_client.is_supported(&desired_format, &ShareMode::Shared) {
         Ok(None) => {
             debug!("Device supports format {:?}", desired_format);
+            false
         }
         Ok(Some(modified)) => {
             debug!(
                 "Device doesn't support format:\n{:#?}\nClosest match is:\n{:#?}",
                 desired_format, modified
-            )
+            );
+            true
         }
         Err(err) => {
             debug!(
                 "Device doesn't support format:\n{:#?}\nError: {}",
                 desired_format, err
             );
+            debug!("Repeating query with format as WAVEFORMATEX");
+            let desired_formatex = desired_format.to_waveformatex().unwrap();
+            match audio_client.is_supported(&desired_formatex, &ShareMode::Shared) {
+                Ok(None) => {
+                    debug!("Device supports format {:?}", desired_formatex);
+                    false
+                }
+                Ok(Some(modified)) => {
+                    debug!(
+                        "Device doesn't support format:\n{:#?}\nClosest match is:\n{:#?}",
+                        desired_formatex, modified
+                    );
+                    true
+                }
+                Err(err) => {
+                    debug!(
+                        "Device doesn't support format:\n{:#?}\nError: {}",
+                        desired_formatex, err
+                    );
+                    true
+                }
+            }
         }
-    }
+    };
 
     // Blockalign is the number of bytes per frame
     let blockalign = desired_format.get_blockalign();
@@ -78,13 +102,14 @@ fn main() {
     let (def_time, min_time) = audio_client.get_periods().unwrap();
     debug!("default period {}, min period {}", def_time, min_time);
 
+    debug!("Initializing device with convert={}", needs_convert);
     audio_client
         .initialize_client(
             &desired_format,
             def_time as i64,
             &Direction::Render,
             &ShareMode::Shared,
-            true,
+            needs_convert,
         )
         .unwrap();
     debug!("initialized playback");

@@ -14,17 +14,19 @@
 //!
 //! - Audio playback and capture
 //! - Shared and exclusive modes
+//! - Event-driven buffering
 //! - Loopback capture
 //! - Notifications for volume change, device disconnect etc
 //!
 //! ## Included examples
 //!
-//! | Example    | Description                                                    |
-//! | ---------- | ---------------------------------------------------------------|
-//! | `playsine` | Plays a sine wave in shared mode on the default output device. |
-//! | `playsine_events` | Similar to `playsine` but also listens to notifications. |
-//! | `loopback` | Shows how to simultaneously capture and render sound, with separate threads for capture and render. |
-//! | `record` | Records audio from the default device, and saves the raw samples to a file. |
+//! | Example               | Description                                                                                            |
+//! | --------------------- | ------------------------------------------------------------------------------------------------------ |
+//! | `playsine`            | Plays a sine wave in shared mode on the default output device.                                         |
+//! | `playsine_events`     | Similar to `playsine` but also listens to notifications.                                               |
+//! | `playnoise_exclusive` | Plays white noise in exclusive mode on the default output device. Shows how to handle HRESULT errors.  |
+//! | `loopback`            | Shows how to simultaneously capture and render sound, with separate threads for capture and render.    |
+//! | `record`              | Records audio from the default device, and saves the raw samples to a file.                            |
 
 mod api;
 mod events;
@@ -36,3 +38,5 @@ pub use windows::core::GUID;
 
 #[macro_use]
 extern crate log;
+
+extern crate num_integer;
