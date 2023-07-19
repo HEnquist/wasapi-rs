@@ -1,13 +1,15 @@
 use num_integer::Integer;
-use windows::Win32::UI::Shell::PropertiesSystem::PROPERTYKEY;
 use std::cmp;
 use std::collections::VecDeque;
 use std::rc::Weak;
 use std::{error, fmt, ptr, slice};
 use widestring::U16CString;
+use windows::Win32::UI::Shell::PropertiesSystem::PROPERTYKEY;
 use windows::{
     core::PCSTR,
-    Win32::Devices::FunctionDiscovery::{PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName, PKEY_DeviceInterface_FriendlyName},
+    Win32::Devices::FunctionDiscovery::{
+        PKEY_DeviceInterface_FriendlyName, PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
+    },
     Win32::Foundation::{HANDLE, WAIT_OBJECT_0},
     Win32::Media::Audio::{
         eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
@@ -23,7 +25,7 @@ use windows::{
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
     Win32::System::Com::STGM_READ,
     Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
         COINIT_MULTITHREADED,
     },
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
@@ -68,6 +70,11 @@ pub fn initialize_mta() -> Result<(), windows::core::Error> {
 /// Initializes COM for use by the calling thread for a single-threaded apartment (STA).
 pub fn initialize_sta() -> Result<(), windows::core::Error> {
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
+}
+
+/// Close the COM library on the current thread.
+pub fn deinitialize() {
+    unsafe { CoUninitialize() }
 }
 
 /// Audio direction, playback or capture.

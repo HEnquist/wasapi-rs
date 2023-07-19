@@ -39,7 +39,8 @@ fn main() {
         LevelFilter::Debug,
         ConfigBuilder::new()
             .set_time_format_rfc3339()
-            .set_time_offset_to_local().unwrap()
+            .set_time_offset_to_local()
+            .unwrap()
             .build(),
     );
 
