@@ -255,12 +255,12 @@ impl DeviceCollection {
 }
 
 /// Iterator for DeviceCollection
-pub struct DeviceCollectionIter {
-    collection: DeviceCollection,
+pub struct DeviceCollectionIter<'a> {
+    collection: &'a DeviceCollection,
     index: u32,
 }
 
-impl Iterator for DeviceCollectionIter {
+impl<'a> Iterator for DeviceCollectionIter<'a> {
     type Item = WasapiRes<Device>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -275,13 +275,13 @@ impl Iterator for DeviceCollectionIter {
 }
 
 /// Implement iterator for DeviceCollection
-impl IntoIterator for DeviceCollection {
+impl<'a> IntoIterator for &'a DeviceCollection {
     type Item = WasapiRes<Device>;
-    type IntoIter = DeviceCollectionIter;
+    type IntoIter = DeviceCollectionIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         DeviceCollectionIter {
-            collection: self,
+            collection: &self,
             index: 0,
         }
     }
