@@ -156,7 +156,7 @@ pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
 
     let dev = Device {
         device,
-        direction: direction.clone(),
+        direction: *direction,
     };
     debug!("default device {:?}", dev.get_friendlyname());
     Ok(dev)
@@ -186,7 +186,7 @@ impl DeviceCollection {
         let devs = unsafe { enumerator.EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE)? };
         Ok(DeviceCollection {
             collection: devs,
-            direction: direction.clone(),
+            direction: *direction,
         })
     }
 
@@ -201,7 +201,7 @@ impl DeviceCollection {
         let device = unsafe { self.collection.Item(idx)? };
         Ok(Device {
             device,
-            direction: self.direction.clone(),
+            direction: self.direction,
         })
     }
 
@@ -237,7 +237,7 @@ impl Device {
         let audio_client = unsafe { self.device.Activate::<IAudioClient>(CLSCTX_ALL, None)? };
         Ok(AudioClient {
             client: audio_client,
-            direction: self.direction.clone(),
+            direction: self.direction,
             sharemode: None,
         })
     }
@@ -532,7 +532,7 @@ impl AudioClient {
             ShareMode::Exclusive => period,
             ShareMode::Shared => 0,
         };
-        self.sharemode = Some(sharemode.clone());
+        self.sharemode = Some(*sharemode);
         unsafe {
             self.client.Initialize(
                 mode,
@@ -617,7 +617,7 @@ impl AudioClient {
         let client = unsafe { self.client.GetService::<IAudioCaptureClient>()? };
         Ok(AudioCaptureClient {
             client,
-            sharemode: self.sharemode.clone(),
+            sharemode: self.sharemode,
         })
     }
 
