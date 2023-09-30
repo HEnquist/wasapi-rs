@@ -29,7 +29,7 @@ use windows::{
         COINIT_MULTITHREADED,
     },
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
-    Win32::UI::Shell::PropertiesSystem::PropVariantToStringAlloc,
+    Win32::System::Com::StructuredStorage::PropVariantToStringAlloc,
 };
 
 use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WaveFormat};

@@ -13,7 +13,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.windows]
-version = "0.48.0"
+version = "0.51"
 features = ["Foundation",
             "implement",
             "Win32_Media_Audio",
@@ -26,6 +26,7 @@ features = ["Foundation",
             "Win32_Media_KernelStreaming",
             "Win32_Media_Multimedia",
             "Win32_System_Threading",
+            "Win32_System_Variant",
             "Win32_Security",]
 
 [dependencies]
