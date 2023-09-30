@@ -24,7 +24,7 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
 
     audio_client.initialize_client(
         &desired_format,
-        min_time as i64,
+        min_time,
         &Direction::Render,
         &ShareMode::Shared,
         true,
@@ -99,7 +99,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
 
     audio_client.initialize_client(
         &desired_format,
-        min_time as i64,
+        min_time,
         &Direction::Capture,
         &ShareMode::Shared,
         true,
@@ -116,9 +116,9 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
     );
     audio_client.start_stream()?;
     loop {
-        while sample_queue.len() > (blockalign as usize * chunksize as usize) {
+        while sample_queue.len() > (blockalign as usize * chunksize) {
             debug!("pushing samples");
-            let mut chunk = vec![0u8; blockalign as usize * chunksize as usize];
+            let mut chunk = vec![0u8; blockalign as usize * chunksize];
             for element in chunk.iter_mut() {
                 *element = sample_queue.pop_front().unwrap();
             }

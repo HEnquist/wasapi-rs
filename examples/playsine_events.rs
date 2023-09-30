@@ -63,7 +63,7 @@ fn main() {
     audio_client
         .initialize_client(
             &desired_format,
-            def_time as i64,
+            def_time,
             &Direction::Render,
             &ShareMode::Shared,
             true,
@@ -102,7 +102,7 @@ fn main() {
         for frame in data.chunks_exact_mut(blockalign as usize) {
             let sample = gen.next().unwrap();
             let sample_bytes = sample.to_le_bytes();
-            for value in frame.chunks_exact_mut(blockalign as usize / channels as usize) {
+            for value in frame.chunks_exact_mut(blockalign as usize / channels) {
                 for (bufbyte, sinebyte) in value.iter_mut().zip(sample_bytes.iter()) {
                     *bufbyte = *sinebyte;
                 }
