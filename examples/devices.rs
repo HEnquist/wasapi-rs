@@ -1,19 +1,6 @@
 use wasapi::*;
 
-#[macro_use]
-extern crate log;
-use simplelog::*;
-
 fn main() {
-    let _ = SimpleLogger::init(
-        LevelFilter::Debug,
-        ConfigBuilder::new()
-            .set_time_format_rfc3339()
-            .set_time_offset_to_local()
-            .unwrap()
-            .build(),
-    );
-
     initialize_mta().unwrap();
 
     println!("Found the following output devices:");
