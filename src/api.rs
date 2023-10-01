@@ -12,9 +12,9 @@ use windows::{
     },
     Win32::Foundation::{HANDLE, WAIT_OBJECT_0},
     Win32::Media::Audio::{
-        eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
-        AudioSessionStateInactive, IAudioCaptureClient, IAudioClient, IAudioClock,
-        IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
+        eCapture, eCommunications, eConsole, eMultimedia, eRender, AudioSessionStateActive,
+        AudioSessionStateExpired, AudioSessionStateInactive, IAudioCaptureClient, IAudioClient,
+        IAudioClock, IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
         IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator,
         AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
         AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
@@ -93,6 +93,25 @@ impl fmt::Display for Direction {
     }
 }
 
+/// Role for audio device. Console is the role used by most applications
+/// https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/ne-mmdeviceapi-eroleV
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Role {
+    Console,
+    Multimedia,
+    Communications,
+}
+
+impl fmt::Display for Role {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Role::Console => write!(f, "Console"),
+            Role::Multimedia => write!(f, "Multimedia"),
+            Role::Communications => write!(f, "Communications"),
+        }
+    }
+}
+
 /// Sharemode for device
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShareMode {
@@ -142,17 +161,27 @@ impl fmt::Display for SessionState {
         }
     }
 }
-
-/// Get the default playback or capture device
+/// Get the default playback or capture device for the console role
 pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
+    get_default_device_for_role(direction, &Role::Console)
+}
+
+/// Get the default playback or capture device for a specific role
+pub fn get_default_device_for_role(direction: &Direction, role: &Role) -> WasapiRes<Device> {
     let dir = match direction {
         Direction::Capture => eCapture,
         Direction::Render => eRender,
     };
 
+    let e_role = match role {
+        Role::Console => eConsole,
+        Role::Multimedia => eMultimedia,
+        Role::Communications => eCommunications,
+    };
+
     let enumerator: IMMDeviceEnumerator =
         unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
-    let device = unsafe { enumerator.GetDefaultAudioEndpoint(dir, eConsole)? };
+    let device = unsafe { enumerator.GetDefaultAudioEndpoint(dir, e_role)? };
 
     let dev = Device {
         device,
@@ -222,6 +251,39 @@ impl DeviceCollection {
     /// Get the direction for this DeviceCollection
     pub fn get_direction(&self) -> Direction {
         self.direction
+    }
+}
+
+/// Iterator for DeviceCollection
+pub struct DeviceCollectionIter<'a> {
+    collection: &'a DeviceCollection,
+    index: u32,
+}
+
+impl<'a> Iterator for DeviceCollectionIter<'a> {
+    type Item = WasapiRes<Device>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.collection.get_nbr_devices().unwrap() {
+            let device = self.collection.get_device_at_index(self.index);
+            self.index += 1;
+            Some(device)
+        } else {
+            None
+        }
+    }
+}
+
+/// Implement iterator for DeviceCollection
+impl<'a> IntoIterator for &'a DeviceCollection {
+    type Item = WasapiRes<Device>;
+    type IntoIter = DeviceCollectionIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        DeviceCollectionIter {
+            collection: &self,
+            index: 0,
+        }
     }
 }
 
