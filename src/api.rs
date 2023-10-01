@@ -93,7 +93,8 @@ impl fmt::Display for Direction {
     }
 }
 
-/// Audio direction, playback or capture.
+/// Role for audio device. Console is the role used by most applications
+/// https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/ne-mmdeviceapi-eroleV
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Role {
     Console,
@@ -160,8 +161,7 @@ impl fmt::Display for SessionState {
         }
     }
 }
-/// Get the default playback or capture device for Console purposes, which is usually what's wanted
-/// https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/ne-mmdeviceapi-erole
+/// Get the default playback or capture device for the console role
 pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
     get_default_device_for_role(direction, &Role::Console)
 }
