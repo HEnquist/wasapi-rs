@@ -5,8 +5,9 @@ fn main() {
 
     println!("Found the following output devices:");
     for device in &DeviceCollection::new(&Direction::Render).unwrap() {
-        let state = &device.unwrap().get_state_enum().unwrap();
-        println!("Device: {:?}. State: {:?}", device.unwrap().get_friendlyname().unwrap(), state);
+        let dev = device.unwrap();
+        let state = &dev.get_state().unwrap();
+        println!("Device: {:?}. State: {:?}", &dev.get_friendlyname().unwrap(), state);
     }
 
     println!("Default output devices:");

@@ -195,7 +195,7 @@ impl fmt::Display for DeviceState {
 }
 
 impl TryFrom<u32> for DeviceState {
-    type Error = ();
+    type Error = WasapiError;
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
@@ -203,7 +203,7 @@ impl TryFrom<u32> for DeviceState {
             2 => Ok(DeviceState::Disabled),
             4 => Ok(DeviceState::NotPresent),
             8 => Ok(DeviceState::Unplugged),
-            _ => {Err(()) }
+            x => Err(WasapiError::new(format!("Unrecognised value: {}", x).as_str()).into())
         }
     }
 }
@@ -352,14 +352,7 @@ impl Device {
     }
 
     /// Read state from an IMMDevice
-    pub fn get_state(&self) -> WasapiRes<u32> {
-        let state: u32 = unsafe { self.device.GetState()? };
-        trace!("state: {:?}", state);
-        Ok(state)
-    }
-
-    /// Read state from an IMMDevice and return enum
-    pub fn get_state_enum(&self) -> WasapiRes<DeviceState> {
+    pub fn get_state(&self) -> WasapiRes<DeviceState> {
         let state: u32 = unsafe { self.device.GetState()? };
         trace!("state: {:?}", state);
         match state.try_into() {
