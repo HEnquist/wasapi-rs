@@ -93,8 +93,8 @@ impl fmt::Display for Direction {
     }
 }
 
-/// Role for audio device. Console is the role used by most applications
-/// https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/ne-mmdeviceapi-eroleV
+/// Wrapper for [ERole](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/ne-mmdeviceapi-erole).
+/// Console is the role used by most applications
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Role {
     Console,
@@ -162,8 +162,7 @@ impl fmt::Display for SessionState {
     }
 }
 
-/// States of an Device, for more information see Wasapi documentation
-/// https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-state-xxx-constants
+/// Enum wrapping [DEVICE_STATE_XXX](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-state-xxx-constants)
 #[derive(Debug, Eq, PartialEq)]
 pub enum DeviceState {
     /// The audio endpoint device is active. That is, the audio adapter that connects to the
@@ -357,7 +356,8 @@ impl Device {
         trace!("state: {:?}", state);
         match state.try_into() {
             Ok(state) => Ok(state),
-            Err(_) => Err(WasapiError::new("Unable to convert state").into()),
+            //Err(e) => Err(Box::try_from(e).unwrap()),
+            x => Ok(x?),
         }
     }
 
