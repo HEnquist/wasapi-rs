@@ -356,8 +356,7 @@ impl Device {
         trace!("state: {:?}", state);
         match state.try_into() {
             Ok(state) => Ok(state),
-            //Err(e) => Err(Box::try_from(e).unwrap()),
-            x => Ok(x?),
+            Err(e) => Err(Box::new(e)),
         }
     }
 
