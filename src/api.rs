@@ -20,7 +20,8 @@ use windows::{
         AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
         AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
-        WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
+        DEVICE_STATE_DISABLED, DEVICE_STATE_NOTPRESENT, DEVICE_STATE_UNPLUGGED, WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
     Win32::System::Com::STGM_READ,
@@ -341,11 +342,10 @@ impl Device {
         let state: u32 = unsafe { self.device.GetState()? };
         trace!("state: {:?}", state);
         let state_enum = match state {
-            // Explicit path used to prevent import changes treating constants as variables
-            windows::Win32::Media::Audio::DEVICE_STATE_ACTIVE => DeviceState::Active,
-            windows::Win32::Media::Audio::DEVICE_STATE_DISABLED => DeviceState::Disabled,
-            windows::Win32::Media::Audio::DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
-            windows::Win32::Media::Audio::DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
+            DEVICE_STATE_ACTIVE => DeviceState::Active,
+            DEVICE_STATE_DISABLED => DeviceState::Disabled,
+            DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
+            DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
             _ => return Err(WasapiError::new(&format!("Got an illegal state: {}", state)).into()),
         };
         Ok(state_enum)
