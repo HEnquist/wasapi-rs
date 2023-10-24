@@ -24,13 +24,13 @@ use windows::{
         WAVEFORMATEXTENSIBLE,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
+    Win32::System::Com::StructuredStorage::PropVariantToStringAlloc,
     Win32::System::Com::STGM_READ,
     Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
         COINIT_MULTITHREADED,
     },
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
-    Win32::System::Com::StructuredStorage::PropVariantToStringAlloc,
 };
 
 use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WaveFormat};
@@ -314,7 +314,7 @@ impl<'a> IntoIterator for &'a DeviceCollection {
 
     fn into_iter(self) -> Self::IntoIter {
         DeviceCollectionIter {
-            collection: &self,
+            collection: self,
             index: 0,
         }
     }
