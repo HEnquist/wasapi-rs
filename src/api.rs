@@ -887,7 +887,7 @@ impl AudioRenderClient {
     }
 }
 
-/// Struct representing the [ _AUDCLNT_BUFFERFLAGS enums](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-_audclnt_bufferflags).
+/// Struct representing the [ _AUDCLNT_BUFFERFLAGS enum values](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-_audclnt_bufferflags).
 #[derive(Debug)]
 pub struct BufferFlags {
     /// AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY
@@ -932,7 +932,7 @@ pub struct AudioCaptureClient {
 
 impl AudioCaptureClient {
     /// Get number of frames in next packet when in shared mode.
-    /// In exclusive mode it returns None, instead use `get_bufferframecount()` on the [AudioClient].
+    /// In exclusive mode it returns None, instead use [AudioClient::get_bufferframecount()].
     pub fn get_next_nbr_frames(&self) -> WasapiRes<Option<u32>> {
         if let Some(ShareMode::Exclusive) = self.sharemode {
             return Ok(None);
@@ -1024,7 +1024,7 @@ impl AudioCaptureClient {
     }
 }
 
-/// Struct wrapping a HANDLE to an [Event Object](https://docs.microsoft.com/en-us/windows/win32/sync/event-objects).
+/// Struct wrapping a [HANDLE] to an [Event Object](https://docs.microsoft.com/en-us/windows/win32/sync/event-objects).
 pub struct Handle {
     handle: HANDLE,
 }
