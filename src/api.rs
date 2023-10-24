@@ -145,11 +145,15 @@ impl fmt::Display for SampleType {
     }
 }
 
-/// States of an AudioSession
+/// Possible states for an [AudioSessionControl], an enum representing the
+/// [AudioSessionStateXxx constants](https://learn.microsoft.com/en-us/windows/win32/api/audiosessiontypes/ne-audiosessiontypes-audiosessionstate)
 #[derive(Debug, Eq, PartialEq)]
 pub enum SessionState {
+    /// The audio session is active. (At least one of the streams in the session is running.)
     Active,
+    /// The audio session is inactive. (It contains at least one stream, but none of the streams in the session is currently running.)
     Inactive,
+    /// The audio session has expired. (It contains no streams.)
     Expired,
 }
 
@@ -163,7 +167,8 @@ impl fmt::Display for SessionState {
     }
 }
 
-/// Enum wrapping [DEVICE_STATE_XXX](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-state-xxx-constants)
+/// Possible states for an [IMMDevice], an enum representing the
+/// [DEVICE_STATE_XXX constants](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-state-xxx-constants)
 #[derive(Debug, Eq, PartialEq)]
 pub enum DeviceState {
     /// The audio endpoint device is active. That is, the audio adapter that connects to the
@@ -237,7 +242,7 @@ pub struct DeviceCollection {
 }
 
 impl DeviceCollection {
-    /// Get an IMMDeviceCollection of all active playback or capture devices
+    /// Get an [IMMDeviceCollection] of all active playback or capture devices
     pub fn new(direction: &Direction) -> WasapiRes<DeviceCollection> {
         let dir = match direction {
             Direction::Capture => eCapture,
@@ -252,13 +257,13 @@ impl DeviceCollection {
         })
     }
 
-    /// Get the number of devices in an IMMDeviceCollection
+    /// Get the number of devices in an [IMMDeviceCollection]
     pub fn get_nbr_devices(&self) -> WasapiRes<u32> {
         let count = unsafe { self.collection.GetCount()? };
         Ok(count)
     }
 
-    /// Get a device from an IMMDeviceCollection using index
+    /// Get a device from an [IMMDeviceCollection] using index
     pub fn get_device_at_index(&self, idx: u32) -> WasapiRes<Device> {
         let device = unsafe { self.collection.Item(idx)? };
         Ok(Device {
@@ -267,7 +272,7 @@ impl DeviceCollection {
         })
     }
 
-    /// Get a device from an IMMDeviceCollection using name
+    /// Get a device from an [IMMDeviceCollection] using name
     pub fn get_device_with_name(&self, name: &str) -> WasapiRes<Device> {
         let count = unsafe { self.collection.GetCount()? };
         trace!("nbr devices {}", count);
@@ -281,13 +286,13 @@ impl DeviceCollection {
         Err(WasapiError::new(format!("Unable to find device {}", name).as_str()).into())
     }
 
-    /// Get the direction for this DeviceCollection
+    /// Get the direction for this [DeviceCollection]
     pub fn get_direction(&self) -> Direction {
         self.direction
     }
 }
 
-/// Iterator for DeviceCollection
+/// Iterator for [DeviceCollection]
 pub struct DeviceCollectionIter<'a> {
     collection: &'a DeviceCollection,
     index: u32,
@@ -307,7 +312,7 @@ impl<'a> Iterator for DeviceCollectionIter<'a> {
     }
 }
 
-/// Implement iterator for DeviceCollection
+/// Implement iterator for [DeviceCollection]
 impl<'a> IntoIterator for &'a DeviceCollection {
     type Item = WasapiRes<Device>;
     type IntoIter = DeviceCollectionIter<'a>;
@@ -327,7 +332,7 @@ pub struct Device {
 }
 
 impl Device {
-    /// Get an IAudioClient from an IMMDevice
+    /// Get an [IAudioClient] from an [IMMDevice]
     pub fn get_iaudioclient(&self) -> WasapiRes<AudioClient> {
         let audio_client = unsafe { self.device.Activate::<IAudioClient>(CLSCTX_ALL, None)? };
         Ok(AudioClient {
@@ -337,7 +342,7 @@ impl Device {
         })
     }
 
-    /// Read state from an IMMDevice
+    /// Read state from an [IMMDevice]
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
         let state: u32 = unsafe { self.device.GetState()? };
         trace!("state: {:?}", state);
@@ -366,7 +371,7 @@ impl Device {
         self.get_string_property(&PKEY_Device_DeviceDesc)
     }
 
-    /// Read the FriendlyName of an IMMDevice
+    /// Read the FriendlyName of an [IMMDevice]
     fn get_string_property(&self, key: &PROPERTYKEY) -> WasapiRes<String> {
         let store = unsafe { self.device.OpenPropertyStore(STGM_READ)? };
         let prop = unsafe { store.GetValue(key)? };
@@ -377,7 +382,7 @@ impl Device {
         Ok(name)
     }
 
-    /// Get the Id of an IMMDevice
+    /// Get the Id of an [IMMDevice]
     pub fn get_id(&self) -> WasapiRes<String> {
         let idstr = unsafe { self.device.GetId()? };
         let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
@@ -595,7 +600,7 @@ impl AudioClient {
         Ok(aligned_period)
     }
 
-    /// Initialize an IAudioClient for the given direction, sharemode and format.
+    /// Initialize an [IAudioClient] for the given direction, sharemode and format.
     /// Setting `convert` to true enables automatic samplerate and format conversion, meaning that almost any format will be accepted.
     pub fn initialize_client(
         &mut self,
@@ -648,7 +653,7 @@ impl AudioClient {
         Ok(())
     }
 
-    /// Create and return an event handle for an IAudioClient
+    /// Create and return an event handle for an [IAudioClient]
     pub fn set_get_eventhandle(&self) -> WasapiRes<Handle> {
         let h_event = unsafe { CreateEventA(None, false, false, PCSTR::null())? };
         unsafe { self.client.SetEventHandle(h_event)? };
@@ -690,19 +695,19 @@ impl AudioClient {
         Ok(frames)
     }
 
-    /// Start the stream on an IAudioClient
+    /// Start the stream on an [IAudioClient]
     pub fn start_stream(&self) -> WasapiRes<()> {
         unsafe { self.client.Start()? };
         Ok(())
     }
 
-    /// Stop the stream on an IAudioClient
+    /// Stop the stream on an [IAudioClient]
     pub fn stop_stream(&self) -> WasapiRes<()> {
         unsafe { self.client.Stop()? };
         Ok(())
     }
 
-    /// Reset the stream on an IAudioClient
+    /// Reset the stream on an [IAudioClient]
     pub fn reset_stream(&self) -> WasapiRes<()> {
         unsafe { self.client.Reset()? };
         Ok(())
@@ -723,24 +728,24 @@ impl AudioClient {
         })
     }
 
-    /// Get the AudioSessionControl
+    /// Get the [AudioSessionControl]
     pub fn get_audiosessioncontrol(&self) -> WasapiRes<AudioSessionControl> {
         let control = unsafe { self.client.GetService::<IAudioSessionControl>()? };
         Ok(AudioSessionControl { control })
     }
 
-    /// Get the AudioClock
+    /// Get the [AudioClock]
     pub fn get_audioclock(&self) -> WasapiRes<AudioClock> {
         let clock = unsafe { self.client.GetService::<IAudioClock>()? };
         Ok(AudioClock { clock })
     }
 
-    /// Get the direction for this AudioClient
+    /// Get the direction for this [AudioClient]
     pub fn get_direction(&self) -> Direction {
         self.direction
     }
 
-    /// Get the sharemode for this AudioClient.
+    /// Get the sharemode for this [AudioClient].
     /// The sharemode is decided when the client is initialized.
     pub fn get_sharemode(&self) -> Option<ShareMode> {
         self.sharemode
@@ -789,7 +794,7 @@ pub struct AudioClock {
 }
 
 impl AudioClock {
-    /// Get the frequency for this AudioClock.
+    /// Get the frequency for this [AudioClock].
     /// Note that the unit for the value is undefined.
     pub fn get_frequency(&self) -> WasapiRes<u64> {
         let freq = unsafe { self.clock.GetFrequency()? };
@@ -816,7 +821,7 @@ pub struct AudioRenderClient {
 impl AudioRenderClient {
     /// Write raw bytes data to a device from a slice.
     /// The number of frames to write should first be checked with the
-    /// `get_available_space_in_frames()` method on the `AudioClient`.
+    /// `get_available_space_in_frames()` method on the [AudioClient].
     /// The buffer_flags argument can be used to mark a buffer as silent.
     pub fn write_to_device(
         &self,
@@ -851,7 +856,7 @@ impl AudioRenderClient {
 
     /// Write raw bytes data to a device from a deque.
     /// The number of frames to write should first be checked with the
-    /// `get_available_space_in_frames()` method on the `AudioClient`.
+    /// `get_available_space_in_frames()` method on the [AudioClient].
     /// The buffer_flags argument can be used to mark a buffer as silent.
     pub fn write_to_device_from_deque(
         &self,
@@ -894,7 +899,7 @@ pub struct BufferFlags {
 }
 
 impl BufferFlags {
-    /// Create a new BufferFlags struct from a u32 value.
+    /// Create a new [BufferFlags] struct from a `u32` value.
     pub fn new(flags: u32) -> Self {
         BufferFlags {
             data_discontinuity: flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32 > 0,
@@ -903,7 +908,7 @@ impl BufferFlags {
         }
     }
 
-    /// Convert a BufferFlags struct to a u32 value.
+    /// Convert a [BufferFlags] struct to a `u32` value.
     pub fn to_u32(&self) -> u32 {
         let mut value = 0;
         if self.data_discontinuity {
@@ -927,7 +932,7 @@ pub struct AudioCaptureClient {
 
 impl AudioCaptureClient {
     /// Get number of frames in next packet when in shared mode.
-    /// In exclusive mode it returns None, instead use `get_bufferframecount()` on the AudioClient.
+    /// In exclusive mode it returns None, instead use `get_bufferframecount()` on the [AudioClient].
     pub fn get_next_nbr_frames(&self) -> WasapiRes<Option<u32>> {
         if let Some(ShareMode::Exclusive) = self.sharemode {
             return Ok(None);
@@ -983,7 +988,7 @@ impl AudioCaptureClient {
     }
 
     /// Read raw bytes data from a device into a deque.
-    /// Returns the BufferFlags describing the buffer that the data was read from.
+    /// Returns the [BufferFlags] describing the buffer that the data was read from.
     pub fn read_from_device_to_deque(
         &self,
         bytes_per_frame: usize,
@@ -1012,7 +1017,7 @@ impl AudioCaptureClient {
         Ok(bufferflags)
     }
 
-    /// Get the sharemode for this AudioCaptureClient.
+    /// Get the sharemode for this [AudioCaptureClient].
     /// The sharemode is decided when the client is initialized.
     pub fn get_sharemode(&self) -> Option<ShareMode> {
         self.sharemode

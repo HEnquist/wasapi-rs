@@ -112,15 +112,23 @@ impl EventCallbacks {
     }
 }
 
-/// Reason for session disconnect
+/// Reason for session disconnect, an enum representing the `DisconnectReasonXxx` values of the
+/// [AudioSessionDisconnectReason enum](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nf-audiopolicy-iaudiosessionevents-onsessiondisconnected)
 #[derive(Debug)]
 pub enum DisconnectReason {
+    /// The user removed the audio endpoint device.
     DeviceRemoval,
+    /// The Windows audio service has stopped.
     ServerShutdown,
+    /// The stream format changed for the device that the audio session is connected to.
     FormatChanged,
+    /// The user logged off the Windows Terminal Services (WTS) session that the audio session was running in.
     SessionLogoff,
+    /// The WTS session that the audio session was running in was disconnected.
     SessionDisconnected,
+    /// The (shared-mode) audio session was disconnected to make the audio endpoint device available for an exclusive-mode connection.
     ExclusiveModeOverride,
+    /// An unknown reason was returned.
     Unknown,
 }
 
@@ -131,7 +139,7 @@ pub(crate) struct AudioSessionEvents {
 }
 
 impl AudioSessionEvents {
-    /// Create a new AudioSessionEvents instance, returned as a IAudioSessionEvent.
+    /// Create a new [AudioSessionEvents] instance, returned as a [IAudioSessionEvent].
     pub fn new(callbacks: Weak<EventCallbacks>) -> Self {
         Self { callbacks }
     }
