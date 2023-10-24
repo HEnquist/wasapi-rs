@@ -12,15 +12,16 @@ use windows::{
     },
     Win32::Foundation::{HANDLE, WAIT_OBJECT_0},
     Win32::Media::Audio::{
-        eCapture, eConsole, eRender, AudioSessionStateActive, AudioSessionStateExpired,
-        AudioSessionStateInactive, IAudioCaptureClient, IAudioClient, IAudioClock,
-        IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
+        eCapture, eCommunications, eConsole, eMultimedia, eRender, AudioSessionStateActive,
+        AudioSessionStateExpired, AudioSessionStateInactive, IAudioCaptureClient, IAudioClient,
+        IAudioClock, IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
         IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator,
         AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
         AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
         AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
-        WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
+        DEVICE_STATE_DISABLED, DEVICE_STATE_NOTPRESENT, DEVICE_STATE_UNPLUGGED, WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
     Win32::System::Com::STGM_READ,
@@ -93,6 +94,25 @@ impl fmt::Display for Direction {
     }
 }
 
+/// Wrapper for [ERole](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/ne-mmdeviceapi-erole).
+/// Console is the role used by most applications
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Role {
+    Console,
+    Multimedia,
+    Communications,
+}
+
+impl fmt::Display for Role {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Role::Console => write!(f, "Console"),
+            Role::Multimedia => write!(f, "Multimedia"),
+            Role::Communications => write!(f, "Communications"),
+        }
+    }
+}
+
 /// Sharemode for device
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShareMode {
@@ -143,16 +163,58 @@ impl fmt::Display for SessionState {
     }
 }
 
-/// Get the default playback or capture device
+/// Enum wrapping [DEVICE_STATE_XXX](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-state-xxx-constants)
+#[derive(Debug, Eq, PartialEq)]
+pub enum DeviceState {
+    /// The audio endpoint device is active. That is, the audio adapter that connects to the
+    /// endpoint device is present and enabled. In addition, if the endpoint device plugs int
+    /// a jack on the adapter, then the endpoint device is plugged in.
+    Active,
+    /// The audio endpoint device is disabled. The user has disabled the device in the Windows
+    /// multimedia control panel, Mmsys.cpl
+    Disabled,
+    /// The audio endpoint device is not present because the audio adapter that connects to the
+    /// endpoint device has been removed from the system, or the user has disabled the adapter
+    /// device in Device Manager.
+    NotPresent,
+    /// The audio endpoint device is unplugged. The audio adapter that contains the jack for the
+    /// endpoint device is present and enabled, but the endpoint device is not plugged into the
+    /// jack. Only a device with jack-presence detection can be in this state.
+    Unplugged,
+}
+
+impl fmt::Display for DeviceState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            DeviceState::Active => write!(f, "Active"),
+            DeviceState::Disabled => write!(f, "Disabled"),
+            DeviceState::NotPresent => write!(f, "NotPresent"),
+            DeviceState::Unplugged => write!(f, "Unplugged"),
+        }
+    }
+}
+
+/// Get the default playback or capture device for the console role
 pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
+    get_default_device_for_role(direction, &Role::Console)
+}
+
+/// Get the default playback or capture device for a specific role
+pub fn get_default_device_for_role(direction: &Direction, role: &Role) -> WasapiRes<Device> {
     let dir = match direction {
         Direction::Capture => eCapture,
         Direction::Render => eRender,
     };
 
+    let e_role = match role {
+        Role::Console => eConsole,
+        Role::Multimedia => eMultimedia,
+        Role::Communications => eCommunications,
+    };
+
     let enumerator: IMMDeviceEnumerator =
         unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
-    let device = unsafe { enumerator.GetDefaultAudioEndpoint(dir, eConsole)? };
+    let device = unsafe { enumerator.GetDefaultAudioEndpoint(dir, e_role)? };
 
     let dev = Device {
         device,
@@ -225,6 +287,39 @@ impl DeviceCollection {
     }
 }
 
+/// Iterator for DeviceCollection
+pub struct DeviceCollectionIter<'a> {
+    collection: &'a DeviceCollection,
+    index: u32,
+}
+
+impl<'a> Iterator for DeviceCollectionIter<'a> {
+    type Item = WasapiRes<Device>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.collection.get_nbr_devices().unwrap() {
+            let device = self.collection.get_device_at_index(self.index);
+            self.index += 1;
+            Some(device)
+        } else {
+            None
+        }
+    }
+}
+
+/// Implement iterator for DeviceCollection
+impl<'a> IntoIterator for &'a DeviceCollection {
+    type Item = WasapiRes<Device>;
+    type IntoIter = DeviceCollectionIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        DeviceCollectionIter {
+            collection: &self,
+            index: 0,
+        }
+    }
+}
+
 /// Struct wrapping an [IMMDevice](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevice).
 pub struct Device {
     device: IMMDevice,
@@ -243,10 +338,17 @@ impl Device {
     }
 
     /// Read state from an IMMDevice
-    pub fn get_state(&self) -> WasapiRes<u32> {
+    pub fn get_state(&self) -> WasapiRes<DeviceState> {
         let state: u32 = unsafe { self.device.GetState()? };
         trace!("state: {:?}", state);
-        Ok(state)
+        let state_enum = match state {
+            _ if state == DEVICE_STATE_ACTIVE => DeviceState::Active,
+            _ if state == DEVICE_STATE_DISABLED => DeviceState::Disabled,
+            _ if state == DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
+            _ if state == DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
+            x => return Err(WasapiError::new(&format!("Got an illegal state: {}", x)).into()),
+        };
+        Ok(state_enum)
     }
 
     /// Read the friendly name of the endpoint device (for example, "Speakers (XYZ Audio Adapter)")
@@ -656,11 +758,13 @@ impl AudioSessionControl {
         let state = unsafe { self.control.GetState()? };
         #[allow(non_upper_case_globals)]
         let sessionstate = match state {
-            AudioSessionStateActive => SessionState::Active,
-            AudioSessionStateInactive => SessionState::Inactive,
-            AudioSessionStateExpired => SessionState::Expired,
-            _ => {
-                return Err(WasapiError::new("Got an illegal state").into());
+            _ if state == AudioSessionStateActive => SessionState::Active,
+            _ if state == AudioSessionStateInactive => SessionState::Inactive,
+            _ if state == AudioSessionStateExpired => SessionState::Expired,
+            x => {
+                return Err(
+                    WasapiError::new(&format!("Got an illegal session state {:?}", x)).into(),
+                );
             }
         };
         Ok(sessionstate)
