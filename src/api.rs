@@ -342,11 +342,11 @@ impl Device {
         let state: u32 = unsafe { self.device.GetState()? };
         trace!("state: {:?}", state);
         let state_enum = match state {
-            DEVICE_STATE_ACTIVE => DeviceState::Active,
-            DEVICE_STATE_DISABLED => DeviceState::Disabled,
-            DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
-            DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
-            _ => return Err(WasapiError::new(&format!("Got an illegal state: {}", state)).into()),
+            _ if state == DEVICE_STATE_ACTIVE => DeviceState::Active,
+            _ if state == DEVICE_STATE_DISABLED => DeviceState::Disabled,
+            _ if state == DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
+            _ if state == DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
+            x => return Err(WasapiError::new(&format!("Got an illegal state: {}", x)).into()),
         };
         Ok(state_enum)
     }
@@ -758,9 +758,9 @@ impl AudioSessionControl {
         let state = unsafe { self.control.GetState()? };
         #[allow(non_upper_case_globals)]
         let sessionstate = match state {
-            AudioSessionStateActive => SessionState::Active,
-            AudioSessionStateInactive => SessionState::Inactive,
-            AudioSessionStateExpired => SessionState::Expired,
+            _ if state == AudioSessionStateActive => SessionState::Active,
+            _ if state == AudioSessionStateInactive => SessionState::Inactive,
+            _ if state == AudioSessionStateExpired => SessionState::Expired,
             x => {
                 return Err(
                     WasapiError::new(&format!("Got an illegal session state {:?}", x)).into(),
