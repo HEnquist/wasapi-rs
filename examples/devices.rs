@@ -7,7 +7,11 @@ fn main() {
     for device in &DeviceCollection::new(&Direction::Render).unwrap() {
         let dev = device.unwrap();
         let state = &dev.get_state().unwrap();
-        println!("Device: {:?}. State: {:?}", &dev.get_friendlyname().unwrap(), state);
+        println!(
+            "Device: {:?}. State: {:?}",
+            &dev.get_friendlyname().unwrap(),
+            state
+        );
     }
 
     println!("Default output devices:");

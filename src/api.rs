@@ -193,20 +193,6 @@ impl fmt::Display for DeviceState {
     }
 }
 
-impl TryFrom<u32> for DeviceState {
-    type Error = WasapiError;
-
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        match value {
-            1 => Ok(DeviceState::Active),
-            2 => Ok(DeviceState::Disabled),
-            4 => Ok(DeviceState::NotPresent),
-            8 => Ok(DeviceState::Unplugged),
-            x => Err(WasapiError::new(format!("Unrecognised value: {}", x).as_str()).into())
-        }
-    }
-}
-
 /// Get the default playback or capture device for the console role
 pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
     get_default_device_for_role(direction, &Role::Console)
@@ -354,10 +340,15 @@ impl Device {
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
         let state: u32 = unsafe { self.device.GetState()? };
         trace!("state: {:?}", state);
-        match state.try_into() {
-            Ok(state) => Ok(state),
-            Err(e) => Err(Box::new(e)),
-        }
+        let state_enum = match state {
+            // Explicit path used to prevent import changes treating constants as variables
+            windows::Win32::Media::Audio::DEVICE_STATE_ACTIVE => DeviceState::Active,
+            windows::Win32::Media::Audio::DEVICE_STATE_DISABLED => DeviceState::Disabled,
+            windows::Win32::Media::Audio::DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
+            windows::Win32::Media::Audio::DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
+            _ => return Err(WasapiError::new(&format!("Got an illegal state: {}", state)).into()),
+        };
+        Ok(state_enum)
     }
 
     /// Read the friendly name of the endpoint device (for example, "Speakers (XYZ Audio Adapter)")
@@ -770,8 +761,10 @@ impl AudioSessionControl {
             AudioSessionStateActive => SessionState::Active,
             AudioSessionStateInactive => SessionState::Inactive,
             AudioSessionStateExpired => SessionState::Expired,
-            _ => {
-                return Err(WasapiError::new("Got an illegal state").into());
+            x => {
+                return Err(
+                    WasapiError::new(&format!("Got an illegal session state {:?}", x)).into(),
+                );
             }
         };
         Ok(sessionstate)
