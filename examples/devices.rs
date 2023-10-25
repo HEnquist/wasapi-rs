@@ -5,7 +5,13 @@ fn main() {
 
     println!("Found the following output devices:");
     for device in &DeviceCollection::new(&Direction::Render).unwrap() {
-        println!("Device: {:?}", device.unwrap().get_friendlyname().unwrap());
+        let dev = device.unwrap();
+        let state = &dev.get_state().unwrap();
+        println!(
+            "Device: {:?}. State: {:?}",
+            &dev.get_friendlyname().unwrap(),
+            state
+        );
     }
 
     println!("Default output devices:");
