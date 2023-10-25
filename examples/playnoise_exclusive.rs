@@ -54,7 +54,7 @@ fn main() {
 
     let init_result = audio_client.initialize_client(
         &desired_format,
-        desired_period as i64,
+        desired_period,
         &Direction::Render,
         &ShareMode::Exclusive,
         false,
@@ -91,7 +91,7 @@ fn main() {
                         audio_client
                             .initialize_client(
                                 &desired_format,
-                                aligned_period as i64,
+                                aligned_period,
                                 &Direction::Render,
                                 &ShareMode::Exclusive,
                                 false,
@@ -146,7 +146,7 @@ fn main() {
         for frame in data.chunks_exact_mut(blockalign as usize) {
             let sample: u32 = rng.gen();
             let sample_bytes = sample.to_le_bytes();
-            for value in frame.chunks_exact_mut(blockalign as usize / channels as usize) {
+            for value in frame.chunks_exact_mut(blockalign as usize / channels) {
                 for (bufbyte, samplebyte) in value.iter_mut().zip(sample_bytes.iter()) {
                     *bufbyte = *samplebyte;
                 }
