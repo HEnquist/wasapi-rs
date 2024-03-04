@@ -50,6 +50,8 @@ fn main() {
 
     let channels = 2;
     let device = get_default_device(&Direction::Render).unwrap();
+    let state = device.get_state();
+    debug!("Device state is: {:?}", state);
     let mut audio_client = device.get_iaudioclient().unwrap();
     let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, channels, None);
 

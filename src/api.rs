@@ -6,7 +6,7 @@ use std::{error, fmt, ptr, slice};
 use widestring::U16CString;
 use windows::Win32::UI::Shell::PropertiesSystem::PROPERTYKEY;
 use windows::{
-    core::PCSTR,
+    core::{HRESULT, PCSTR},
     Win32::Devices::FunctionDiscovery::{
         PKEY_DeviceInterface_FriendlyName, PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
     },
@@ -64,12 +64,12 @@ impl WasapiError {
 }
 
 /// Initializes COM for use by the calling thread for the multi-threaded apartment (MTA).
-pub fn initialize_mta() -> Result<(), windows::core::Error> {
+pub fn initialize_mta() -> HRESULT {
     unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
 }
 
 /// Initializes COM for use by the calling thread for a single-threaded apartment (STA).
-pub fn initialize_sta() -> Result<(), windows::core::Error> {
+pub fn initialize_sta() -> HRESULT {
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
 }
 
@@ -344,13 +344,14 @@ impl Device {
 
     /// Read state from an [IMMDevice]
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
-        let state: u32 = unsafe { self.device.GetState()? };
-        trace!("state: {:?}", state);
-        let state_enum = match state {
-            _ if state == DEVICE_STATE_ACTIVE => DeviceState::Active,
-            _ if state == DEVICE_STATE_DISABLED => DeviceState::Disabled,
-            _ if state == DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
-            _ if state == DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
+        let mut pdwstate: u32 = 0;
+        let state = unsafe { self.device.GetState(&mut pdwstate) };
+        trace!("state: {:?}, pdwstate: {}", state, pdwstate);
+        let state_enum = match pdwstate {
+            _ if pdwstate == DEVICE_STATE_ACTIVE.0 => DeviceState::Active,
+            _ if pdwstate == DEVICE_STATE_DISABLED.0 => DeviceState::Disabled,
+            _ if pdwstate == DEVICE_STATE_NOTPRESENT.0 => DeviceState::NotPresent,
+            _ if pdwstate == DEVICE_STATE_UNPLUGGED.0 => DeviceState::Unplugged,
             x => return Err(WasapiError::new(&format!("Got an illegal state: {}", x)).into()),
         };
         Ok(state_enum)
