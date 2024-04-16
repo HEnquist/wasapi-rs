@@ -5,6 +5,7 @@ use wasapi::*;
 extern crate log;
 use simplelog::*;
 use windows::core::Error;
+use windows::core::w;
 
 // A selection of the possible errors
 use windows::Win32::Foundation::E_INVALIDARG;
@@ -12,6 +13,7 @@ use windows::Win32::Media::Audio::{
     AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_DEVICE_IN_USE, AUDCLNT_E_ENDPOINT_CREATE_FAILED,
     AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED, AUDCLNT_E_UNSUPPORTED_FORMAT,
 };
+use windows::Win32::System::Threading::{AvSetMmThreadCharacteristicsW, AvSetMmThreadPriority, AVRT_PRIORITY_HIGH};
 
 // Main loop
 fn main() {
@@ -25,6 +27,20 @@ fn main() {
     );
 
     initialize_mta().unwrap();
+
+    // Raise priority
+    let mut task_idx = 0;
+    let handle = unsafe {
+        AvSetMmThreadCharacteristicsW(w!("Pro Audio"), &mut task_idx).unwrap()
+    };
+    if task_idx > 0 {
+        debug!("Playback thread raised priority, task index: {}", task_idx);
+    } else {
+        warn!("Failed to raise playback thread priority");
+    }
+    unsafe {
+        let _ = AvSetMmThreadPriority(handle, AVRT_PRIORITY_HIGH);
+    }
 
     let channels = 2;
     let device = get_default_device(&Direction::Render).unwrap();
@@ -44,7 +60,7 @@ fn main() {
 
     // Set some period as an example, using 128 byte alignment to satisfy for example Intel HDA devices.
     let desired_period = audio_client
-        .calculate_aligned_period_near(3 * min_period / 2, Some(128), &desired_format)
+        .calculate_aligned_period_near(def_period, Some(128), &desired_format)
         .unwrap();
 
     debug!(

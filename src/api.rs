@@ -843,13 +843,13 @@ impl AudioRenderClient {
             )
             .into());
         }
-        let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
-        let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
-        bufferslice.copy_from_slice(data);
         let flags = match buffer_flags {
             Some(bflags) => bflags.to_u32(),
             None => 0,
         };
+        let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
+        let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
+        bufferslice.copy_from_slice(data);
         unsafe { self.client.ReleaseBuffer(nbr_frames as u32, flags)? };
         trace!("wrote {} frames", nbr_frames);
         Ok(())
@@ -873,15 +873,15 @@ impl AudioRenderClient {
             )
             .into());
         }
+        let flags = match buffer_flags {
+            Some(bflags) => bflags.to_u32(),
+            None => 0,
+        };
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         for element in bufferslice.iter_mut() {
             *element = data.pop_front().unwrap();
         }
-        let flags = match buffer_flags {
-            Some(bflags) => bflags.to_u32(),
-            None => 0,
-        };
         unsafe { self.client.ReleaseBuffer(nbr_frames as u32, flags)? };
         trace!("wrote {} frames", nbr_frames);
         Ok(())
