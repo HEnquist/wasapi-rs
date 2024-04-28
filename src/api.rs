@@ -1,13 +1,24 @@
 use num_integer::Integer;
-use windows_core::HRESULT;
 use std::cmp;
 use std::collections::VecDeque;
+use std::mem::{size_of, ManuallyDrop};
+use std::ops::Deref;
 use std::rc::Weak;
+use std::sync::{Arc, Condvar, Mutex};
 use std::{error, fmt, ptr, slice};
 use widestring::U16CString;
+use windows::Win32::Media::Audio::{
+    ActivateAudioInterfaceAsync, IActivateAudioInterfaceAsyncOperation,
+    IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
+    AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
+    AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
+    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
+};
+use windows::Win32::System::Variant::VT_BLOB;
 use windows::Win32::UI::Shell::PropertiesSystem::PROPERTYKEY;
 use windows::{
-    core::PCSTR,
+    core::{HRESULT, PCSTR},
     Win32::Devices::FunctionDiscovery::{
         PKEY_DeviceInterface_FriendlyName, PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
     },
@@ -33,6 +44,7 @@ use windows::{
     },
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
 };
+use windows_core::{implement, IUnknown, Interface, PROPVARIANT};
 
 use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WaveFormat};
 
@@ -397,6 +409,277 @@ impl Device {
     pub fn get_direction(&self) -> Direction {
         self.direction
     }
+}
+
+#[implement(IActivateAudioInterfaceCompletionHandler)]
+struct Handler(Arc<(Mutex<bool>, Condvar)>);
+
+impl Handler {
+    pub fn new(object: Arc<(Mutex<bool>, Condvar)>) -> Handler {
+        Handler(object)
+    }
+}
+
+impl IActivateAudioInterfaceCompletionHandler_Impl for Handler {
+    fn ActivateCompleted(
+        &self,
+        _activateoperation: Option<&IActivateAudioInterfaceAsyncOperation>,
+    ) -> windows::core::Result<()> {
+        let (lock, cvar) = &*self.0;
+        let mut completed = lock.lock().unwrap();
+        *completed = true;
+        drop(completed);
+        cvar.notify_one();
+        Ok(())
+    }
+}
+ 
+/// A wrapper for [AudioClient] specific to capturing audio from a process.
+/// Handles the weird construction and initialisation, and only exposes the methods that work:
+/// * `audio_client.get_audiocaptureclient()`
+/// * `audio_client.initialize_client(wavefmt, period, direction, sharemode, convert)`
+/// * `audio_client.get_direction()`
+/// * `audio_client.reset_stream()`
+/// * `audio_client.start_stream()`
+/// * `audio_client.stop_stream()`
+/// * `audio_client.set_get_eventhandle()`
+///
+///  `audio_client.get_bufferframecount()` has also been exposed as it returns non-error values, but these are extremely large and do not appear to be releated to the buffer size requested.
+/// 
+/// # Example
+/// ```
+/// let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
+/// let hnsbufferduration = 200_000; // 20ms in hundreds of nanoseconds
+/// let autoconvert = true;
+/// let include_tree = false;
+/// 
+/// let mut audio_client = ProcessAudioClient::new(process_id, include_tree)?;
+/// audio_client.initialize_client(&desired_format, hnsbufferduration, autoconvert)?;
+/// ```
+pub struct ProcessAudioClient {
+    audio_client: AudioClient,
+}
+
+impl ProcessAudioClient {
+    pub fn as_inner(&self) -> &AudioClient {
+        &self.audio_client
+    }
+    pub fn as_inner_mut(&mut self) -> &mut AudioClient {
+        &mut self.audio_client
+    }
+    pub fn into_inner(self) -> AudioClient {
+        self.audio_client
+    }
+
+    /// Creates an audio client capturing the output of a process or process tree and initialises it.
+    /// Must be called after calling initialize_mta() on a non-UI thread.
+    pub fn new(
+        process_id: u32,
+        include_tree: bool,
+    ) -> WasapiRes<Self> {
+        unsafe {
+            // Create audio client
+            let audio_client_activation_params = AUDIOCLIENT_ACTIVATION_PARAMS {
+                ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
+                Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
+                    ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
+                        TargetProcessId: process_id,
+                        ProcessLoopbackMode: if include_tree {
+                            PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE
+                        } else {
+                            PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE
+                        },
+                    },
+                },
+            };
+
+            let raw_prop = windows_core::imp::PROPVARIANT {
+                Anonymous: windows_core::imp::PROPVARIANT_0 {
+                    Anonymous: windows_core::imp::PROPVARIANT_0_0 {
+                        vt: VT_BLOB.0,
+                        wReserved1: 0,
+                        wReserved2: 0,
+                        wReserved3: 0,
+                        Anonymous: windows_core::imp::PROPVARIANT_0_0_0 {
+                            blob: windows_core::imp::BLOB {
+                                cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
+                                pBlobData: &audio_client_activation_params as *const _ as *mut _,
+                            },
+                        },
+                    },
+                },
+            };
+
+            let activation_prop = ManuallyDrop::new(PROPVARIANT::from_raw(raw_prop));
+            let activation_params = Some(activation_prop.deref() as *const _);
+            let riid = IAudioClient::IID;
+
+            // Create completion handler
+            let setup = Arc::new((Mutex::new(false), Condvar::new()));
+            let callback: IActivateAudioInterfaceCompletionHandler =
+                Handler::new(setup.clone()).into();
+
+            // Activate audio interface
+            let operation = ActivateAudioInterfaceAsync(
+                VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
+                &riid,
+                activation_params,
+                &callback,
+            )?;
+
+            // Wait for completion
+            let (lock, cvar) = &*setup;
+            let mut completed = lock.lock().unwrap();
+            while !*completed {
+                completed = cvar.wait(completed).unwrap();
+            }
+            drop(completed);
+
+            // Get audio client and result
+            let mut audio_client: Option<IUnknown> = Default::default();
+            let mut result: HRESULT = Default::default();
+            operation.GetActivateResult(&mut result, &mut audio_client)?;
+
+            // Ensure successful activation
+            result.ok()?;
+            let audio_client: IAudioClient = audio_client.unwrap().cast()?;
+
+            Ok(ProcessAudioClient {
+                audio_client: AudioClient {
+                    client: audio_client,
+                    direction: Direction::Capture,
+                    sharemode: None,
+                },
+            })
+        }
+    }
+
+
+    // Just returns 'Not implemented'
+    // pub fn get_mixformat(&self) -> WasapiRes<WaveFormat>{
+    //     self.audio_client.get_mixformat()
+    // }
+
+    // Just returns 'Not implemented' even if the format and mode work
+    // pub fn is_supported(
+    //     &self,
+    //     wave_fmt: &WaveFormat,
+    //     sharemode: &ShareMode
+    // ) -> WasapiRes<Option<WaveFormat>>{
+    //     self.audio_client.is_supported(wave_fmt, sharemode)
+    // }
+
+    // Just returns 'Unable to find a supported format'
+    // pub fn is_supported_exclusive_with_quirks(
+    //     &self,
+    //     wave_fmt: &WaveFormat
+    // ) -> WasapiRes<WaveFormat>{
+    //     self.audio_client.is_supported_exclusive_with_quirks(wave_fmt)
+    // }
+
+    // Just returns 'Not implemented'
+    // pub fn get_periods(&self) -> WasapiRes<(i64, i64)>{
+    //     self.audio_client.get_periods()
+    // }
+
+    // Just returns 'Not implemented' even for values that would later work.
+    // pub fn calculate_aligned_period_near(
+    //     &self,
+    //     desired_period: i64,
+    //     align_bytes: Option<u32>,
+    //     wave_fmt: &WaveFormat
+    // ) -> WasapiRes<i64>{
+    //     self.audio_client.calculate_aligned_period_near(desired_period, align_bytes, wave_fmt)
+    // }
+
+    pub fn initialize_client(
+        &mut self,
+        wavefmt: &WaveFormat,
+        hnsbufferduration: i64,
+        autoconvert: bool
+    ) -> WasapiRes<()> {
+
+        let mut stream_flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_LOOPBACK;
+        if autoconvert {
+            stream_flags |= AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+        }
+        
+        // Initialise audio client
+        unsafe {
+            self.audio_client.client.Initialize(
+                AUDCLNT_SHAREMODE_SHARED,
+                stream_flags,
+                hnsbufferduration,
+                0,
+                wavefmt.as_waveformatex_ref(),
+                None,
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn set_get_eventhandle(&self) -> WasapiRes<Handle> {
+        self.audio_client.set_get_eventhandle()
+    }
+
+    // Returns huge values like 3131961357 but no error?
+    pub fn get_bufferframecount(&self) -> WasapiRes<u32>{
+        self.audio_client.get_bufferframecount()
+    }
+
+    // Just returns Not 'implemented'
+    // pub fn get_current_padding(&self) -> WasapiRes<u32>{
+    //     self.audio_client.get_current_padding()
+    // }
+
+    // Just returns `Client has not been initialised` even if it has.
+    // pub fn get_available_space_in_frames(&self) -> WasapiRes<u32>{
+    //     self.audio_client.get_available_space_in_frames()
+    // }
+
+    pub fn start_stream(&self) -> WasapiRes<()>{
+        self.audio_client.start_stream()
+    }
+
+    pub fn stop_stream(&self) -> WasapiRes<()>{
+        self.audio_client.stop_stream()
+    }
+
+    pub fn reset_stream(&self) -> WasapiRes<()>{
+        self.audio_client.reset_stream()
+    }
+
+    // Just returns 'No such interface supported'
+    // pub fn get_audiorenderclient(&self) -> WasapiRes<AudioRenderClient>{
+    //     self.audio_client.get_audiorenderclient()
+    // }
+
+    pub fn get_audiocaptureclient(
+        &self
+    ) -> WasapiRes<AudioCaptureClient>{
+        self.audio_client.get_audiocaptureclient()
+    }
+
+    // Just returns 'No such interface supported'
+    pub fn get_audiosessioncontrol(
+        &self
+    ) -> WasapiRes<AudioSessionControl>{
+        self.audio_client.get_audiosessioncontrol()
+    }
+
+    // Just returns 'No such interface supported'
+    pub fn get_audioclock(&self) -> WasapiRes<AudioClock>{
+        self.audio_client.get_audioclock()
+    }
+
+    pub fn get_direction(&self) -> Direction{
+        self.audio_client.get_direction()
+    }
+
+    // Always returns `None` when it should returns Shared after initialisation
+    // pub fn get_sharemode(&self) -> Option<ShareMode>{
+    //     self.audio_client.get_sharemode()
+    // }
 }
 
 /// Struct wrapping an [IAudioClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclient).
