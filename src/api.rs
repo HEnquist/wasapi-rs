@@ -984,7 +984,9 @@ impl AudioCaptureClient {
         let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
         let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
         data[..len_in_bytes].copy_from_slice(bufferslice);
-        unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
+        if nbr_frames_returned > 0 {
+            unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
+        }
         trace!("read {} frames", nbr_frames_returned);
         Ok((nbr_frames_returned, bufferflags))
     }
@@ -1014,7 +1016,9 @@ impl AudioCaptureClient {
         for element in bufferslice.iter() {
             data.push_back(*element);
         }
-        unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
+        if nbr_frames_returned > 0 {
+            unsafe { self.client.ReleaseBuffer(nbr_frames_returned).unwrap() };
+        }
         trace!("read {} frames", nbr_frames_returned);
         Ok(bufferflags)
     }
