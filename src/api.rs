@@ -1,4 +1,5 @@
 use num_integer::Integer;
+use windows_core::HRESULT;
 use std::cmp;
 use std::collections::VecDeque;
 use std::rc::Weak;
@@ -64,12 +65,12 @@ impl WasapiError {
 }
 
 /// Initializes COM for use by the calling thread for the multi-threaded apartment (MTA).
-pub fn initialize_mta() -> Result<(), windows::core::Error> {
+pub fn initialize_mta() -> HRESULT {
     unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
 }
 
 /// Initializes COM for use by the calling thread for a single-threaded apartment (STA).
-pub fn initialize_sta() -> Result<(), windows::core::Error> {
+pub fn initialize_sta() -> HRESULT {
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
 }
 
@@ -344,14 +345,15 @@ impl Device {
 
     /// Read state from an [IMMDevice]
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
-        let state: u32 = unsafe { self.device.GetState()? };
+        let mut state_temp: u32 = 0;
+        let state = unsafe { self.device.GetState(&mut state_temp) };
         trace!("state: {:?}", state);
         let state_enum = match state {
             _ if state == DEVICE_STATE_ACTIVE => DeviceState::Active,
             _ if state == DEVICE_STATE_DISABLED => DeviceState::Disabled,
             _ if state == DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
             _ if state == DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
-            x => return Err(WasapiError::new(&format!("Got an illegal state: {}", x)).into()),
+            x => return Err(WasapiError::new(&format!("Got an illegal state: DEVICE_STATE({})", x.0)).into()),
         };
         Ok(state_enum)
     }
