@@ -1,12 +1,15 @@
 use num_integer::Integer;
 use std::cmp;
 use std::collections::VecDeque;
+use std::mem::size_of;
 use std::rc::Weak;
 use std::{error, fmt, ptr, slice};
 use widestring::U16CString;
 use windows::Win32::UI::Shell::PropertiesSystem::PROPERTYKEY;
 use windows::{
-    core::{HRESULT, PCSTR},
+    core::{HRESULT, PCSTR, PCWSTR, Interface, PROPVARIANT, IUnknown, implement,
+        imp::{PROPVARIANT as impPROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0, BLOB}
+    },
     Win32::Devices::FunctionDiscovery::{
         PKEY_DeviceInterface_FriendlyName, PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
     },
@@ -21,7 +24,11 @@ use windows::{
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
         AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
         DEVICE_STATE_DISABLED, DEVICE_STATE_NOTPRESENT, DEVICE_STATE_UNPLUGGED, WAVEFORMATEX,
-        WAVEFORMATEXTENSIBLE,
+        WAVEFORMATEXTENSIBLE, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_ACTIVATION_PARAMS,
+        AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
+        PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE, PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
+        VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, ActivateAudioInterfaceAsync, IActivateAudioInterfaceAsyncOperation,
+        IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
     Win32::System::Com::StructuredStorage::PropVariantToStringAlloc,
@@ -31,6 +38,7 @@ use windows::{
         COINIT_MULTITHREADED,
     },
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
+    Win32::System::Variant::VT_BLOB,
 };
 
 use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WaveFormat};
@@ -406,6 +414,65 @@ pub struct AudioClient {
 }
 
 impl AudioClient {
+    /// Calls an async operation to create a loopback capture client for a specific process. The client is retrieved from the [ActivateAudioInterfaceAsyncOperation] object returned.
+    /// 
+    /// If include_tree is true, the loopback capture client will capture audio from the target process and all its child processes.
+    /// If include_tree is false, the loopback capture client will capture all audio except the target process and all its child processes.
+    /// 
+    /// NOTE: On versions of Windows prior to Windows 10, the thread calling this function must called in a COM Single-Threaded Apartment (STA).
+    /// > Additionally when calling [AudioClient::initialize_client] on the client returned by this method, the caller must use [Direction::Capture], and [ShareMode::Shared].
+    /// > Finally calls to [AudioClient::get_periods] do not work, however the period passed by the caller to [AudioClient::initialize_client] is irrelevant.
+    pub fn create_application_loopback_client(process_id: u32, include_tree: bool, completion_handler: ActivateAudioInterfaceCompletionHandler) -> WasapiRes<ActivateAudioInterfaceAsyncOperation> {
+        let loop_back_mode = if include_tree {
+            PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE
+        } else { 
+            PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE
+        };
+
+        let audio_client_activation_params = Box::new(AUDIOCLIENT_ACTIVATION_PARAMS {
+            ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
+            Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
+                ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
+                    TargetProcessId: process_id,
+                    ProcessLoopbackMode: loop_back_mode,
+                },
+            },
+        });
+
+        let raw_prop = impPROPVARIANT {
+            Anonymous: PROPVARIANT_0 {
+                Anonymous: PROPVARIANT_0_0 {
+                    vt: VT_BLOB.0,
+                    wReserved1: 0,
+                    wReserved2: 0,
+                    wReserved3: 0,
+                    Anonymous: PROPVARIANT_0_0_0 {
+                        blob: BLOB {
+                            cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
+                            pBlobData: Box::into_raw(audio_client_activation_params) as *mut _,
+                        }
+                    }
+                },
+            },
+        };
+
+        let activation_prop = unsafe { PROPVARIANT::from_raw(raw_prop) };
+        let activation_params = Some(&activation_prop as *const _);
+        let riid = IAudioClient::IID;
+
+        let operation = unsafe {
+            ActivateAudioInterfaceAsync::<PCWSTR, &IActivateAudioInterfaceCompletionHandler>(
+                VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
+                &riid, 
+                activation_params, 
+                &completion_handler.into()
+            )?
+        };
+
+        // Must keep the activation_prop alive until the operation is complete
+        Ok(ActivateAudioInterfaceAsyncOperation {operation, _activation_prop: activation_prop})
+    }
+
     /// Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
         let temp_fmt_ptr = unsafe { self.client.GetMixFormat()? };
@@ -1038,5 +1105,67 @@ impl Handle {
             return Err(WasapiError::new("Wait timed out").into());
         }
         Ok(())
+    }
+}
+
+/// A trait for implementing the [IActivateAudioInterfaceCompletionHandler](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-iactivateaudiointerfacecompletionhandler) interface.
+pub trait ActivateAudioInterfaceCompletionHandlerImpl {
+    fn activate_completed(&self);
+}
+
+/// A struct that implements the [IActivateAudioInterfaceCompletionHandler](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-iactivateaudiointerfacecompletionhandler) interface.
+#[implement(IActivateAudioInterfaceCompletionHandler)]
+pub struct ActivateAudioInterfaceCompletionHandler {
+    pub handler: Box<dyn ActivateAudioInterfaceCompletionHandlerImpl>,
+}
+
+impl ActivateAudioInterfaceCompletionHandler {
+    pub fn new(handler: Box<dyn ActivateAudioInterfaceCompletionHandlerImpl>) -> Self {
+        Self { handler }
+    }
+}
+
+impl IActivateAudioInterfaceCompletionHandler_Impl for ActivateAudioInterfaceCompletionHandler {
+    fn ActivateCompleted(&self, _: Option<&IActivateAudioInterfaceAsyncOperation>) -> windows_core::Result<()> {
+        self.handler.activate_completed();
+        Ok(())
+    }
+}
+
+
+/// Struct wrapping an [IActivateAudioInterfaceAsyncOperation](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-iactivateaudiointerfaceasyncoperation).
+pub struct ActivateAudioInterfaceAsyncOperation {
+    operation: IActivateAudioInterfaceAsyncOperation,
+    _activation_prop: PROPVARIANT,
+}
+
+impl ActivateAudioInterfaceAsyncOperation {
+    /// Get the audio client from the activation operation
+    pub fn get_audio_client(&self) -> WasapiRes<AudioClient> {
+        let mut audio_client: Option<IUnknown> = Default::default();
+        let mut result: HRESULT = Default::default();
+        unsafe {
+            match self.operation.GetActivateResult(&mut result, &mut audio_client) {
+                Ok(_) => {},
+                Err(x) => { return Err(WasapiError::new(&format!("Method called before operation completed: {}", x)).into()); }
+            }
+        }
+
+        if result.is_err() {
+            return Err(WasapiError::new(&format!("Failed to activate audio client: {}", result)).into());
+        }
+        
+        match audio_client {
+            Some(audio_client) => {
+                let audio_client: IAudioClient = audio_client.cast()?;
+                Ok(AudioClient {
+                    client: audio_client,
+                    direction: Direction::Render,
+                    sharemode: Some(ShareMode::Shared),
+                })
+            }
+            // This should never happen, the result should contain the error and trigger the error branch above
+            None => Err(WasapiError::new("Failed to get audio client").into())
+        }
     }
 }
