@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::prelude::*;
 
 use std::thread;
+use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 use wasapi::*;
 
 #[macro_use]
@@ -22,21 +23,21 @@ fn capture_loop(
 
     initialize_mta().ok().unwrap();
 
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
+    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 48000, 2, None);
     let blockalign = desired_format.get_blockalign();
     debug!("Desired capture format: {:?}", desired_format);
-    let hnsbufferduration = 200_000; // 20ms
     let autoconvert = true;
-    let include_tree = false;
+    let include_tree = true;
 
-    let mut audio_client = ProcessAudioClient::new(process_id, include_tree)?;
+    let mut audio_client = AudioClient::new_application_loopback_client(process_id, include_tree)?;
+    audio_client.initialize_client(&desired_format, 0, &Direction::Capture, &ShareMode::Shared, autoconvert)?;
 
-    audio_client.initialize_client(&desired_format, hnsbufferduration, autoconvert)?;
+
     debug!("initialized capture");
-
     let h_event = audio_client.set_get_eventhandle().unwrap();
 
     let capture_client = audio_client.get_audiocaptureclient().unwrap();
+
 
     let mut sample_queue: VecDeque<u8> = VecDeque::new(); // just eat the reallocation because querying the buffer size gives massive values.
 
@@ -54,7 +55,7 @@ fn capture_loop(
         trace!("capturing");
 
         let new_frames = capture_client.get_next_nbr_frames()?.unwrap_or(0);
-        let additional = (sample_queue.len()).saturating_sub(new_frames as usize * blockalign as usize);
+        let additional = (new_frames as usize * blockalign as usize).saturating_sub(sample_queue.capacity() - sample_queue.len());
         sample_queue.reserve(additional);
         if new_frames > 0 {
             capture_client.read_from_device_to_deque(blockalign as usize, &mut sample_queue).unwrap();
@@ -70,9 +71,6 @@ fn capture_loop(
 
 // Main loop
 fn main() -> Res<()> {
-
-    let process_id = 5908;
-
     let _ = SimpleLogger::init(
         LevelFilter::Trace,
         ConfigBuilder::new()
@@ -81,6 +79,17 @@ fn main() -> Res<()> {
             .unwrap()
             .build(),
     );
+
+    let refreshes = RefreshKind::new().with_processes(ProcessRefreshKind::everything());
+    let system = System::new_with_specifics(refreshes);
+    let process_ids = system.processes_by_name("firefox.exe");
+    let mut process_id = 0;
+    for process in process_ids {
+        // Note: When capturing audio windows allows you to capture an app's entire process tree, however you must ensure you use the parent as the target process ID
+        process_id = process.parent().unwrap_or(process.pid()).as_u32();
+    }
+
+    info!("Capture Process ID: {}", process_id);
 
     let (tx_capt, rx_capt): (
         std::sync::mpsc::SyncSender<Vec<u8>>,

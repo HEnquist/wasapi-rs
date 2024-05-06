@@ -38,6 +38,7 @@ windows-core = "0.56"
 [dev-dependencies]
 simplelog = "0.12.1"
 rand = "0.8.5"
+sysinfo = "0.30.9"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"
