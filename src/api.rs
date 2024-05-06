@@ -448,13 +448,16 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler {
 /// 
 /// # Example
 /// ```
+/// use wasapi::{WaveFormat, SampleType, ProcessAudioClient, initialize_mta};
 /// let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
 /// let hnsbufferduration = 200_000; // 20ms in hundreds of nanoseconds
 /// let autoconvert = true;
 /// let include_tree = false;
+/// let process_id = std::process::id();
 /// 
-/// let mut audio_client = ProcessAudioClient::new(process_id, include_tree)?;
-/// audio_client.initialize_client(&desired_format, hnsbufferduration, autoconvert)?;
+/// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
+/// let mut audio_client = ProcessAudioClient::new(process_id, include_tree).unwrap();
+/// audio_client.initialize_client(&desired_format, hnsbufferduration, autoconvert).unwrap();
 /// ```
 pub struct ProcessAudioClient {
     audio_client: AudioClient,
