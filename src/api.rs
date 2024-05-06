@@ -3,6 +3,7 @@ use std::cmp;
 use std::collections::VecDeque;
 use std::mem::{size_of, ManuallyDrop};
 use std::ops::Deref;
+use std::pin::Pin;
 use std::rc::Weak;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{error, fmt, ptr, slice};
@@ -482,7 +483,7 @@ impl ProcessAudioClient {
     ) -> WasapiRes<Self> {
         unsafe {
             // Create audio client
-            let audio_client_activation_params = AUDIOCLIENT_ACTIVATION_PARAMS {
+            let mut audio_client_activation_params = AUDIOCLIENT_ACTIVATION_PARAMS {
                 ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
                 Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
                     ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
@@ -495,6 +496,7 @@ impl ProcessAudioClient {
                     },
                 },
             };
+            let pinned_params = Pin::new(&mut audio_client_activation_params);
 
             let raw_prop = windows_core::imp::PROPVARIANT {
                 Anonymous: windows_core::imp::PROPVARIANT_0 {
@@ -506,15 +508,16 @@ impl ProcessAudioClient {
                         Anonymous: windows_core::imp::PROPVARIANT_0_0_0 {
                             blob: windows_core::imp::BLOB {
                                 cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
-                                pBlobData: &audio_client_activation_params as *const _ as *mut _,
+                                pBlobData: pinned_params.get_mut() as *const _ as *mut _,
                             },
                         },
                     },
                 },
             };
 
-            let activation_prop = ManuallyDrop::new(PROPVARIANT::from_raw(raw_prop));
-            let activation_params = Some(activation_prop.deref() as *const _);
+            let activation_prop = PROPVARIANT::from_raw(raw_prop);
+            let pinned_prop = Pin::new(&activation_prop);
+            let activation_params = Some(pinned_prop.get_ref() as *const _);
             let riid = IAudioClient::IID;
 
             // Create completion handler
