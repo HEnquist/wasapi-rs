@@ -353,6 +353,7 @@ impl Device {
             client: audio_client,
             direction: self.direction,
             sharemode: None,
+            bytes_per_frame: None,
         })
     }
 
@@ -440,6 +441,7 @@ pub struct AudioClient {
     client: IAudioClient,
     direction: Direction,
     sharemode: Option<ShareMode>,
+    bytes_per_frame: Option<usize>
 }
 
 impl AudioClient {
@@ -557,6 +559,7 @@ impl AudioClient {
                     client: audio_client,
                     direction: Direction::Render,
                     sharemode: Some(ShareMode::Shared),
+                    bytes_per_frame: None,
                 })
         }
     }
@@ -806,6 +809,8 @@ impl AudioClient {
                 None,
             )?;
         }
+        self.bytes_per_frame = Some(wavefmt.get_blockalign() as usize);
+        println!("bytes per frame: {:?}", self.bytes_per_frame);
         Ok(())
     }
 
@@ -872,7 +877,7 @@ impl AudioClient {
     /// Get a rendering (playback) client
     pub fn get_audiorenderclient(&self) -> WasapiRes<AudioRenderClient> {
         let client = unsafe { self.client.GetService::<IAudioRenderClient>()? };
-        Ok(AudioRenderClient { client })
+        Ok(AudioRenderClient { client, bytes_per_frame: self.bytes_per_frame.unwrap_or_default() })
     }
 
     /// Get a capture client
@@ -881,6 +886,7 @@ impl AudioClient {
         Ok(AudioCaptureClient {
             client,
             sharemode: self.sharemode,
+            bytes_per_frame: self.bytes_per_frame.unwrap_or_default(),
         })
     }
 
@@ -972,6 +978,7 @@ impl AudioClock {
 /// Struct wrapping an [IAudioRenderClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudiorenderclient).
 pub struct AudioRenderClient {
     client: IAudioRenderClient,
+    bytes_per_frame: usize,
 }
 
 impl AudioRenderClient {
@@ -982,11 +989,11 @@ impl AudioRenderClient {
     pub fn write_to_device(
         &self,
         nbr_frames: usize,
-        byte_per_frame: usize,
         data: &[u8],
         buffer_flags: Option<BufferFlags>,
     ) -> WasapiRes<()> {
-        let nbr_bytes = nbr_frames * byte_per_frame;
+        println!(".... {},{}", nbr_frames, self.bytes_per_frame);
+        let nbr_bytes = nbr_frames * self.bytes_per_frame;
         if nbr_bytes != data.len() {
             return Err(WasapiError::new(
                 format!(
@@ -999,6 +1006,7 @@ impl AudioRenderClient {
             .into());
         }
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
+        println!("---- {:?}, {}", bufferptr, nbr_frames);
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         bufferslice.copy_from_slice(data);
         let flags = match buffer_flags {
@@ -1017,11 +1025,10 @@ impl AudioRenderClient {
     pub fn write_to_device_from_deque(
         &self,
         nbr_frames: usize,
-        byte_per_frame: usize,
         data: &mut VecDeque<u8>,
         buffer_flags: Option<BufferFlags>,
     ) -> WasapiRes<()> {
-        let nbr_bytes = nbr_frames * byte_per_frame;
+        let nbr_bytes = nbr_frames * self.bytes_per_frame;
         if nbr_bytes > data.len() {
             return Err(WasapiError::new(
                 format!("To little data, got {}, need {}", data.len(), nbr_bytes).as_str(),
@@ -1084,6 +1091,7 @@ impl BufferFlags {
 pub struct AudioCaptureClient {
     client: IAudioCaptureClient,
     sharemode: Option<ShareMode>,
+    bytes_per_frame: usize,
 }
 
 impl AudioCaptureClient {
@@ -1103,10 +1111,9 @@ impl AudioCaptureClient {
     /// If it is longer that needed, the unused elements will not be modified.
     pub fn read_from_device(
         &self,
-        bytes_per_frame: usize,
         data: &mut [u8],
     ) -> WasapiRes<(u32, BufferFlags)> {
-        let data_len_in_frames = data.len() / bytes_per_frame;
+        let data_len_in_frames = data.len() / self.bytes_per_frame;
         let mut buffer_ptr = ptr::null_mut();
         let mut nbr_frames_returned = 0;
         let mut flags = 0;
@@ -1135,7 +1142,7 @@ impl AudioCaptureClient {
             )
             .into());
         }
-        let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
+        let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
         let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
         data[..len_in_bytes].copy_from_slice(bufferslice);
         if nbr_frames_returned > 0 {
@@ -1149,7 +1156,6 @@ impl AudioCaptureClient {
     /// Returns the [BufferFlags] describing the buffer that the data was read from.
     pub fn read_from_device_to_deque(
         &self,
-        bytes_per_frame: usize,
         data: &mut VecDeque<u8>,
     ) -> WasapiRes<BufferFlags> {
         let mut buffer_ptr = ptr::null_mut();
@@ -1165,7 +1171,7 @@ impl AudioCaptureClient {
             )?
         };
         let bufferflags = BufferFlags::new(flags);
-        let len_in_bytes = nbr_frames_returned as usize * bytes_per_frame;
+        let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
         let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
         for element in bufferslice.iter() {
             data.push_back(*element);

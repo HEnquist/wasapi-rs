@@ -113,7 +113,6 @@ fn main() {
         render_client
             .write_to_device(
                 buffer_frame_count as usize,
-                blockalign as usize,
                 &data,
                 None,
             )

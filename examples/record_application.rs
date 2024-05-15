@@ -58,7 +58,7 @@ fn capture_loop(
         let additional = (new_frames as usize * blockalign as usize).saturating_sub(sample_queue.capacity() - sample_queue.len());
         sample_queue.reserve(additional);
         if new_frames > 0 {
-            capture_client.read_from_device_to_deque(blockalign as usize, &mut sample_queue).unwrap();
+            capture_client.read_from_device_to_deque(&mut sample_queue).unwrap();
         }
         if h_event.wait_for_event(3000).is_err() {
             error!("timeout error, stopping capture");
