@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
-use std::sync::mpsc;
 use std::error::{self};
 use std::fs::File;
 use std::io::prelude::*;
+use std::sync::mpsc;
 
 use std::thread;
 use sysinfo::{ProcessRefreshKind, RefreshKind, System};
@@ -13,14 +13,12 @@ extern crate log;
 use simplelog::*;
 type Res<T> = Result<T, Box<dyn error::Error>>;
 
-
 // Capture loop, capture samples and send in chunks of "chunksize" frames to channel
 fn capture_loop(
     tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>,
     chunksize: usize,
     process_id: u32,
 ) -> Res<()> {
-
     initialize_mta().ok().unwrap();
 
     let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 48000, 2, None);
@@ -30,14 +28,18 @@ fn capture_loop(
     let include_tree = true;
 
     let mut audio_client = AudioClient::new_application_loopback_client(process_id, include_tree)?;
-    audio_client.initialize_client(&desired_format, 0, &Direction::Capture, &ShareMode::Shared, autoconvert)?;
-
+    audio_client.initialize_client(
+        &desired_format,
+        0,
+        &Direction::Capture,
+        &ShareMode::Shared,
+        autoconvert,
+    )?;
 
     debug!("initialized capture");
     let h_event = audio_client.set_get_eventhandle().unwrap();
 
     let capture_client = audio_client.get_audiocaptureclient().unwrap();
-
 
     let mut sample_queue: VecDeque<u8> = VecDeque::new(); // just eat the reallocation because querying the buffer size gives massive values.
 
@@ -55,10 +57,13 @@ fn capture_loop(
         trace!("capturing");
 
         let new_frames = capture_client.get_next_nbr_frames()?.unwrap_or(0);
-        let additional = (new_frames as usize * blockalign as usize).saturating_sub(sample_queue.capacity() - sample_queue.len());
+        let additional = (new_frames as usize * blockalign as usize)
+            .saturating_sub(sample_queue.capacity() - sample_queue.len());
         sample_queue.reserve(additional);
         if new_frames > 0 {
-            capture_client.read_from_device_to_deque(&mut sample_queue).unwrap();
+            capture_client
+                .read_from_device_to_deque(&mut sample_queue)
+                .unwrap();
         }
         if h_event.wait_for_event(3000).is_err() {
             error!("timeout error, stopping capture");

@@ -367,7 +367,13 @@ impl Device {
             _ if state == DEVICE_STATE_DISABLED => DeviceState::Disabled,
             _ if state == DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
             _ if state == DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
-            x => return Err(WasapiError::new(&format!("Got an illegal state: DEVICE_STATE({})", x.0)).into()),
+            x => {
+                return Err(WasapiError::new(&format!(
+                    "Got an illegal state: DEVICE_STATE({})",
+                    x.0
+                ))
+                .into())
+            }
         };
         Ok(state_enum)
     }
@@ -435,26 +441,26 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler {
         Ok(())
     }
 }
- 
+
 /// Struct wrapping an [IAudioClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclient).
 pub struct AudioClient {
     client: IAudioClient,
     direction: Direction,
     sharemode: Option<ShareMode>,
-    bytes_per_frame: Option<usize>
+    bytes_per_frame: Option<usize>,
 }
 
 impl AudioClient {
     /// Creates a loopback capture [AudioClient] for a specific process.
-    /// 
+    ///
     /// `include_tree` is equivalent to [PROCESS_LOOPBACK_MODE](https://learn.microsoft.com/en-us/windows/win32/api/audioclientactivationparams/ne-audioclientactivationparams-process_loopback_mode).
     /// If true, the loopback capture client will capture audio from the target process and all its child processes, if false only audio from the target process is captured.
-    /// 
+    ///
     /// On versions of Windows prior to Windows 10, the thread calling this function must called in a COM Single-Threaded Apartment (STA).
-    /// 
+    ///
     /// Additionally when calling [AudioClient::initialize_client] on the client returned by this method, the caller must use [Direction::Capture], and [ShareMode::Shared].
     /// Finally calls to [AudioClient::get_periods] do not work, however the period passed by the caller to [AudioClient::initialize_client] is irrelevant.
-    /// 
+    ///
     /// # Non-functional methods:
     /// * `get_mixformat` just returns `Not implemented`
     /// * `is_supported` just returns `Not implemented` even if the format and mode work
@@ -468,7 +474,7 @@ impl AudioClient {
     /// * `get_audiosessioncontrol` just returns `No such interface supported`
     /// * `get_audioclock` just returns `No such interface supported`
     /// * `get_sharemode` slways returns `None` when it should returns Shared after initialisation
-    /// 
+    ///
     /// # Example
     /// ```
     /// use wasapi::{WaveFormat, SampleType, ProcessAudioClient, initialize_mta};
@@ -477,15 +483,12 @@ impl AudioClient {
     /// let autoconvert = true;
     /// let include_tree = false;
     /// let process_id = std::process::id();
-    /// 
+    ///
     /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
     /// let mut audio_client = ProcessAudioClient::new(process_id, include_tree).unwrap();
     /// audio_client.initialize_client(&desired_format, hnsbufferduration, autoconvert).unwrap();
     /// ```
-    pub fn new_application_loopback_client(
-        process_id: u32,
-        include_tree: bool,
-    ) -> WasapiRes<Self> {
+    pub fn new_application_loopback_client(process_id: u32, include_tree: bool) -> WasapiRes<Self> {
         unsafe {
             // Create audio client
             let mut audio_client_activation_params = AUDIOCLIENT_ACTIVATION_PARAMS {
@@ -554,13 +557,12 @@ impl AudioClient {
             result.ok()?;
             let audio_client: IAudioClient = audio_client.unwrap().cast()?; // always safe to unwrap if result above is checked first
 
-            Ok(
-                AudioClient {
-                    client: audio_client,
-                    direction: Direction::Render,
-                    sharemode: Some(ShareMode::Shared),
-                    bytes_per_frame: None,
-                })
+            Ok(AudioClient {
+                client: audio_client,
+                direction: Direction::Render,
+                sharemode: Some(ShareMode::Shared),
+                bytes_per_frame: None,
+            })
         }
     }
 
@@ -810,7 +812,6 @@ impl AudioClient {
             )?;
         }
         self.bytes_per_frame = Some(wavefmt.get_blockalign() as usize);
-        println!("bytes per frame: {:?}", self.bytes_per_frame);
         Ok(())
     }
 
@@ -877,7 +878,10 @@ impl AudioClient {
     /// Get a rendering (playback) client
     pub fn get_audiorenderclient(&self) -> WasapiRes<AudioRenderClient> {
         let client = unsafe { self.client.GetService::<IAudioRenderClient>()? };
-        Ok(AudioRenderClient { client, bytes_per_frame: self.bytes_per_frame.unwrap_or_default() })
+        Ok(AudioRenderClient {
+            client,
+            bytes_per_frame: self.bytes_per_frame.unwrap_or_default(),
+        })
     }
 
     /// Get a capture client
@@ -992,7 +996,9 @@ impl AudioRenderClient {
         data: &[u8],
         buffer_flags: Option<BufferFlags>,
     ) -> WasapiRes<()> {
-        println!(".... {},{}", nbr_frames, self.bytes_per_frame);
+        if nbr_frames == 0 {
+            return Ok(());
+        }
         let nbr_bytes = nbr_frames * self.bytes_per_frame;
         if nbr_bytes != data.len() {
             return Err(WasapiError::new(
@@ -1006,7 +1012,6 @@ impl AudioRenderClient {
             .into());
         }
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
-        println!("---- {:?}, {}", bufferptr, nbr_frames);
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         bufferslice.copy_from_slice(data);
         let flags = match buffer_flags {
@@ -1028,6 +1033,9 @@ impl AudioRenderClient {
         data: &mut VecDeque<u8>,
         buffer_flags: Option<BufferFlags>,
     ) -> WasapiRes<()> {
+        if nbr_frames == 0 {
+            return Ok(());
+        }
         let nbr_bytes = nbr_frames * self.bytes_per_frame;
         if nbr_bytes > data.len() {
             return Err(WasapiError::new(
@@ -1109,10 +1117,7 @@ impl AudioCaptureClient {
     /// that was read, and the BufferFlags describing the buffer that the data was read from.
     /// The slice must be large enough to hold all data.
     /// If it is longer that needed, the unused elements will not be modified.
-    pub fn read_from_device(
-        &self,
-        data: &mut [u8],
-    ) -> WasapiRes<(u32, BufferFlags)> {
+    pub fn read_from_device(&self, data: &mut [u8]) -> WasapiRes<(u32, BufferFlags)> {
         let data_len_in_frames = data.len() / self.bytes_per_frame;
         let mut buffer_ptr = ptr::null_mut();
         let mut nbr_frames_returned = 0;
@@ -1154,10 +1159,7 @@ impl AudioCaptureClient {
 
     /// Read raw bytes data from a device into a deque.
     /// Returns the [BufferFlags] describing the buffer that the data was read from.
-    pub fn read_from_device_to_deque(
-        &self,
-        data: &mut VecDeque<u8>,
-    ) -> WasapiRes<BufferFlags> {
+    pub fn read_from_device_to_deque(&self, data: &mut VecDeque<u8>) -> WasapiRes<BufferFlags> {
         let mut buffer_ptr = ptr::null_mut();
         let mut nbr_frames_returned = 0;
         let mut flags = 0;

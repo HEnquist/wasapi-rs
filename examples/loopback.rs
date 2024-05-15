@@ -70,7 +70,6 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
         trace!("write");
         render_client.write_to_device_from_deque(
             buffer_frame_count as usize,
-            blockalign as usize,
             &mut sample_queue,
             None,
         )?;

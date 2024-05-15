@@ -106,7 +106,7 @@ fn main() {
     audio_client
         .initialize_client(
             &desired_format,
-            4*def_time,
+            def_time,
             &Direction::Render,
             &ShareMode::Shared,
             needs_convert,
@@ -121,7 +121,6 @@ fn main() {
     audio_client.start_stream().unwrap();
     loop {
         let buffer_frame_count = audio_client.get_available_space_in_frames().unwrap();
-        println!("space {}", buffer_frame_count);
 
         let mut data = vec![0u8; buffer_frame_count as usize * blockalign as usize];
         for frame in data.chunks_exact_mut(blockalign as usize) {
@@ -136,11 +135,7 @@ fn main() {
 
         trace!("write");
         render_client
-            .write_to_device(
-                buffer_frame_count as usize,
-                &data,
-                None,
-            )
+            .write_to_device(buffer_frame_count as usize, &data, None)
             .unwrap();
         trace!("write ok");
         if h_event.wait_for_event(1000).is_err() {
