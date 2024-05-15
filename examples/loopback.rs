@@ -146,7 +146,7 @@ fn main() -> Res<()> {
             .build(),
     );
 
-    initialize_mta()?;
+    initialize_mta().ok()?;
 
     let (tx_play, rx_play): (
         std::sync::mpsc::SyncSender<Vec<u8>>,

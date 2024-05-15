@@ -82,7 +82,7 @@ fn main() -> Res<()> {
             .build(),
     );
 
-    initialize_mta()?;
+    initialize_mta().ok()?;
 
     let (tx_capt, rx_capt): (
         std::sync::mpsc::SyncSender<Vec<u8>>,
