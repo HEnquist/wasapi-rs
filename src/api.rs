@@ -1079,6 +1079,14 @@ impl BufferFlags {
         }
     }
 
+    pub fn none() -> Self {
+        BufferFlags {
+            data_discontinuity: false,
+            silent: false,
+            timestamp_error: false,
+        }
+    }
+
     /// Convert a [BufferFlags] struct to a `u32` value.
     pub fn to_u32(&self) -> u32 {
         let mut value = 0;
@@ -1119,6 +1127,9 @@ impl AudioCaptureClient {
     /// If it is longer that needed, the unused elements will not be modified.
     pub fn read_from_device(&self, data: &mut [u8]) -> WasapiRes<(u32, BufferFlags)> {
         let data_len_in_frames = data.len() / self.bytes_per_frame;
+        if data_len_in_frames == 0 {
+            return Ok((0, BufferFlags::none()));
+        }
         let mut buffer_ptr = ptr::null_mut();
         let mut nbr_frames_returned = 0;
         let mut flags = 0;
@@ -1173,6 +1184,10 @@ impl AudioCaptureClient {
             )?
         };
         let bufferflags = BufferFlags::new(flags);
+        if nbr_frames_returned == 0 {
+            // There is no need to release a buffer of 0 bytes
+            return Ok(bufferflags);
+        }
         let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
         let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
         for element in bufferslice.iter() {
