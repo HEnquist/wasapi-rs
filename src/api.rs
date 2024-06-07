@@ -359,20 +359,18 @@ impl Device {
 
     /// Read state from an [IMMDevice]
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
-        let mut state_temp: u32 = 0;
-        let state = unsafe { self.device.GetState(&mut state_temp) };
-        trace!("state: {:?}", state);
-        let state_enum = match state {
-            _ if state == DEVICE_STATE_ACTIVE => DeviceState::Active,
-            _ if state == DEVICE_STATE_DISABLED => DeviceState::Disabled,
-            _ if state == DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
-            _ if state == DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
+        let mut pdwstate: u32 = 0;
+        let state = unsafe { self.device.GetState(&mut pdwstate) };
+        trace!("state: {:?}, pdwstate: {}", state, pdwstate);
+        let state_enum = match pdwstate {
+            _ if pdwstate == DEVICE_STATE_ACTIVE.0 => DeviceState::Active,
+            _ if pdwstate == DEVICE_STATE_DISABLED.0 => DeviceState::Disabled,
+            _ if pdwstate == DEVICE_STATE_NOTPRESENT.0 => DeviceState::NotPresent,
+            _ if pdwstate == DEVICE_STATE_UNPLUGGED.0 => DeviceState::Unplugged,
             x => {
-                return Err(WasapiError::new(&format!(
-                    "Got an illegal state: DEVICE_STATE({})",
-                    x.0
-                ))
-                .into())
+                return Err(
+                    WasapiError::new(&format!("Got an illegal state: DEVICE_STATE({})", x)).into(),
+                )
             }
         };
         Ok(state_enum)
