@@ -61,7 +61,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
             tx_capt.send(chunk)?;
         }
         trace!("capturing");
-        render_client.read_from_device_to_deque(blockalign as usize, &mut sample_queue)?;
+        render_client.read_from_device_to_deque(&mut sample_queue)?;
         if h_event.wait_for_event(3000).is_err() {
             error!("timeout error, stopping capture");
             audio_client.stop_stream()?;

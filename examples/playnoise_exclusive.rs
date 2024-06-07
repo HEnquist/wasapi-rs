@@ -155,12 +155,7 @@ fn main() {
 
         trace!("write");
         render_client
-            .write_to_device(
-                buffer_frame_count as usize,
-                blockalign as usize,
-                &data,
-                None,
-            )
+            .write_to_device(buffer_frame_count as usize, &data, None)
             .unwrap();
         trace!("write ok");
         if h_event.wait_for_event(1000).is_err() {

@@ -70,7 +70,6 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
         trace!("write");
         render_client.write_to_device_from_deque(
             buffer_frame_count as usize,
-            blockalign as usize,
             &mut sample_queue,
             None,
         )?;
@@ -125,7 +124,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
             tx_capt.send(chunk)?;
         }
         trace!("capturing");
-        render_client.read_from_device_to_deque(blockalign as usize, &mut sample_queue)?;
+        render_client.read_from_device_to_deque(&mut sample_queue)?;
         if h_event.wait_for_event(1000000).is_err() {
             error!("error, stopping capture");
             audio_client.stop_stream()?;

@@ -28,4 +28,4 @@ These things have been implemented so far:
 | `loopback`            | Shows how to simultaneously capture and render sound, with separate threads for capture and render.    |
 | `record`              | Records audio from the default device, and saves the raw samples to a file.                            |
 | `devices`             | Lists all available audio devices and displays the default devices.                                    |
-
+| `record_application`  | Records audio from a single application, and saves the raw samples to a file.                          |
