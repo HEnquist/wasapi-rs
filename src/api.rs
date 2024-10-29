@@ -9,7 +9,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::{error, fmt, ptr, slice};
 use widestring::U16CString;
 use windows::Win32::Media::Audio::{
-    ActivateAudioInterfaceAsync, IActivateAudioInterfaceAsyncOperation,
+    ActivateAudioInterfaceAsync, EDataFlow, ERole, IActivateAudioInterfaceAsyncOperation,
     IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
     AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
     AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
@@ -92,6 +92,17 @@ pub fn deinitialize() {
     unsafe { CoUninitialize() }
 }
 
+#[derive(Debug)]
+pub struct InvalidEnumError;
+
+impl fmt::Display for InvalidEnumError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Invalid enum value supplied")
+    }
+}
+
+impl error::Error for InvalidEnumError {}
+
 /// Audio direction, playback or capture.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Direction {
@@ -104,6 +115,28 @@ impl fmt::Display for Direction {
         match *self {
             Direction::Render => write!(f, "Render"),
             Direction::Capture => write!(f, "Capture"),
+        }
+    }
+}
+
+impl TryFrom<EDataFlow> for Direction {
+    type Error = InvalidEnumError;
+
+    fn try_from(value: EDataFlow) -> Result<Self, Self::Error> {
+        match value {
+            EDataFlow(0) => Ok(Self::Render),
+            EDataFlow(1) => Ok(Self::Capture),
+            // EDataFlow(2) => All/Both,
+            _ => Err(InvalidEnumError),
+        }
+    }
+}
+
+impl From<Direction> for EDataFlow {
+    fn from(value: Direction) -> Self {
+        match value {
+            Direction::Capture => eCapture,
+            Direction::Render => eRender,
         }
     }
 }
@@ -123,6 +156,29 @@ impl fmt::Display for Role {
             Role::Console => write!(f, "Console"),
             Role::Multimedia => write!(f, "Multimedia"),
             Role::Communications => write!(f, "Communications"),
+        }
+    }
+}
+
+impl TryFrom<ERole> for Role {
+    type Error = InvalidEnumError;
+
+    fn try_from(value: ERole) -> Result<Self, Self::Error> {
+        match value {
+            ERole(0) => Ok(Self::Console),
+            ERole(1) => Ok(Self::Multimedia),
+            ERole(2) => Ok(Self::Communications),
+            _ => Err(InvalidEnumError),
+        }
+    }
+}
+
+impl From<Role> for ERole {
+    fn from(value: Role) -> Self {
+        match value {
+            Role::Communications => eCommunications,
+            Role::Multimedia => eMultimedia,
+            Role::Console => eConsole,
         }
     }
 }
@@ -346,6 +402,11 @@ pub struct Device {
 }
 
 impl Device {
+    /// Build a [Device] from a supplied [IMMDevice] and [Direction]
+    pub fn custom(device: IMMDevice, direction: Direction) -> Device {
+        Device { device, direction }
+    }
+
     /// Get an [IAudioClient] from an [IMMDevice]
     pub fn get_iaudioclient(&self) -> WasapiRes<AudioClient> {
         let audio_client = unsafe { self.device.Activate::<IAudioClient>(CLSCTX_ALL, None)? };
