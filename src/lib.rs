@@ -31,9 +31,11 @@
 //! | `record_application`  | Records audio from a single application, and saves the raw samples to a file.                          |
 
 mod api;
+mod errors;
 mod events;
 mod waveformat;
 pub use api::*;
+pub use errors::*;
 pub use events::*;
 pub use waveformat::*;
 pub use windows::core::GUID;

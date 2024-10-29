@@ -152,9 +152,7 @@ impl WaveFormat {
         let sample_type = match formattag as u32 {
             WAVE_FORMAT_PCM => SampleType::Int,
             WAVE_FORMAT_IEEE_FLOAT => SampleType::Float,
-            _ => {
-                return Err(WasapiError::new("Unsupported format").into());
-            }
+            _ => return Err(WasapiError::UnsupportedFormat),
         };
         let storebits = 8 * blockalign / channels;
         Ok(WaveFormat::new(
@@ -177,9 +175,7 @@ impl WaveFormat {
         let sample_type = match self.wave_fmt.SubFormat {
             KSDATAFORMAT_SUBTYPE_IEEE_FLOAT => WAVE_FORMAT_IEEE_FLOAT,
             KSDATAFORMAT_SUBTYPE_PCM => WAVE_FORMAT_PCM,
-            _ => {
-                return Err(WasapiError::new("Unsupported format").into());
-            }
+            _ => return Err(WasapiError::UnsupportedFormat),
         };
         let wave_format = WAVEFORMATEX {
             cbSize: 0,
@@ -249,12 +245,7 @@ impl WaveFormat {
         let subfmt = match self.wave_fmt.SubFormat {
             KSDATAFORMAT_SUBTYPE_IEEE_FLOAT => SampleType::Float,
             KSDATAFORMAT_SUBTYPE_PCM => SampleType::Int,
-            _ => {
-                return Err(WasapiError::new(
-                    format!("Unknown subformat {:?}", { self.wave_fmt.SubFormat }).as_str(),
-                )
-                .into());
-            }
+            _ => return Err(WasapiError::UnsupportedSubformat(self.wave_fmt.SubFormat)),
         };
         Ok(subfmt)
     }

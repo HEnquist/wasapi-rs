@@ -6,7 +6,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::rc::Weak;
 use std::sync::{Arc, Condvar, Mutex};
-use std::{error, fmt, ptr, slice};
+use std::{fmt, ptr, slice};
 use widestring::U16CString;
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, EDataFlow, ERole, IActivateAudioInterfaceAsyncOperation,
@@ -47,35 +47,9 @@ use windows::{
 };
 use windows_core::{implement, IUnknown, Interface, PROPVARIANT};
 
-use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WaveFormat};
+use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WasapiError, WaveFormat};
 
-pub(crate) type WasapiRes<T> = Result<T, Box<dyn error::Error>>;
-
-/// Error returned by the Wasapi crate.
-#[derive(Debug)]
-pub struct WasapiError {
-    desc: String,
-}
-
-impl fmt::Display for WasapiError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.desc)
-    }
-}
-
-impl error::Error for WasapiError {
-    fn description(&self) -> &str {
-        &self.desc
-    }
-}
-
-impl WasapiError {
-    pub fn new(desc: &str) -> Self {
-        WasapiError {
-            desc: desc.to_owned(),
-        }
-    }
-}
+pub(crate) type WasapiRes<T> = Result<T, WasapiError>;
 
 /// Initializes COM for use by the calling thread for the multi-threaded apartment (MTA).
 pub fn initialize_mta() -> HRESULT {
@@ -353,7 +327,7 @@ impl DeviceCollection {
                 return Ok(device);
             }
         }
-        Err(WasapiError::new(format!("Unable to find device {}", name).as_str()).into())
+        Err(WasapiError::DeviceNotFound(name.to_owned()))
     }
 
     /// Get the direction for this [DeviceCollection]
@@ -428,11 +402,7 @@ impl Device {
             _ if pdwstate == DEVICE_STATE_DISABLED.0 => DeviceState::Disabled,
             _ if pdwstate == DEVICE_STATE_NOTPRESENT.0 => DeviceState::NotPresent,
             _ if pdwstate == DEVICE_STATE_UNPLUGGED.0 => DeviceState::Unplugged,
-            x => {
-                return Err(
-                    WasapiError::new(&format!("Got an illegal state: DEVICE_STATE({})", x)).into(),
-                )
-            }
+            x => return Err(WasapiError::IllegalDeviceState(x)),
         };
         Ok(state_enum)
     }
@@ -764,7 +734,7 @@ impl AudioClient {
                 return Ok(wave_fmt);
             }
         }
-        Err(WasapiError::new("Unable to find a supported format").into())
+        Err(WasapiError::UnsupportedFormat)
     }
 
     /// Get default and minimum periods in 100-nanosecond units
@@ -831,19 +801,17 @@ impl AudioClient {
         convert: bool,
     ) -> WasapiRes<()> {
         if sharemode == &ShareMode::Exclusive && convert {
-            return Err(
-                WasapiError::new("Cant use automatic format conversion in exclusive mode").into(),
-            );
+            return Err(WasapiError::AutomaticFormatConversionInExclusiveMode);
         }
         let mut streamflags = match (&self.direction, direction, sharemode) {
             (Direction::Render, Direction::Capture, ShareMode::Shared) => {
                 AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_LOOPBACK
             }
             (Direction::Render, Direction::Capture, ShareMode::Exclusive) => {
-                return Err(WasapiError::new("Cant use Loopback with exclusive mode").into());
+                return Err(WasapiError::LoopbackWithExclusiveMode);
             }
             (Direction::Capture, Direction::Render, _) => {
-                return Err(WasapiError::new("Cant render to a capture device").into());
+                return Err(WasapiError::RenderToCaptureDevice);
             }
             _ => AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
         };
@@ -911,7 +879,7 @@ impl AudioClient {
 
                 buffer_frame_count - padding_count
             }
-            _ => return Err(WasapiError::new("Client has not been initialized").into()),
+            _ => return Err(WasapiError::ClientNotInit),
         };
         Ok(frames)
     }
@@ -991,11 +959,7 @@ impl AudioSessionControl {
             _ if state == AudioSessionStateActive => SessionState::Active,
             _ if state == AudioSessionStateInactive => SessionState::Inactive,
             _ if state == AudioSessionStateExpired => SessionState::Expired,
-            x => {
-                return Err(
-                    WasapiError::new(&format!("Got an illegal session state {:?}", x)).into(),
-                );
-            }
+            x => return Err(WasapiError::IllegalSessionState(x.0)),
         };
         Ok(sessionstate)
     }
@@ -1006,9 +970,7 @@ impl AudioSessionControl {
 
         match unsafe { self.control.RegisterAudioSessionNotification(&events) } {
             Ok(()) => Ok(()),
-            Err(err) => {
-                Err(WasapiError::new(&format!("Failed to register notifications, {}", err)).into())
-            }
+            Err(err) => Err(WasapiError::RegisterNotifications(err)),
         }
     }
 }
@@ -1060,15 +1022,7 @@ impl AudioRenderClient {
         }
         let nbr_bytes = nbr_frames * self.bytes_per_frame;
         if nbr_bytes != data.len() {
-            return Err(WasapiError::new(
-                format!(
-                    "Wrong length of data, got {}, expected {}",
-                    data.len(),
-                    nbr_bytes
-                )
-                .as_str(),
-            )
-            .into());
+            return Err(WasapiError::InvalidDataLength(data.len(), nbr_bytes));
         }
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
@@ -1097,10 +1051,7 @@ impl AudioRenderClient {
         }
         let nbr_bytes = nbr_frames * self.bytes_per_frame;
         if nbr_bytes > data.len() {
-            return Err(WasapiError::new(
-                format!("To little data, got {}, need {}", data.len(), nbr_bytes).as_str(),
-            )
-            .into());
+            return Err(WasapiError::InvalidDataLength(data.len(), nbr_bytes));
         }
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
@@ -1208,14 +1159,10 @@ impl AudioCaptureClient {
         }
         if data_len_in_frames < nbr_frames_returned as usize {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
-            return Err(WasapiError::new(
-                format!(
-                    "Wrong length of data, got {} frames, expected at least {} frames",
-                    data_len_in_frames, nbr_frames_returned
-                )
-                .as_str(),
-            )
-            .into());
+            return Err(WasapiError::InvalidDataLength(
+                data_len_in_frames,
+                nbr_frames_returned as usize,
+            ));
         }
         let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
         let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
@@ -1276,7 +1223,7 @@ impl Handle {
     pub fn wait_for_event(&self, timeout_ms: u32) -> WasapiRes<()> {
         let retval = unsafe { WaitForSingleObject(self.handle, timeout_ms) };
         if retval.0 != WAIT_OBJECT_0.0 {
-            return Err(WasapiError::new("Wait timed out").into());
+            return Err(WasapiError::EventTimeout);
         }
         Ok(())
     }
