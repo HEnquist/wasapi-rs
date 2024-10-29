@@ -66,17 +66,6 @@ pub fn deinitialize() {
     unsafe { CoUninitialize() }
 }
 
-#[derive(Debug)]
-pub struct InvalidEnumError;
-
-impl fmt::Display for InvalidEnumError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Invalid enum value supplied")
-    }
-}
-
-impl error::Error for InvalidEnumError {}
-
 /// Audio direction, playback or capture.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Direction {
@@ -93,25 +82,37 @@ impl fmt::Display for Direction {
     }
 }
 
-impl TryFrom<EDataFlow> for Direction {
-    type Error = InvalidEnumError;
+impl TryFrom<&EDataFlow> for Direction {
+    type Error = WasapiError;
 
-    fn try_from(value: EDataFlow) -> Result<Self, Self::Error> {
+    fn try_from(value: &EDataFlow) -> Result<Self, Self::Error> {
         match value {
             EDataFlow(0) => Ok(Self::Render),
             EDataFlow(1) => Ok(Self::Capture),
             // EDataFlow(2) => All/Both,
-            _ => Err(InvalidEnumError),
+            x => Err(WasapiError::IllegalDeviceDirection(x.0)),
         }
     }
 }
+impl TryFrom<EDataFlow> for Direction {
+    type Error = WasapiError;
 
-impl From<Direction> for EDataFlow {
-    fn from(value: Direction) -> Self {
+    fn try_from(value: EDataFlow) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
+
+impl From<&Direction> for EDataFlow {
+    fn from(value: &Direction) -> Self {
         match value {
             Direction::Capture => eCapture,
             Direction::Render => eRender,
         }
+    }
+}
+impl From<Direction> for EDataFlow {
+    fn from(value: Direction) -> Self {
+        Self::from(&value)
     }
 }
 
@@ -134,26 +135,38 @@ impl fmt::Display for Role {
     }
 }
 
-impl TryFrom<ERole> for Role {
-    type Error = InvalidEnumError;
+impl TryFrom<&ERole> for Role {
+    type Error = WasapiError;
 
-    fn try_from(value: ERole) -> Result<Self, Self::Error> {
+    fn try_from(value: &ERole) -> Result<Self, Self::Error> {
         match value {
             ERole(0) => Ok(Self::Console),
             ERole(1) => Ok(Self::Multimedia),
             ERole(2) => Ok(Self::Communications),
-            _ => Err(InvalidEnumError),
+            x => Err(WasapiError::IllegalDeviceRole(x.0)),
         }
     }
 }
+impl TryFrom<ERole> for Role {
+    type Error = WasapiError;
 
-impl From<Role> for ERole {
-    fn from(value: Role) -> Self {
+    fn try_from(value: ERole) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
+
+impl From<&Role> for ERole {
+    fn from(value: &Role) -> Self {
         match value {
             Role::Communications => eCommunications,
             Role::Multimedia => eMultimedia,
             Role::Console => eConsole,
         }
+    }
+}
+impl From<Role> for ERole {
+    fn from(value: Role) -> Self {
+        Self::from(&value)
     }
 }
 
@@ -250,16 +263,8 @@ pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
 
 /// Get the default playback or capture device for a specific role
 pub fn get_default_device_for_role(direction: &Direction, role: &Role) -> WasapiRes<Device> {
-    let dir = match direction {
-        Direction::Capture => eCapture,
-        Direction::Render => eRender,
-    };
-
-    let e_role = match role {
-        Role::Console => eConsole,
-        Role::Multimedia => eMultimedia,
-        Role::Communications => eCommunications,
-    };
+    let dir = direction.into();
+    let e_role = role.into();
 
     let enumerator: IMMDeviceEnumerator =
         unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
@@ -288,10 +293,7 @@ pub struct DeviceCollection {
 impl DeviceCollection {
     /// Get an [IMMDeviceCollection] of all active playback or capture devices
     pub fn new(direction: &Direction) -> WasapiRes<DeviceCollection> {
-        let dir = match direction {
-            Direction::Capture => eCapture,
-            Direction::Render => eRender,
-        };
+        let dir: EDataFlow = direction.into();
         let enumerator: IMMDeviceEnumerator =
             unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
         let devs = unsafe { enumerator.EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE)? };
