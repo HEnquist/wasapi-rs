@@ -1166,6 +1166,54 @@ impl AudioCaptureClient {
         Ok((nbr_frames_returned, bufferflags))
     }
 
+    /// Read raw bytes from a device into a slice. Returns the number of frames
+    /// that was read, and the BufferFlags describing the buffer that the data was read from.
+    /// The slice must be large enough to hold all data.
+    /// If it is longer that needed, the unused elements will not be modified.
+    pub fn read_from_device_ext(&self, buffer: &mut [u8]) -> WasapiRes<(u32, u64, BufferFlags)> {
+        let buffer_len_in_frames = buffer.len() / self.bytes_per_frame;
+        if buffer_len_in_frames == 0 {
+            return Ok((0, 0, BufferFlags::none()));
+        }
+        let mut buffer_ptr = ptr::null_mut();
+        let mut nbr_frames_returned = 0;
+        let mut flags = 0;
+        let mut position = 0;
+        unsafe {
+            self.client.GetBuffer(
+                &mut buffer_ptr,
+                &mut nbr_frames_returned,
+                &mut flags,
+                None,
+                Some(&mut position),
+            )?
+        };
+        let bufferflags = BufferFlags::new(flags);
+        if nbr_frames_returned == 0 {
+            unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
+            return Ok((0, 0, bufferflags));
+        }
+        if buffer_len_in_frames < nbr_frames_returned as usize {
+            unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
+            return Err(WasapiError::new(
+                format!(
+                    "Buffer too small, got {} frames, but buffer has only space for {} frames",
+                    nbr_frames_returned, buffer_len_in_frames,
+                )
+                .as_str(),
+            )
+            .into());
+        }
+        let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
+        let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
+        buffer[..len_in_bytes].copy_from_slice(bufferslice);
+        if nbr_frames_returned > 0 {
+            unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
+        }
+        trace!("read {} frames", nbr_frames_returned);
+        Ok((nbr_frames_returned, position, bufferflags))
+    }
+
     /// Read raw bytes data from a device into a deque.
     /// Returns the [BufferFlags] describing the buffer that the data was read from.
     pub fn read_from_device_to_deque(&self, data: &mut VecDeque<u8>) -> WasapiRes<BufferFlags> {
