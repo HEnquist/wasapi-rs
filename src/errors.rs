@@ -18,8 +18,10 @@ pub enum WasapiError {
     ClientNotInit,
     #[error("Couldn't register session notifications: {0}")]
     RegisterNotifications(windows_core::Error),
-    #[error("Wrong length of data, got {0} frames, expected at least {1} frames")]
-    InvalidDataLength(usize, usize),
+    #[error("Wrong length of data, got {received}, expected exactly {expected}")]
+    DataLengthMismatch { received: usize, expected: usize },
+    #[error("Wrong length of data, got {received}, expected at least {expected}")]
+    DataLengthTooShort { received: usize, expected: usize },
     #[error("Handle wait timed out")]
     EventTimeout,
     #[error("Cant use automatic format conversion in exclusive mode")]

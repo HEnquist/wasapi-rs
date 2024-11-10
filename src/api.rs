@@ -1024,7 +1024,10 @@ impl AudioRenderClient {
         }
         let nbr_bytes = nbr_frames * self.bytes_per_frame;
         if nbr_bytes != data.len() {
-            return Err(WasapiError::InvalidDataLength(data.len(), nbr_bytes));
+            return Err(WasapiError::DataLengthMismatch {
+                received: data.len(),
+                expected: nbr_bytes,
+            });
         }
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
@@ -1053,7 +1056,10 @@ impl AudioRenderClient {
         }
         let nbr_bytes = nbr_frames * self.bytes_per_frame;
         if nbr_bytes > data.len() {
-            return Err(WasapiError::InvalidDataLength(data.len(), nbr_bytes));
+            return Err(WasapiError::DataLengthTooShort {
+                received: data.len(),
+                expected: nbr_bytes,
+            });
         }
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
@@ -1161,10 +1167,10 @@ impl AudioCaptureClient {
         }
         if data_len_in_frames < nbr_frames_returned as usize {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
-            return Err(WasapiError::InvalidDataLength(
-                data_len_in_frames,
-                nbr_frames_returned as usize,
-            ));
+            return Err(WasapiError::DataLengthTooShort {
+                received: data_len_in_frames,
+                expected: nbr_frames_returned as usize,
+            });
         }
         let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
         let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
