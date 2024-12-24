@@ -11,7 +11,7 @@ use widestring::U16CString;
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, EDataFlow, ERole, IActivateAudioInterfaceAsyncOperation,
     IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
-    AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
+    IMMEndpoint, AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
     AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
     PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
@@ -379,8 +379,24 @@ pub struct Device {
 
 impl Device {
     /// Build a [Device] from a supplied [IMMDevice] and [Direction]
-    pub fn custom(device: IMMDevice, direction: Direction) -> Device {
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the [IMMDevice]'s data flow direction
+    /// is the same as the [Direction] supplied to the function.
+    ///
+    /// Use [from_immdevice], which queries the endpoint, for safe construction.
+    pub unsafe fn from_raw(device: IMMDevice, direction: Direction) -> Device {
         Device { device, direction }
+    }
+
+    /// Attempts to build a [Device] from a supplied [IMMDevice],
+    /// querying the endpoint for its data flow direction.
+    pub fn from_immdevice(device: IMMDevice) -> WasapiRes<Device> {
+        let endpoint: IMMEndpoint = device.cast()?;
+        let direction: Direction = unsafe { endpoint.GetDataFlow()? }.try_into()?;
+
+        Ok(Device { device, direction })
     }
 
     /// Get an [IAudioClient] from an [IMMDevice]
