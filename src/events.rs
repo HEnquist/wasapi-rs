@@ -145,7 +145,7 @@ impl AudioSessionEvents {
     }
 }
 
-impl IAudioSessionEvents_Impl for AudioSessionEvents {
+impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
     fn OnStateChanged(&self, newstate: AudioSessionState) -> Result<()> {
         #[allow(non_upper_case_globals)]
         let state_name = match newstate {

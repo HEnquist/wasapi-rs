@@ -344,7 +344,7 @@ pub struct DeviceCollectionIter<'a> {
     index: u32,
 }
 
-impl<'a> Iterator for DeviceCollectionIter<'a> {
+impl Iterator for DeviceCollectionIter<'_> {
     type Item = WasapiRes<Device>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -412,15 +412,14 @@ impl Device {
 
     /// Read state from an [IMMDevice]
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
-        let mut pdwstate: u32 = 0;
-        let state = unsafe { self.device.GetState(&mut pdwstate) };
-        trace!("state: {:?}, pdwstate: {}", state, pdwstate);
-        let state_enum = match pdwstate {
-            _ if pdwstate == DEVICE_STATE_ACTIVE.0 => DeviceState::Active,
-            _ if pdwstate == DEVICE_STATE_DISABLED.0 => DeviceState::Disabled,
-            _ if pdwstate == DEVICE_STATE_NOTPRESENT.0 => DeviceState::NotPresent,
-            _ if pdwstate == DEVICE_STATE_UNPLUGGED.0 => DeviceState::Unplugged,
-            x => return Err(WasapiError::IllegalDeviceState(x)),
+        let state = unsafe { self.device.GetState()? };
+        trace!("state: {:?}", state);
+        let state_enum = match state {
+            _ if state == DEVICE_STATE_ACTIVE => DeviceState::Active,
+            _ if state == DEVICE_STATE_DISABLED => DeviceState::Disabled,
+            _ if state == DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
+            _ if state == DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
+            x => return Err(WasapiError::IllegalDeviceState(x.0)),
         };
         Ok(state_enum)
     }
@@ -475,7 +474,7 @@ impl Handler {
     }
 }
 
-impl IActivateAudioInterfaceCompletionHandler_Impl for Handler {
+impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
     fn ActivateCompleted(
         &self,
         _activateoperation: Option<&IActivateAudioInterfaceAsyncOperation>,
