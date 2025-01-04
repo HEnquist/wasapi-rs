@@ -34,6 +34,7 @@ widestring = "1.0.2"
 log = "0.4.18"
 num-integer = "0.1"
 windows-core = "0.57"
+thiserror = "1.0.65"
 
 [dev-dependencies]
 simplelog = "0.12.1"
