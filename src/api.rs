@@ -385,7 +385,7 @@ impl Device {
     /// The caller must ensure that the [IMMDevice]'s data flow direction
     /// is the same as the [Direction] supplied to the function.
     ///
-    /// Use [from_immdevice], which queries the endpoint, for safe construction.
+    /// Use [Device::from_immdevice], which queries the endpoint, for safe construction.
     pub unsafe fn from_raw(device: IMMDevice, direction: Direction) -> Device {
         Device { device, direction }
     }
@@ -500,30 +500,36 @@ impl AudioClient {
     /// Creates a loopback capture [AudioClient] for a specific process.
     ///
     /// `include_tree` is equivalent to [PROCESS_LOOPBACK_MODE](https://learn.microsoft.com/en-us/windows/win32/api/audioclientactivationparams/ne-audioclientactivationparams-process_loopback_mode).
-    /// If true, the loopback capture client will capture audio from the target process and all its child processes, if false only audio from the target process is captured.
+    /// If true, the loopback capture client will capture audio from the target process and all its child processes,
+    /// if false only audio from the target process is captured.
     ///
-    /// On versions of Windows prior to Windows 10, the thread calling this function must called in a COM Single-Threaded Apartment (STA).
+    /// On versions of Windows prior to Windows 10, the thread calling this function
+    /// must called in a COM Single-Threaded Apartment (STA).
     ///
-    /// Additionally when calling [AudioClient::initialize_client] on the client returned by this method, the caller must use [Direction::Capture], and [ShareMode::Shared].
-    /// Finally calls to [AudioClient::get_periods] do not work, however the period passed by the caller to [AudioClient::initialize_client] is irrelevant.
+    /// Additionally when calling [AudioClient::initialize_client] on the client returned by this method,
+    /// the caller must use [Direction::Capture], and [ShareMode::Shared].
+    /// Finally calls to [AudioClient::get_periods] do not work,
+    /// however the period passed by the caller to [AudioClient::initialize_client] is irrelevant.
     ///
-    /// # Non-functional methods:
-    /// * `get_mixformat` just returns `Not implemented`
-    /// * `is_supported` just returns `Not implemented` even if the format and mode work
-    /// * `is_supported_exclusive_with_quirks` just returns `Unable to find a supported format`
-    /// * `get_periods` just returns `Not implemented`
+    /// # Non-functional methods
+    /// In process loopback mode, the functionality of the AudioClient is limited.
+    /// The following methods either do not work, or return incorrect results:
+    /// * `get_mixformat` just returns `Not implemented`.
+    /// * `is_supported` just returns `Not implemented` even if the format and mode work.
+    /// * `is_supported_exclusive_with_quirks` just returns `Unable to find a supported format`.
+    /// * `get_periods` just returns `Not implemented`.
     /// * `calculate_aligned_period_near` just returns `Not implemented` even for values that would later work.
-    /// * `get_bufferframecount` returns huge values like 3131961357 but no error
-    /// * `get_current_padding` just returns Not `implemented`
+    /// * `get_bufferframecount` returns huge values like 3131961357 but no error.
+    /// * `get_current_padding` just returns `Not implemented`.
     /// * `get_available_space_in_frames` just returns `Client has not been initialised` even if it has.
-    /// * `get_audiorenderclient` just returns `No such interface supported`
-    /// * `get_audiosessioncontrol` just returns `No such interface supported`
-    /// * `get_audioclock` just returns `No such interface supported`
-    /// * `get_sharemode` slways returns `None` when it should returns Shared after initialisation
+    /// * `get_audiorenderclient` just returns `No such interface supported`.
+    /// * `get_audiosessioncontrol` just returns `No such interface supported`.
+    /// * `get_audioclock` just returns `No such interface supported`.
+    /// * `get_sharemode` always returns `None` when it should return `Shared` after initialisation.
     ///
     /// # Example
     /// ```
-    /// use wasapi::{WaveFormat, SampleType, ProcessAudioClient, initialize_mta};
+    /// use wasapi::{WaveFormat, SampleType, AudioClient, Direction, ShareMode, initialize_mta};
     /// let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
     /// let hnsbufferduration = 200_000; // 20ms in hundreds of nanoseconds
     /// let autoconvert = true;
@@ -531,8 +537,8 @@ impl AudioClient {
     /// let process_id = std::process::id();
     ///
     /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
-    /// let mut audio_client = ProcessAudioClient::new(process_id, include_tree).unwrap();
-    /// audio_client.initialize_client(&desired_format, hnsbufferduration, autoconvert).unwrap();
+    /// let mut audio_client = AudioClient::new_application_loopback_client(process_id, include_tree).unwrap();
+    /// audio_client.initialize_client(&desired_format, hnsbufferduration, &Direction::Capture, &ShareMode::Shared, autoconvert).unwrap();
     /// ```
     pub fn new_application_loopback_client(process_id: u32, include_tree: bool) -> WasapiRes<Self> {
         unsafe {
@@ -601,7 +607,8 @@ impl AudioClient {
 
             // Ensure successful activation
             result.ok()?;
-            let audio_client: IAudioClient = audio_client.unwrap().cast()?; // always safe to unwrap if result above is checked first
+            // always safe to unwrap if result above is checked first
+            let audio_client: IAudioClient = audio_client.unwrap().cast()?;
 
             Ok(AudioClient {
                 client: audio_client,

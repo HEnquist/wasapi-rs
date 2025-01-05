@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::error::{self};
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::prelude::*;
 use std::sync::mpsc;
@@ -41,7 +42,8 @@ fn capture_loop(
 
     let capture_client = audio_client.get_audiocaptureclient().unwrap();
 
-    let mut sample_queue: VecDeque<u8> = VecDeque::new(); // just eat the reallocation because querying the buffer size gives massive values.
+    // just eat the reallocation because querying the buffer size gives massive values.
+    let mut sample_queue: VecDeque<u8> = VecDeque::new();
 
     audio_client.start_stream().unwrap();
 
@@ -85,12 +87,13 @@ fn main() -> Res<()> {
             .build(),
     );
 
-    let refreshes = RefreshKind::new().with_processes(ProcessRefreshKind::everything());
+    let refreshes = RefreshKind::nothing().with_processes(ProcessRefreshKind::everything());
     let system = System::new_with_specifics(refreshes);
-    let process_ids = system.processes_by_name("firefox.exe");
+    let process_ids = system.processes_by_name(OsStr::new("firefox.exe"));
     let mut process_id = 0;
     for process in process_ids {
-        // Note: When capturing audio windows allows you to capture an app's entire process tree, however you must ensure you use the parent as the target process ID
+        // Note: When capturing audio windows allows you to capture an app's entire process tree,
+        // however you must ensure you use the parent as the target process ID
         process_id = process.parent().unwrap_or(process.pid()).as_u32();
     }
 

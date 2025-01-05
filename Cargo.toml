@@ -1,8 +1,8 @@
 [package]
 name = "wasapi"
-version = "0.15.0"
+version = "0.16.0"
 edition = "2021"
-rust-version = "1.59"
+rust-version = "1.70"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 description = "Bindings for the Wasapi API on Windows"
 license = "MIT"
@@ -30,16 +30,16 @@ features = ["Foundation",
             "Win32_Security",]
 
 [dependencies]
-widestring = "1.0.2"
-log = "0.4.18"
+widestring = "1.1.0"
+log = "0.4.22"
 num-integer = "0.1"
 windows-core = "0.58"
-thiserror = "1.0.65"
+thiserror = "2.0.9"
 
 [dev-dependencies]
-simplelog = "0.12.1"
+simplelog = "0.12.2"
 rand = "0.8.5"
-sysinfo = "0.30.9"
+sysinfo = "0.33.1"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"
