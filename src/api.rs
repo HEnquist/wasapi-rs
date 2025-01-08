@@ -8,6 +8,7 @@ use std::rc::Weak;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use widestring::U16CString;
+use windows::Win32::Foundation::PROPERTYKEY;
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, EDataFlow, ERole, IActivateAudioInterfaceAsyncOperation,
     IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
@@ -17,7 +18,6 @@ use windows::Win32::Media::Audio::{
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::System::Variant::VT_BLOB;
-use windows::Win32::UI::Shell::PropertiesSystem::PROPERTYKEY;
 use windows::{
     core::{HRESULT, PCSTR},
     Win32::Devices::FunctionDiscovery::{
@@ -37,15 +37,17 @@ use windows::{
         WAVEFORMATEXTENSIBLE,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
-    Win32::System::Com::StructuredStorage::PropVariantToStringAlloc,
-    Win32::System::Com::STGM_READ,
+    Win32::System::Com::StructuredStorage::{
+        PropVariantToStringAlloc, PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0,
+    },
     Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
         COINIT_MULTITHREADED,
     },
+    Win32::System::Com::{BLOB, STGM_READ},
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
 };
-use windows_core::{implement, IUnknown, Interface, PROPVARIANT};
+use windows_core::{implement, IUnknown, Interface, Ref};
 
 use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WasapiError, WaveFormat};
 
@@ -477,7 +479,7 @@ impl Handler {
 impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
     fn ActivateCompleted(
         &self,
-        _activateoperation: Option<&IActivateAudioInterfaceAsyncOperation>,
+        _activateoperation: Ref<IActivateAudioInterfaceAsyncOperation>,
     ) -> windows::core::Result<()> {
         let (lock, cvar) = &*self.0;
         let mut completed = lock.lock().unwrap();
@@ -558,24 +560,24 @@ impl AudioClient {
             };
             let pinned_params = Pin::new(&mut audio_client_activation_params);
 
-            let raw_prop = windows_core::imp::PROPVARIANT {
-                Anonymous: windows_core::imp::PROPVARIANT_0 {
-                    Anonymous: windows_core::imp::PROPVARIANT_0_0 {
-                        vt: VT_BLOB.0,
+            let raw_prop = PROPVARIANT {
+                Anonymous: PROPVARIANT_0 {
+                    Anonymous: ManuallyDrop::new(PROPVARIANT_0_0 {
+                        vt: VT_BLOB,
                         wReserved1: 0,
                         wReserved2: 0,
                         wReserved3: 0,
-                        Anonymous: windows_core::imp::PROPVARIANT_0_0_0 {
-                            blob: windows_core::imp::BLOB {
+                        Anonymous: PROPVARIANT_0_0_0 {
+                            blob: BLOB {
                                 cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
                                 pBlobData: pinned_params.get_mut() as *const _ as *mut _,
                             },
                         },
-                    },
+                    }),
                 },
             };
 
-            let activation_prop = ManuallyDrop::new(PROPVARIANT::from_raw(raw_prop));
+            let activation_prop = ManuallyDrop::new(raw_prop);
             let pinned_prop = Pin::new(activation_prop.deref());
             let activation_params = Some(pinned_prop.get_ref() as *const _);
 
