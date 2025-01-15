@@ -2,7 +2,7 @@
 name = "wasapi"
 version = "0.16.0"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.74"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 description = "Bindings for the Wasapi API on Windows"
 license = "MIT"
