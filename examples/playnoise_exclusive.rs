@@ -4,7 +4,6 @@ use wasapi::*;
 #[macro_use]
 extern crate log;
 use simplelog::*;
-use windows::core::Error;
 
 // A selection of the possible errors
 use windows::Win32::Foundation::E_INVALIDARG;
@@ -62,7 +61,7 @@ fn main() {
     match init_result {
         Ok(()) => debug!("IAudioClient::Initialize ok"),
         Err(e) => {
-            if let Some(werr) = e.downcast_ref::<Error>() {
+            if let WasapiError::Windows(werr) = e {
                 // Some of the possible errors. See the documentation for the full list and descriptions.
                 // https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize
                 match werr.code() {
