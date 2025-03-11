@@ -19,13 +19,13 @@ type OptionBox<T> = Option<Box<T>>;
 
 /// A structure holding the callbacks for notifications
 pub struct EventCallbacks {
-    simple_volume: OptionBox<dyn Fn(f32, bool, GUID)>,
-    channel_volume: OptionBox<dyn Fn(usize, f32, GUID)>,
-    state: OptionBox<dyn Fn(SessionState)>,
-    disconnected: OptionBox<dyn Fn(DisconnectReason)>,
-    iconpath: OptionBox<dyn Fn(String, GUID)>,
-    displayname: OptionBox<dyn Fn(String, GUID)>,
-    groupingparam: OptionBox<dyn Fn(GUID, GUID)>,
+    simple_volume: OptionBox<dyn Fn(f32, bool, GUID) + Send + Sync>,
+    channel_volume: OptionBox<dyn Fn(usize, f32, GUID) + Send + Sync>,
+    state: OptionBox<dyn Fn(SessionState) + Send + Sync>,
+    disconnected: OptionBox<dyn Fn(DisconnectReason) + Send + Sync>,
+    iconpath: OptionBox<dyn Fn(String, GUID) + Send + Sync>,
+    displayname: OptionBox<dyn Fn(String, GUID) + Send + Sync>,
+    groupingparam: OptionBox<dyn Fn(GUID, GUID) + Send + Sync>,
 }
 
 impl Default for EventCallbacks {
@@ -49,7 +49,10 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnSimpleVolumeChanged notifications
-    pub fn set_simple_volume_callback(&mut self, c: impl Fn(f32, bool, GUID) + 'static) {
+    pub fn set_simple_volume_callback(
+        &mut self,
+        c: impl Fn(f32, bool, GUID) + 'static + Sync + Send,
+    ) {
         self.simple_volume = Some(Box::new(c));
     }
     /// Remove a callback for OnSimpleVolumeChanged notifications
@@ -58,7 +61,10 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnChannelVolumeChanged notifications
-    pub fn set_channel_volume_callback(&mut self, c: impl Fn(usize, f32, GUID) + 'static) {
+    pub fn set_channel_volume_callback(
+        &mut self,
+        c: impl Fn(usize, f32, GUID) + 'static + Sync + Send,
+    ) {
         self.channel_volume = Some(Box::new(c));
     }
     /// Remove a callback for OnChannelVolumeChanged notifications
@@ -67,7 +73,10 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnSessionDisconnected notifications
-    pub fn set_disconnected_callback(&mut self, c: impl Fn(DisconnectReason) + 'static) {
+    pub fn set_disconnected_callback(
+        &mut self,
+        c: impl Fn(DisconnectReason) + 'static + Sync + Send,
+    ) {
         self.disconnected = Some(Box::new(c));
     }
     /// Remove a callback for OnSessionDisconnected notifications
@@ -76,7 +85,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnStateChanged notifications
-    pub fn set_state_callback(&mut self, c: impl Fn(SessionState) + 'static) {
+    pub fn set_state_callback(&mut self, c: impl Fn(SessionState) + 'static + Sync + Send) {
         self.state = Some(Box::new(c));
     }
     /// Remove a callback for OnStateChanged notifications
@@ -85,7 +94,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnIconPathChanged notifications
-    pub fn set_iconpath_callback(&mut self, c: impl Fn(String, GUID) + 'static) {
+    pub fn set_iconpath_callback(&mut self, c: impl Fn(String, GUID) + 'static + Sync + Send) {
         self.iconpath = Some(Box::new(c));
     }
     /// Remove a callback for OnIconPathChanged notifications
@@ -94,7 +103,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnDisplayNameChanged notifications
-    pub fn set_displayname_callback(&mut self, c: impl Fn(String, GUID) + 'static) {
+    pub fn set_displayname_callback(&mut self, c: impl Fn(String, GUID) + 'static + Sync + Send) {
         self.displayname = Some(Box::new(c));
     }
     /// Remove a callback for OnDisplayNameChanged notifications
@@ -103,7 +112,7 @@ impl EventCallbacks {
     }
 
     /// Set a callback for OnGroupingParamChanged notifications
-    pub fn set_groupingparam_callback(&mut self, c: impl Fn(GUID, GUID) + 'static) {
+    pub fn set_groupingparam_callback(&mut self, c: impl Fn(GUID, GUID) + 'static + Sync + Send) {
         self.groupingparam = Some(Box::new(c));
     }
     /// Remove a callback for OnGroupingParamChanged notifications
