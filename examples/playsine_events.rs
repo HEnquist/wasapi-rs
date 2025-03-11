@@ -1,5 +1,5 @@
 use std::f64::consts::PI;
-use std::rc::Rc;
+use std::sync::Arc;
 use wasapi::*;
 
 #[macro_use]
@@ -86,8 +86,8 @@ fn main() {
     });
     callbacks.set_disconnected_callback(|reason| println!("Disconnected, reason: {:?}", reason));
 
-    let callbacks_rc = Rc::new(callbacks);
-    let callbacks_weak = Rc::downgrade(&callbacks_rc);
+    let callbacks_rc = Arc::new(callbacks);
+    let callbacks_weak = Arc::downgrade(&callbacks_rc);
 
     let sessioncontrol = audio_client.get_audiosessioncontrol().unwrap();
     sessioncontrol

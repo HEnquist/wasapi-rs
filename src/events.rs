@@ -1,5 +1,5 @@
-use std::rc::Weak;
 use std::slice;
+use std::sync::Weak;
 use widestring::U16CString;
 use windows::{
     core::{implement, Result, GUID, PCWSTR},

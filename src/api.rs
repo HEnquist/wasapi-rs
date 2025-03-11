@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::mem::{size_of, ManuallyDrop};
 use std::ops::Deref;
 use std::pin::Pin;
-use std::rc::Weak;
+use std::sync::Weak;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use widestring::U16CString;
