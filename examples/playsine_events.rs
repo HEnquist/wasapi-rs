@@ -90,10 +90,9 @@ fn main() {
     let callbacks_weak = Arc::downgrade(&callbacks_rc);
 
     let sessioncontrol = audio_client.get_audiosessioncontrol().unwrap();
-    sessioncontrol
+    let _registered_events = sessioncontrol
         .register_session_notification(callbacks_weak)
         .unwrap();
-
     audio_client.start_stream().unwrap();
     loop {
         let buffer_frame_count = audio_client.get_available_space_in_frames().unwrap();

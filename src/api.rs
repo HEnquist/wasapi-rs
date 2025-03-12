@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::mem::{size_of, ManuallyDrop};
 use std::ops::Deref;
 use std::pin::Pin;
-use std::sync::Weak;
+use std::rc::Rc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use widestring::U16CString;
@@ -950,7 +950,9 @@ impl AudioClient {
     /// Get the [AudioSessionControl]
     pub fn get_audiosessioncontrol(&self) -> WasapiRes<AudioSessionControl> {
         let control = unsafe { self.client.GetService::<IAudioSessionControl>()? };
-        Ok(AudioSessionControl { control })
+        Ok(AudioSessionControl {
+            control: Rc::new(control),
+        })
     }
 
     /// Get the [AudioClock]
@@ -973,7 +975,7 @@ impl AudioClient {
 
 /// Struct wrapping an [IAudioSessionControl](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessioncontrol).
 pub struct AudioSessionControl {
-    control: IAudioSessionControl,
+    control: Rc<IAudioSessionControl>,
 }
 
 impl AudioSessionControl {
@@ -990,13 +992,35 @@ impl AudioSessionControl {
         Ok(sessionstate)
     }
 
-    /// Register to receive notifications
-    pub fn register_session_notification(&self, callbacks: Weak<EventCallbacks>) -> WasapiRes<()> {
+    /// Register to receive notifications.
+    /// Returns a [SessionEvents] struct.
+    /// The notifications are unregistered when this struct is dropped.
+    pub fn register_session_notification(
+        &self,
+        callbacks: std::sync::Weak<EventCallbacks>,
+    ) -> WasapiRes<SessionEvents> {
         let events: IAudioSessionEvents = AudioSessionEvents::new(callbacks).into();
 
         match unsafe { self.control.RegisterAudioSessionNotification(&events) } {
-            Ok(()) => Ok(()),
+            Ok(()) => Ok(SessionEvents {
+                events,
+                control: self.control.downgrade().unwrap(),
+            }),
             Err(err) => Err(WasapiError::RegisterNotifications(err)),
+        }
+    }
+}
+
+/// Struct for keeping track of the registered notifications.
+pub struct SessionEvents {
+    events: IAudioSessionEvents,
+    control: windows_core::Weak<IAudioSessionControl>,
+}
+
+impl Drop for SessionEvents {
+    fn drop(&mut self) {
+        if let Some(control) = self.control.upgrade() {
+            let _ = unsafe { control.UnregisterAudioSessionNotification(&self.events) };
         }
     }
 }
