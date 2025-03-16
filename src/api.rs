@@ -993,16 +993,16 @@ impl AudioSessionControl {
     }
 
     /// Register to receive notifications.
-    /// Returns a [SessionEvents] struct.
+    /// Returns a [EventRegistration] struct.
     /// The notifications are unregistered when this struct is dropped.
     pub fn register_session_notification(
         &self,
         callbacks: std::sync::Weak<EventCallbacks>,
-    ) -> WasapiRes<SessionEvents> {
+    ) -> WasapiRes<EventRegistration> {
         let events: IAudioSessionEvents = AudioSessionEvents::new(callbacks).into();
 
         match unsafe { self.control.RegisterAudioSessionNotification(&events) } {
-            Ok(()) => Ok(SessionEvents {
+            Ok(()) => Ok(EventRegistration {
                 events,
                 control: self.control.downgrade().unwrap(),
             }),
@@ -1012,12 +1012,12 @@ impl AudioSessionControl {
 }
 
 /// Struct for keeping track of the registered notifications.
-pub struct SessionEvents {
+pub struct EventRegistration {
     events: IAudioSessionEvents,
     control: windows_core::Weak<IAudioSessionControl>,
 }
 
-impl Drop for SessionEvents {
+impl Drop for EventRegistration {
     fn drop(&mut self) {
         if let Some(control) = self.control.upgrade() {
             let _ = unsafe { control.UnregisterAudioSessionNotification(&self.events) };
