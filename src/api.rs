@@ -995,6 +995,8 @@ impl AudioSessionControl {
     /// Register to receive notifications.
     /// Returns a [EventRegistration] struct.
     /// The notifications are unregistered when this struct is dropped.
+    /// Make sure to store the [EventRegistration] in a variable that remains
+    /// in scope for as long as the event notifications are needed.
     pub fn register_session_notification(
         &self,
         callbacks: std::sync::Weak<EventCallbacks>,
