@@ -994,16 +994,23 @@ impl AudioSessionControl {
     /// The notifications are unregistered when this struct is dropped.
     /// Make sure to store the [EventRegistration] in a variable that remains
     /// in scope for as long as the event notifications are needed.
+    ///
+    /// The function takes ownership of the provided [EventCallbacks].
+    /// It is then stored in the [EventRegistration] struct and can be accessed
+    /// via the [EventRegistration::callbacks] method.
     pub fn register_session_notification(
         &self,
-        callbacks: std::sync::Weak<EventCallbacks>,
+        callbacks: EventCallbacks,
     ) -> WasapiRes<EventRegistration> {
-        let events: IAudioSessionEvents = AudioSessionEvents::new(callbacks).into();
+        let callbacks_arc = Arc::new(callbacks);
+        let events: IAudioSessionEvents =
+            AudioSessionEvents::new(Arc::downgrade(&callbacks_arc)).into();
 
         match unsafe { self.control.RegisterAudioSessionNotification(&events) } {
             Ok(()) => Ok(EventRegistration {
                 events,
                 control: self.control.clone(),
+                callbacks: callbacks_arc,
             }),
             Err(err) => Err(WasapiError::RegisterNotifications(err)),
         }
@@ -1014,6 +1021,14 @@ impl AudioSessionControl {
 pub struct EventRegistration {
     events: IAudioSessionEvents,
     control: IAudioSessionControl,
+    callbacks: Arc<EventCallbacks>,
+}
+
+impl EventRegistration {
+    /// Access the [EventCallbacks] that are registered for handling events.
+    pub fn callbacks(&self) -> &Arc<EventCallbacks> {
+        &self.callbacks
+    }
 }
 
 impl Drop for EventRegistration {
