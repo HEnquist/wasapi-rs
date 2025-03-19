@@ -1,5 +1,4 @@
 use std::slice;
-use std::sync::Weak;
 use widestring::U16CString;
 use windows::{
     core::{implement, Result, GUID, PCWSTR},
@@ -144,12 +143,12 @@ pub enum DisconnectReason {
 /// Wrapper for [IAudioSessionEvents](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionevents).
 #[implement(IAudioSessionEvents)]
 pub(crate) struct AudioSessionEvents {
-    callbacks: Weak<EventCallbacks>,
+    callbacks: EventCallbacks,
 }
 
 impl AudioSessionEvents {
     /// Create a new [AudioSessionEvents] instance, returned as a [IAudioSessionEvent].
-    pub fn new(callbacks: Weak<EventCallbacks>) -> Self {
+    pub fn new(callbacks: EventCallbacks) -> Self {
         Self { callbacks }
     }
 }
@@ -171,10 +170,8 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
             AudioSessionStateExpired => SessionState::Expired,
             _ => return Ok(()),
         };
-        if let Some(callbacks) = &mut self.callbacks.upgrade() {
-            if let Some(callback) = &callbacks.state {
-                callback(sessionstate);
-            }
+        if let Some(callback) = &self.callbacks.state {
+            callback(sessionstate);
         }
         Ok(())
     }
@@ -192,10 +189,8 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
             _ => DisconnectReason::Unknown,
         };
 
-        if let Some(callbacks) = &mut self.callbacks.upgrade() {
-            if let Some(callback) = &callbacks.disconnected {
-                callback(reason);
-            }
+        if let Some(callback) = &self.callbacks.disconnected {
+            callback(reason);
         }
         Ok(())
     }
@@ -208,11 +203,9 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         let wide_name = unsafe { U16CString::from_ptr_str(newdisplayname.0) };
         let name = wide_name.to_string_lossy();
         trace!("New display name: {}", name);
-        if let Some(callbacks) = &mut self.callbacks.upgrade() {
-            if let Some(callback) = &callbacks.displayname {
-                let context = unsafe { *eventcontext };
-                callback(name, context);
-            }
+        if let Some(callback) = &self.callbacks.displayname {
+            let context = unsafe { *eventcontext };
+            callback(name, context);
         }
         Ok(())
     }
@@ -221,11 +214,9 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
         let path = wide_path.to_string_lossy();
         trace!("New icon path: {}", path);
-        if let Some(callbacks) = &mut self.callbacks.upgrade() {
-            if let Some(callback) = &callbacks.iconpath {
-                let context = unsafe { *eventcontext };
-                callback(path, context);
-            }
+        if let Some(callback) = &self.callbacks.iconpath {
+            let context = unsafe { *eventcontext };
+            callback(path, context);
         }
         Ok(())
     }
@@ -237,11 +228,9 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         eventcontext: *const GUID,
     ) -> Result<()> {
         trace!("New volume: {}, mute: {:?}", newvolume, newmute);
-        if let Some(callbacks) = &mut self.callbacks.upgrade() {
-            if let Some(callback) = &callbacks.simple_volume {
-                let context = unsafe { *eventcontext };
-                callback(newvolume, bool::from(newmute), context);
-            }
+        if let Some(callback) = &self.callbacks.simple_volume {
+            let context = unsafe { *eventcontext };
+            callback(newvolume, bool::from(newmute), context);
         }
         Ok(())
     }
@@ -256,27 +245,25 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         trace!("New channel volume for channel: {}", changedchannel);
         let volslice =
             unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
-        if let Some(callbacks) = &mut self.callbacks.upgrade() {
-            if let Some(callback) = &callbacks.channel_volume {
-                let context = unsafe { *eventcontext };
-                if changedchannel == u32::MAX {
-                    // special meaning by specs: (DWORD)(-1) - "more than one channel have changed"
-                    // using all channels
-                    for (idx, newvol) in volslice.iter().enumerate() {
-                        callback(idx, *newvol, context);
-                    }
+        if let Some(callback) = &self.callbacks.channel_volume {
+            let context = unsafe { *eventcontext };
+            if changedchannel == u32::MAX {
+                // special meaning by specs: (DWORD)(-1) - "more than one channel have changed"
+                // using all channels
+                for (idx, newvol) in volslice.iter().enumerate() {
+                    callback(idx, *newvol, context);
                 }
-                if (changedchannel as usize) < volslice.len() {
-                    let newvol = volslice[changedchannel as usize];
-                    callback(changedchannel as usize, newvol, context);
-                } else {
-                    warn!(
+            }
+            if (changedchannel as usize) < volslice.len() {
+                let newvol = volslice[changedchannel as usize];
+                callback(changedchannel as usize, newvol, context);
+            } else {
+                warn!(
                         "OnChannelVolumeChanged: received unsupported changedchannel value {} for volume array length of {}",
                         changedchannel,
                         volslice.len()
                     );
-                    return Ok(());
-                }
+                return Ok(());
             }
         }
         Ok(())
@@ -288,12 +275,10 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         eventcontext: *const GUID,
     ) -> Result<()> {
         trace!("Grouping changed");
-        if let Some(callbacks) = &mut self.callbacks.upgrade() {
-            if let Some(callback) = &callbacks.groupingparam {
-                let context = unsafe { *eventcontext };
-                let grouping = unsafe { *newgroupingparam };
-                callback(grouping, context);
-            }
+        if let Some(callback) = &self.callbacks.groupingparam {
+            let context = unsafe { *eventcontext };
+            let grouping = unsafe { *newgroupingparam };
+            callback(grouping, context);
         }
         Ok(())
     }
