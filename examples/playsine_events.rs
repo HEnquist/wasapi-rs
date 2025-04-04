@@ -1,5 +1,4 @@
 use std::f64::consts::PI;
-use std::sync::Arc;
 use wasapi::*;
 
 #[macro_use]
@@ -86,12 +85,9 @@ fn main() {
     });
     callbacks.set_disconnected_callback(|reason| println!("Disconnected, reason: {:?}", reason));
 
-    let callbacks_rc = Arc::new(callbacks);
-    let callbacks_weak = Arc::downgrade(&callbacks_rc);
-
     let sessioncontrol = audio_client.get_audiosessioncontrol().unwrap();
     let _registered_events = sessioncontrol
-        .register_session_notification(callbacks_weak)
+        .register_session_notification(callbacks)
         .unwrap();
     audio_client.start_stream().unwrap();
     loop {

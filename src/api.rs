@@ -994,9 +994,11 @@ impl AudioSessionControl {
     /// The notifications are unregistered when this struct is dropped.
     /// Make sure to store the [EventRegistration] in a variable that remains
     /// in scope for as long as the event notifications are needed.
+    ///
+    /// The function takes ownership of the provided [EventCallbacks].
     pub fn register_session_notification(
         &self,
-        callbacks: std::sync::Weak<EventCallbacks>,
+        callbacks: EventCallbacks,
     ) -> WasapiRes<EventRegistration> {
         let events: IAudioSessionEvents = AudioSessionEvents::new(callbacks).into();
 
