@@ -34,6 +34,7 @@ fn capture_loop(
         0,
         &Direction::Capture,
         &ShareMode::Shared,
+        &TimingMode::Events,
         autoconvert,
     )?;
 

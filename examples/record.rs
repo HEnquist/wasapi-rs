@@ -33,6 +33,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
         min_time,
         &Direction::Capture,
         &ShareMode::Shared,
+        &TimingMode::Events,
         true,
     )?;
     debug!("initialized capture");

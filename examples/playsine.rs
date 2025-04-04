@@ -109,6 +109,7 @@ fn main() {
             def_time,
             &Direction::Render,
             &ShareMode::Shared,
+            &TimingMode::Events,
             needs_convert,
         )
         .unwrap();

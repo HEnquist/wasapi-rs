@@ -1,4 +1,5 @@
 use rand::prelude::*;
+use std::{thread, time};
 use wasapi::*;
 
 #[macro_use]
@@ -56,7 +57,7 @@ fn main() {
         desired_period,
         &Direction::Render,
         &ShareMode::Exclusive,
-        &TimingMode::Events,
+        &TimingMode::Polling,
         false,
     );
     match init_result {
@@ -94,7 +95,7 @@ fn main() {
                                 aligned_period,
                                 &Direction::Render,
                                 &ShareMode::Exclusive,
-                                &TimingMode::Events,
+                                &TimingMode::Polling,
                                 false,
                             )
                             .unwrap();
@@ -135,11 +136,15 @@ fn main() {
 
     let mut rng = rand::thread_rng();
 
-    let h_event = audio_client.set_get_eventhandle().unwrap();
-
     let render_client = audio_client.get_audiorenderclient().unwrap();
 
+    let buffer_frames = audio_client.get_bufferframecount().unwrap();
+    let sleep_period = time::Duration::from_millis(
+        500 * buffer_frames as u64 / desired_format.get_samplespersec() as u64,
+    );
+
     audio_client.start_stream().unwrap();
+
     loop {
         let buffer_frame_count = audio_client.get_available_space_in_frames().unwrap();
 
@@ -154,15 +159,11 @@ fn main() {
             }
         }
 
-        trace!("write");
+        info!("write {} frames", buffer_frame_count);
         render_client
             .write_to_device(buffer_frame_count as usize, &data, None)
             .unwrap();
         trace!("write ok");
-        if h_event.wait_for_event(1000).is_err() {
-            error!("error, stopping playback");
-            audio_client.stop_stream().unwrap();
-            break;
-        }
+        thread::sleep(sleep_period);
     }
 }
