@@ -859,8 +859,9 @@ impl AudioClient {
     ///   - When the event is signaled, the thread wakes up to processes the available data, and then goes back to waiting.
     ///   - This mode is generally more efficient because the application only wakes up when there's work to do.
     ///   - It's suitable for real-time audio applications where low latency is important.
-    ///   - This mode is not supported by all devices, and can have issues with stuttering sound with playback devices
-    ///     using the standard USB audio driver of Windows.
+    ///   - This mode is not supported by all devices in exclusive mode (but all devices are supported in shared mode).
+    ///   - In exclusive mode, devices using the standard Windows USB audio driver can have issues
+    ///     with stuttering sound on playback.
     ///
     /// #### Polling Mode ([TimingMode::Polling])
     ///   - In this mode, the application periodically calls [AudioClient::get_current_padding()] (for capture)
@@ -868,7 +869,7 @@ impl AudioClient {
     ///     to check how much data is available or required.
     ///   - The thread processes the data, and then goes to sleep, for example by calling [std::thread::sleep()].
     ///   - This mode is less efficient and is more prone to glitches when running at low latency.
-    ///   - It supports more devices, and does not have the stuttering issue with USB audio devices.
+    ///   - In exclusive mode, it supports more devices, and does not have the stuttering issue with USB audio devices.
     pub fn initialize_client(
         &mut self,
         wavefmt: &WaveFormat,
