@@ -59,7 +59,7 @@ fn capture_loop(
         }
         trace!("capturing");
 
-        let new_frames = capture_client.get_next_nbr_frames()?.unwrap_or(0);
+        let new_frames = capture_client.get_next_packet_size()?.unwrap_or(0);
         let additional = (new_frames as usize * blockalign as usize)
             .saturating_sub(sample_queue.capacity() - sample_queue.len());
         sample_queue.reserve(additional);

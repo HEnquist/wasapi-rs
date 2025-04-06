@@ -40,7 +40,7 @@ fn main() {
     let blockalign = desired_format.get_blockalign();
     debug!("Desired playback format: {:?}", desired_format);
 
-    let (def_period, min_period) = audio_client.get_periods().unwrap();
+    let (def_period, min_period) = audio_client.get_device_period().unwrap();
 
     // Set some period as an example, using 128 byte alignment to satisfy for example Intel HDA devices.
     let desired_period = audio_client
@@ -74,7 +74,7 @@ fn main() {
                         // https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize#examples
                         // Just panic on errors to keep it short and simple.
                         // 1. Call IAudioClient::GetBufferSize and receive the next-highest-aligned buffer size (in frames).
-                        let buffersize = audio_client.get_bufferframecount().unwrap();
+                        let buffersize = audio_client.get_buffer_size().unwrap();
                         info!(
                             "Client next-highest-aligned buffer size: {} frames",
                             buffersize
@@ -138,7 +138,7 @@ fn main() {
 
     let render_client = audio_client.get_audiorenderclient().unwrap();
 
-    let buffer_frames = audio_client.get_bufferframecount().unwrap();
+    let buffer_frames = audio_client.get_buffer_size().unwrap();
     let sleep_period = time::Duration::from_millis(
         500 * buffer_frames as u64 / desired_format.get_samplespersec() as u64,
     );

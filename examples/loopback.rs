@@ -19,7 +19,7 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
     let blockalign = desired_format.get_blockalign();
     debug!("Desired playback format: {:?}", desired_format);
 
-    let (def_time, min_time) = audio_client.get_periods()?;
+    let (def_time, min_time) = audio_client.get_device_period()?;
     debug!("default period {}, min period {}", def_time, min_time);
 
     audio_client.initialize_client(
@@ -34,7 +34,7 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
 
     let h_event = audio_client.set_get_eventhandle()?;
 
-    let mut buffer_frame_count = audio_client.get_bufferframecount()?;
+    let mut buffer_frame_count = audio_client.get_buffer_size()?;
 
     let render_client = audio_client.get_audiorenderclient()?;
     let mut sample_queue: VecDeque<u8> = VecDeque::with_capacity(
@@ -94,7 +94,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
     let blockalign = desired_format.get_blockalign();
     debug!("Desired capture format: {:?}", desired_format);
 
-    let (def_time, min_time) = audio_client.get_periods()?;
+    let (def_time, min_time) = audio_client.get_device_period()?;
     debug!("default period {}, min period {}", def_time, min_time);
 
     audio_client.initialize_client(
@@ -109,7 +109,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
 
     let h_event = audio_client.set_get_eventhandle()?;
 
-    let buffer_frame_count = audio_client.get_bufferframecount()?;
+    let buffer_frame_count = audio_client.get_buffer_size()?;
 
     let render_client = audio_client.get_audiocaptureclient()?;
     let mut sample_queue: VecDeque<u8> = VecDeque::with_capacity(

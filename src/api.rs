@@ -518,7 +518,7 @@ impl AudioClient {
     ///
     /// Additionally when calling [AudioClient::initialize_client] on the client returned by this method,
     /// the caller must use [Direction::Capture], and [ShareMode::Shared].
-    /// Finally calls to [AudioClient::get_periods] do not work,
+    /// Finally calls to [AudioClient::get_device_period] do not work,
     /// however the period passed by the caller to [AudioClient::initialize_client] is irrelevant.
     ///
     /// # Non-functional methods
@@ -527,9 +527,9 @@ impl AudioClient {
     /// * `get_mixformat` just returns `Not implemented`.
     /// * `is_supported` just returns `Not implemented` even if the format and mode work.
     /// * `is_supported_exclusive_with_quirks` just returns `Unable to find a supported format`.
-    /// * `get_periods` just returns `Not implemented`.
+    /// * `get_device_period` just returns `Not implemented`.
     /// * `calculate_aligned_period_near` just returns `Not implemented` even for values that would later work.
-    /// * `get_bufferframecount` returns huge values like 3131961357 but no error.
+    /// * `get_buffer_size` returns huge values like 3131961357 but no error.
     /// * `get_current_padding` just returns `Not implemented`.
     /// * `get_available_space_in_frames` just returns `Client has not been initialised` even if it has.
     /// * `get_audiorenderclient` just returns `No such interface supported`.
@@ -780,7 +780,7 @@ impl AudioClient {
     }
 
     /// Get default and minimum periods in 100-nanosecond units
-    pub fn get_periods(&self) -> WasapiRes<(i64, i64)> {
+    pub fn get_device_period(&self) -> WasapiRes<(i64, i64)> {
         let mut def_time = 0;
         let mut min_time = 0;
         unsafe {
@@ -789,6 +789,14 @@ impl AudioClient {
         };
         trace!("default period {}, min period {}", def_time, min_time);
         Ok((def_time, min_time))
+    }
+
+    #[deprecated(
+        since = "0.17.0",
+        note = "please use the new function name `get_device_period` instead"
+    )]
+    pub fn get_periods(&self) -> WasapiRes<(i64, i64)> {
+        self.get_device_period()
     }
 
     /// Helper function for calculating a period size in 100-nanosecond units that is near a desired value,
@@ -806,7 +814,7 @@ impl AudioClient {
         align_bytes: Option<u32>,
         wave_fmt: &WaveFormat,
     ) -> WasapiRes<i64> {
-        let (_default_period, min_period) = self.get_periods()?;
+        let (_default_period, min_period) = self.get_device_period()?;
         let adjusted_desired_period = cmp::max(desired_period, min_period);
         let frame_bytes = wave_fmt.get_blockalign();
         let period_alignment_bytes = match align_bytes {
@@ -933,15 +941,26 @@ impl AudioClient {
         Ok(Handle { handle: h_event })
     }
 
-    /// Get buffer size in frames
-    pub fn get_bufferframecount(&self) -> WasapiRes<u32> {
+    /// Get buffer size in frames,
+    /// see [IAudioClient::GetBufferSize](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getbuffersize).
+    pub fn get_buffer_size(&self) -> WasapiRes<u32> {
         let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
         trace!("buffer_frame_count {}", buffer_frame_count);
         Ok(buffer_frame_count)
     }
 
+    #[deprecated(
+        since = "0.17.0",
+        note = "please use the new function name `get_buffer_size` instead"
+    )]
+    pub fn get_bufferframecount(&self) -> WasapiRes<u32> {
+        self.get_buffer_size()
+    }
+
     /// Get current padding in frames.
     /// This represents the number of frames currently in the buffer, for both capture and render devices.
+    /// The exact meaning depends on how the AudioClient was initialized, see
+    /// [IAudioClient::GetCurrentPadding](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getcurrentpadding).
     pub fn get_current_padding(&self) -> WasapiRes<u32> {
         let padding_count = unsafe { self.client.GetCurrentPadding()? };
         trace!("padding_count {}", padding_count);
@@ -1245,13 +1264,22 @@ pub struct AudioCaptureClient {
 
 impl AudioCaptureClient {
     /// Get number of frames in next packet when in shared mode.
-    /// In exclusive mode it returns None, instead use [AudioClient::get_bufferframecount()].
-    pub fn get_next_nbr_frames(&self) -> WasapiRes<Option<u32>> {
+    /// In exclusive mode it returns None, instead use [AudioClient::get_buffer_size()] or [AudioClient::get_current_padding()].
+    /// See [IAudioCaptureClient::GetNextPacketSize](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudiocaptureclient-getnextpacketsize).
+    pub fn get_next_packet_size(&self) -> WasapiRes<Option<u32>> {
         if let Some(ShareMode::Exclusive) = self.sharemode {
             return Ok(None);
         }
         let nbr_frames = unsafe { self.client.GetNextPacketSize()? };
         Ok(Some(nbr_frames))
+    }
+
+    #[deprecated(
+        since = "0.17.0",
+        note = "please use the new function name `get_next_packet_size` instead"
+    )]
+    pub fn get_next_nbr_frames(&self) -> WasapiRes<Option<u32>> {
+        self.get_next_packet_size()
     }
 
     /// Read raw bytes from a device into a slice. Returns the number of frames

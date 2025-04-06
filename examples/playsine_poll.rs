@@ -100,7 +100,7 @@ fn main() {
     let blockalign = desired_format.get_blockalign();
     debug!("Desired playback format: {:?}", desired_format);
 
-    let (def_time, min_time) = audio_client.get_periods().unwrap();
+    let (def_time, min_time) = audio_client.get_device_period().unwrap();
     debug!("default period {}, min period {}", def_time, min_time);
 
     debug!("Initializing device with convert={}", needs_convert);
@@ -118,7 +118,7 @@ fn main() {
 
     let render_client = audio_client.get_audiorenderclient().unwrap();
 
-    let buffer_frames = audio_client.get_bufferframecount().unwrap();
+    let buffer_frames = audio_client.get_buffer_size().unwrap();
     let sleep_period = time::Duration::from_millis(
         500 * buffer_frames as u64 / desired_format.get_samplespersec() as u64,
     );
