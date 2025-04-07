@@ -29,14 +29,11 @@ fn capture_loop(
     let include_tree = true;
 
     let mut audio_client = AudioClient::new_application_loopback_client(process_id, include_tree)?;
-    audio_client.initialize_client(
-        &desired_format,
-        0,
-        &Direction::Capture,
-        &ShareMode::Shared,
-        &TimingMode::Events,
+    let mode = StreamMode::EventsShared {
         autoconvert,
-    )?;
+        buffer_duration_hns: 0,
+    };
+    audio_client.initialize_client(&desired_format, &Direction::Capture, &mode)?;
 
     debug!("initialized capture");
     let h_event = audio_client.set_get_eventhandle().unwrap();

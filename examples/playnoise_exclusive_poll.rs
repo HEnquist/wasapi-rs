@@ -29,7 +29,7 @@ fn main() {
     let channels = 2;
     let device = get_default_device(&Direction::Render).unwrap();
     let mut audio_client = device.get_iaudioclient().unwrap();
-    let desired_format = WaveFormat::new(24, 24, &SampleType::Int, 44100, channels, None);
+    let desired_format = WaveFormat::new(24, 24, &SampleType::Int, 48000, channels, None);
 
     // Make sure the format is supported, panic if not.
     let desired_format = audio_client
@@ -44,22 +44,19 @@ fn main() {
 
     // Set some period as an example, using 128 byte alignment to satisfy for example Intel HDA devices.
     let desired_period = audio_client
-        .calculate_aligned_period_near(3 * min_period / 2, Some(128), &desired_format)
+        .calculate_aligned_period_near(2 * min_period, Some(128), &desired_format)
         .unwrap();
 
     debug!(
         "periods in 100ns units {}, minimum {}, wanted {}",
         def_period, min_period, desired_period
     );
+    let mode = StreamMode::PollingExclusive {
+        period_hns: desired_period,
+        buffer_duration_hns: 2 * desired_period,
+    };
 
-    let init_result = audio_client.initialize_client(
-        &desired_format,
-        desired_period,
-        &Direction::Render,
-        &ShareMode::Exclusive,
-        &TimingMode::Polling,
-        false,
-    );
+    let init_result = audio_client.initialize_client(&desired_format, &Direction::Render, &mode);
     match init_result {
         Ok(()) => debug!("IAudioClient::Initialize ok"),
         Err(e) => {
@@ -89,15 +86,13 @@ fn main() {
                         // 4. Get a new IAudioClient
                         audio_client = device.get_iaudioclient().unwrap();
                         // 5. Call Initialize again on the created audio client.
+                        let mode = StreamMode::PollingExclusive {
+                            period_hns: aligned_period,
+                            buffer_duration_hns: 2 * aligned_period,
+                        };
+
                         audio_client
-                            .initialize_client(
-                                &desired_format,
-                                aligned_period,
-                                &Direction::Render,
-                                &ShareMode::Exclusive,
-                                &TimingMode::Polling,
-                                false,
-                            )
+                            .initialize_client(&desired_format, &Direction::Render, &mode)
                             .unwrap();
                         debug!("IAudioClient::Initialize ok");
                     }
