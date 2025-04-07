@@ -975,9 +975,6 @@ impl AudioClient {
             } => (*period_hns, *buffer_duration_hns),
             StreamMode::EventsExclusive { period_hns, .. } => (*period_hns, *period_hns),
         };
-        self.direction = *direction;
-        self.sharemode = Some(sharemode);
-        self.timingmode = Some(timing);
         unsafe {
             self.client.Initialize(
                 mode,
@@ -988,6 +985,9 @@ impl AudioClient {
                 None,
             )?;
         }
+        self.direction = *direction;
+        self.sharemode = Some(sharemode);
+        self.timingmode = Some(timing);
         self.bytes_per_frame = Some(wavefmt.get_blockalign() as usize);
         Ok(())
     }
