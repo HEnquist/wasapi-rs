@@ -4,7 +4,6 @@ use std::collections::VecDeque;
 use std::mem::{size_of, ManuallyDrop};
 use std::ops::Deref;
 use std::pin::Pin;
-use std::rc::Weak;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use widestring::U16CString;
@@ -990,14 +989,41 @@ impl AudioSessionControl {
         Ok(sessionstate)
     }
 
-    /// Register to receive notifications
-    pub fn register_session_notification(&self, callbacks: Weak<EventCallbacks>) -> WasapiRes<()> {
+    /// Register to receive notifications.
+    /// Returns a [EventRegistration] struct.
+    /// The notifications are unregistered when this struct is dropped.
+    /// Make sure to store the [EventRegistration] in a variable that remains
+    /// in scope for as long as the event notifications are needed.
+    ///
+    /// The function takes ownership of the provided [EventCallbacks].
+    pub fn register_session_notification(
+        &self,
+        callbacks: EventCallbacks,
+    ) -> WasapiRes<EventRegistration> {
         let events: IAudioSessionEvents = AudioSessionEvents::new(callbacks).into();
 
         match unsafe { self.control.RegisterAudioSessionNotification(&events) } {
-            Ok(()) => Ok(()),
+            Ok(()) => Ok(EventRegistration {
+                events,
+                control: self.control.clone(),
+            }),
             Err(err) => Err(WasapiError::RegisterNotifications(err)),
         }
+    }
+}
+
+/// Struct for keeping track of the registered notifications.
+pub struct EventRegistration {
+    events: IAudioSessionEvents,
+    control: IAudioSessionControl,
+}
+
+impl Drop for EventRegistration {
+    fn drop(&mut self) {
+        let _ = unsafe {
+            self.control
+                .UnregisterAudioSessionNotification(&self.events)
+        };
     }
 }
 
