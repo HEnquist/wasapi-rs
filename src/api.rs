@@ -178,6 +178,13 @@ pub enum ShareMode {
     Exclusive,
 }
 
+/// Timing mode for device
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TimingMode {
+    Polling,
+    Events,
+}
+
 impl fmt::Display for ShareMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -407,6 +414,7 @@ impl Device {
             client: audio_client,
             direction: self.direction,
             sharemode: None,
+            timingmode: None,
             bytes_per_frame: None,
         })
     }
@@ -494,6 +502,7 @@ pub struct AudioClient {
     client: IAudioClient,
     direction: Direction,
     sharemode: Option<ShareMode>,
+    timingmode: Option<TimingMode>,
     bytes_per_frame: Option<usize>,
 }
 
@@ -509,7 +518,7 @@ impl AudioClient {
     ///
     /// Additionally when calling [AudioClient::initialize_client] on the client returned by this method,
     /// the caller must use [Direction::Capture], and [ShareMode::Shared].
-    /// Finally calls to [AudioClient::get_periods] do not work,
+    /// Finally calls to [AudioClient::get_device_period] do not work,
     /// however the period passed by the caller to [AudioClient::initialize_client] is irrelevant.
     ///
     /// # Non-functional methods
@@ -518,9 +527,9 @@ impl AudioClient {
     /// * `get_mixformat` just returns `Not implemented`.
     /// * `is_supported` just returns `Not implemented` even if the format and mode work.
     /// * `is_supported_exclusive_with_quirks` just returns `Unable to find a supported format`.
-    /// * `get_periods` just returns `Not implemented`.
+    /// * `get_device_period` just returns `Not implemented`.
     /// * `calculate_aligned_period_near` just returns `Not implemented` even for values that would later work.
-    /// * `get_bufferframecount` returns huge values like 3131961357 but no error.
+    /// * `get_buffer_size` returns huge values like 3131961357 but no error.
     /// * `get_current_padding` just returns `Not implemented`.
     /// * `get_available_space_in_frames` just returns `Client has not been initialised` even if it has.
     /// * `get_audiorenderclient` just returns `No such interface supported`.
@@ -530,7 +539,7 @@ impl AudioClient {
     ///
     /// # Example
     /// ```
-    /// use wasapi::{WaveFormat, SampleType, AudioClient, Direction, ShareMode, initialize_mta};
+    /// use wasapi::{WaveFormat, SampleType, AudioClient, Direction, ShareMode, TimingMode, initialize_mta};
     /// let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
     /// let hnsbufferduration = 200_000; // 20ms in hundreds of nanoseconds
     /// let autoconvert = true;
@@ -539,7 +548,14 @@ impl AudioClient {
     ///
     /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
     /// let mut audio_client = AudioClient::new_application_loopback_client(process_id, include_tree).unwrap();
-    /// audio_client.initialize_client(&desired_format, hnsbufferduration, &Direction::Capture, &ShareMode::Shared, autoconvert).unwrap();
+    /// audio_client.initialize_client(
+    ///     &desired_format,
+    ///     hnsbufferduration,
+    ///     &Direction::Capture,
+    ///     &ShareMode::Shared,
+    ///     &TimingMode::Events,
+    ///     autoconvert
+    /// ).unwrap();
     /// ```
     pub fn new_application_loopback_client(process_id: u32, include_tree: bool) -> WasapiRes<Self> {
         unsafe {
@@ -615,6 +631,7 @@ impl AudioClient {
                 client: audio_client,
                 direction: Direction::Render,
                 sharemode: Some(ShareMode::Shared),
+                timingmode: None,
                 bytes_per_frame: None,
             })
         }
@@ -763,7 +780,7 @@ impl AudioClient {
     }
 
     /// Get default and minimum periods in 100-nanosecond units
-    pub fn get_periods(&self) -> WasapiRes<(i64, i64)> {
+    pub fn get_device_period(&self) -> WasapiRes<(i64, i64)> {
         let mut def_time = 0;
         let mut min_time = 0;
         unsafe {
@@ -772,6 +789,14 @@ impl AudioClient {
         };
         trace!("default period {}, min period {}", def_time, min_time);
         Ok((def_time, min_time))
+    }
+
+    #[deprecated(
+        since = "0.17.0",
+        note = "please use the new function name `get_device_period` instead"
+    )]
+    pub fn get_periods(&self) -> WasapiRes<(i64, i64)> {
+        self.get_device_period()
     }
 
     /// Helper function for calculating a period size in 100-nanosecond units that is near a desired value,
@@ -789,7 +814,7 @@ impl AudioClient {
         align_bytes: Option<u32>,
         wave_fmt: &WaveFormat,
     ) -> WasapiRes<i64> {
-        let (_default_period, min_period) = self.get_periods()?;
+        let (_default_period, min_period) = self.get_device_period()?;
         let adjusted_desired_period = cmp::max(desired_period, min_period);
         let frame_bytes = wave_fmt.get_blockalign();
         let period_alignment_bytes = match align_bytes {
@@ -815,14 +840,51 @@ impl AudioClient {
         Ok(aligned_period)
     }
 
-    /// Initialize an [IAudioClient] for the given direction, sharemode and format.
-    /// Setting `convert` to true enables automatic samplerate and format conversion, meaning that almost any format will be accepted.
+    /// Initialize an [AudioClient] for the given direction, sharemode, timing mode and format.
+    /// Setting `convert` to true enables automatic samplerate and format conversion,
+    /// meaning that almost any format will be accepted.
+    ///
+    /// ### Sharing mode
+    /// In WASAPI, sharing mode determines how multiple audio applications interact with the same audio endpoint.
+    /// There are two primary sharing modes: Shared and Exclusive.
+    /// #### Shared Mode ([ShareMode::Shared])
+    /// - Multiple applications can simultaneously access the audio device.
+    /// - The system's audio engine mixes the audio streams from all applications.
+    /// - The application has no control over the sample rate and format used by the device.
+    ///
+    /// #### Exclusive Mode ([ShareMode::Exclusive])
+    /// - Only one application can access the audio device at a time.
+    /// - This mode provides lower latency but requires the device to support the exact audio format requested.
+    /// - The application can control the sample rate and format used by the device.
+    ///
+    /// ### Timing mode
+    /// Event-driven mode and polling mode are two different ways of handling audio buffer updates.
+    ///
+    /// #### Event-Driven Mode ([TimingMode::Events])
+    ///   - In this mode, the application registers an event handle using [AudioClient::set_get_eventhandle()].
+    ///   - The system signals this event whenever a new buffer of audio data is ready to be processed (either for rendering or capture).
+    ///   - The application's audio processing thread waits on this event ([Handle::wait_for_event()]).
+    ///   - When the event is signaled, the thread wakes up to processes the available data, and then goes back to waiting.
+    ///   - This mode is generally more efficient because the application only wakes up when there's work to do.
+    ///   - It's suitable for real-time audio applications where low latency is important.
+    ///   - This mode is not supported by all devices in exclusive mode (but all devices are supported in shared mode).
+    ///   - In exclusive mode, devices using the standard Windows USB audio driver can have issues
+    ///     with stuttering sound on playback.
+    ///
+    /// #### Polling Mode ([TimingMode::Polling])
+    ///   - In this mode, the application periodically calls [AudioClient::get_current_padding()] (for capture)
+    ///     or [AudioClient::get_available_space_in_frames()] (for playback)
+    ///     to check how much data is available or required.
+    ///   - The thread processes the data, and then goes to sleep, for example by calling [std::thread::sleep()].
+    ///   - This mode is less efficient and is more prone to glitches when running at low latency.
+    ///   - In exclusive mode, it supports more devices, and does not have the stuttering issue with USB audio devices.
     pub fn initialize_client(
         &mut self,
         wavefmt: &WaveFormat,
         period: i64,
         direction: &Direction,
         sharemode: &ShareMode,
+        timing: &TimingMode,
         convert: bool,
     ) -> WasapiRes<()> {
         if sharemode == &ShareMode::Exclusive && convert {
@@ -830,7 +892,7 @@ impl AudioClient {
         }
         let mut streamflags = match (&self.direction, direction, sharemode) {
             (Direction::Render, Direction::Capture, ShareMode::Shared) => {
-                AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_LOOPBACK
+                AUDCLNT_STREAMFLAGS_LOOPBACK
             }
             (Direction::Render, Direction::Capture, ShareMode::Exclusive) => {
                 return Err(WasapiError::LoopbackWithExclusiveMode);
@@ -838,11 +900,14 @@ impl AudioClient {
             (Direction::Capture, Direction::Render, _) => {
                 return Err(WasapiError::RenderToCaptureDevice);
             }
-            _ => AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+            _ => 0,
         };
         if convert {
             streamflags |=
                 AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+        }
+        if timing == &TimingMode::Events {
+            streamflags |= AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
         }
         let mode = match sharemode {
             ShareMode::Exclusive => AUDCLNT_SHAREMODE_EXCLUSIVE,
@@ -853,6 +918,7 @@ impl AudioClient {
             ShareMode::Shared => 0,
         };
         self.sharemode = Some(*sharemode);
+        self.timingmode = Some(*timing);
         unsafe {
             self.client.Initialize(
                 mode,
@@ -867,22 +933,34 @@ impl AudioClient {
         Ok(())
     }
 
-    /// Create and return an event handle for an [IAudioClient]
+    /// Create and return an event handle for an [AudioClient].
+    /// This is required when using an [AudioClient] initialized for event driven mode, [TimingMode::Events].
     pub fn set_get_eventhandle(&self) -> WasapiRes<Handle> {
         let h_event = unsafe { CreateEventA(None, false, false, PCSTR::null())? };
         unsafe { self.client.SetEventHandle(h_event)? };
         Ok(Handle { handle: h_event })
     }
 
-    /// Get buffer size in frames
-    pub fn get_bufferframecount(&self) -> WasapiRes<u32> {
+    /// Get buffer size in frames,
+    /// see [IAudioClient::GetBufferSize](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getbuffersize).
+    pub fn get_buffer_size(&self) -> WasapiRes<u32> {
         let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
         trace!("buffer_frame_count {}", buffer_frame_count);
         Ok(buffer_frame_count)
     }
 
+    #[deprecated(
+        since = "0.17.0",
+        note = "please use the new function name `get_buffer_size` instead"
+    )]
+    pub fn get_bufferframecount(&self) -> WasapiRes<u32> {
+        self.get_buffer_size()
+    }
+
     /// Get current padding in frames.
     /// This represents the number of frames currently in the buffer, for both capture and render devices.
+    /// The exact meaning depends on how the AudioClient was initialized, see
+    /// [IAudioClient::GetCurrentPadding](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getcurrentpadding).
     pub fn get_current_padding(&self) -> WasapiRes<u32> {
         let padding_count = unsafe { self.client.GetCurrentPadding()? };
         trace!("padding_count {}", padding_count);
@@ -892,13 +970,13 @@ impl AudioClient {
     /// Get buffer size minus padding in frames.
     /// Use this to find out how much free space is available in the buffer.
     pub fn get_available_space_in_frames(&self) -> WasapiRes<u32> {
-        let frames = match self.sharemode {
-            Some(ShareMode::Exclusive) => {
+        let frames = match (self.sharemode, self.timingmode) {
+            (Some(ShareMode::Exclusive), Some(TimingMode::Events)) => {
                 let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
                 trace!("buffer_frame_count {}", buffer_frame_count);
                 buffer_frame_count
             }
-            Some(ShareMode::Shared) => {
+            (Some(_), Some(_)) => {
                 let padding_count = unsafe { self.client.GetCurrentPadding()? };
                 let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
 
@@ -967,6 +1045,12 @@ impl AudioClient {
     /// The sharemode is decided when the client is initialized.
     pub fn get_sharemode(&self) -> Option<ShareMode> {
         self.sharemode
+    }
+
+    /// Get the timing mode for this [AudioClient].
+    /// The mode is decided when the client is initialized.
+    pub fn get_timing_mode(&self) -> Option<TimingMode> {
+        self.timingmode
     }
 }
 
@@ -1180,13 +1264,22 @@ pub struct AudioCaptureClient {
 
 impl AudioCaptureClient {
     /// Get number of frames in next packet when in shared mode.
-    /// In exclusive mode it returns None, instead use [AudioClient::get_bufferframecount()].
-    pub fn get_next_nbr_frames(&self) -> WasapiRes<Option<u32>> {
+    /// In exclusive mode it returns None, instead use [AudioClient::get_buffer_size()] or [AudioClient::get_current_padding()].
+    /// See [IAudioCaptureClient::GetNextPacketSize](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudiocaptureclient-getnextpacketsize).
+    pub fn get_next_packet_size(&self) -> WasapiRes<Option<u32>> {
         if let Some(ShareMode::Exclusive) = self.sharemode {
             return Ok(None);
         }
         let nbr_frames = unsafe { self.client.GetNextPacketSize()? };
         Ok(Some(nbr_frames))
+    }
+
+    #[deprecated(
+        since = "0.17.0",
+        note = "please use the new function name `get_next_packet_size` instead"
+    )]
+    pub fn get_next_nbr_frames(&self) -> WasapiRes<Option<u32>> {
+        self.get_next_packet_size()
     }
 
     /// Read raw bytes from a device into a slice. Returns the number of frames

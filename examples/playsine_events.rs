@@ -56,7 +56,7 @@ fn main() {
     let blockalign = desired_format.get_blockalign();
     debug!("Desired playback format: {:?}", desired_format);
 
-    let (def_time, min_time) = audio_client.get_periods().unwrap();
+    let (def_time, min_time) = audio_client.get_device_period().unwrap();
     debug!("default period {}, min period {}", def_time, min_time);
 
     audio_client
@@ -65,6 +65,7 @@ fn main() {
             def_time,
             &Direction::Render,
             &ShareMode::Shared,
+            &TimingMode::Events,
             true,
         )
         .unwrap();
