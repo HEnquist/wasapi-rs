@@ -103,15 +103,13 @@ fn main() {
     debug!("default period {}, min period {}", def_time, min_time);
 
     debug!("Initializing device with convert={}", needs_convert);
+    let mode = StreamMode::EventsShared {
+        autoconvert: needs_convert,
+        buffer_duration_hns: def_time,
+    };
+
     audio_client
-        .initialize_client(
-            &desired_format,
-            def_time,
-            &Direction::Render,
-            &ShareMode::Shared,
-            &TimingMode::Events,
-            needs_convert,
-        )
+        .initialize_client(&desired_format, &Direction::Render, &mode)
         .unwrap();
     debug!("initialized playback");
 

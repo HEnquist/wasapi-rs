@@ -22,14 +22,11 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
     let (def_time, min_time) = audio_client.get_device_period()?;
     debug!("default period {}, min period {}", def_time, min_time);
 
-    audio_client.initialize_client(
-        &desired_format,
-        min_time,
-        &Direction::Render,
-        &ShareMode::Shared,
-        &TimingMode::Events,
-        true,
-    )?;
+    let mode = StreamMode::EventsShared {
+        autoconvert: true,
+        buffer_duration_hns: min_time,
+    };
+    audio_client.initialize_client(&desired_format, &Direction::Render, &mode)?;
     debug!("initialized playback");
 
     let h_event = audio_client.set_get_eventhandle()?;
@@ -97,14 +94,11 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
     let (def_time, min_time) = audio_client.get_device_period()?;
     debug!("default period {}, min period {}", def_time, min_time);
 
-    audio_client.initialize_client(
-        &desired_format,
-        min_time,
-        &Direction::Capture,
-        &ShareMode::Shared,
-        &TimingMode::Events,
-        true,
-    )?;
+    let mode = StreamMode::EventsShared {
+        autoconvert: true,
+        buffer_duration_hns: min_time,
+    };
+    audio_client.initialize_client(&desired_format, &Direction::Capture, &mode)?;
     debug!("initialized capture");
 
     let h_event = audio_client.set_get_eventhandle()?;
