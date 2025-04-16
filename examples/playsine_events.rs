@@ -58,16 +58,12 @@ fn main() {
 
     let (def_time, min_time) = audio_client.get_device_period().unwrap();
     debug!("default period {}, min period {}", def_time, min_time);
-
+    let mode = StreamMode::EventsShared {
+        autoconvert: true,
+        buffer_duration_hns: def_time,
+    };
     audio_client
-        .initialize_client(
-            &desired_format,
-            def_time,
-            &Direction::Render,
-            &ShareMode::Shared,
-            &TimingMode::Events,
-            true,
-        )
+        .initialize_client(&desired_format, &Direction::Render, &mode)
         .unwrap();
     debug!("initialized playback");
 

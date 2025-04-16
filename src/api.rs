@@ -171,6 +171,40 @@ impl From<Role> for ERole {
     }
 }
 
+/// Helper enum for initializing an [AudioClient].
+/// There are four main modes that can be specified,
+/// corresponding to the four possible combinations of sharing mode and timing.
+/// The enum variants only expose the parameters that can be set in each mode.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StreamMode {
+    /// Shared mode using polling for timing.
+    /// The parameters that can be set are the device buffer duration (in units on 100 ns)
+    /// and whether automatic format conversion should be enabled.
+    /// The audio engine decides the period, and this cannot be changed.
+    PollingShared {
+        autoconvert: bool,
+        buffer_duration_hns: i64,
+    },
+    /// Exclusive mode using polling for timing.
+    /// Both device period and buffer duration are given, in units of 100 ns.
+    PollingExclusive {
+        buffer_duration_hns: i64,
+        period_hns: i64,
+    },
+    /// Shared mode using event driven timing.
+    /// The parameters that can be set are the device buffer duration (in units on 100 ns)
+    /// and whether automatic format conversion should be enabled.
+    /// The audio engine decides the period, and this cannot be changed.
+    EventsShared {
+        autoconvert: bool,
+        buffer_duration_hns: i64,
+    },
+    /// Exclusive mode using event driven timing.
+    /// The period and buffer duration must be set to the same value.
+    /// Only device period is given here, in units of 100 ns.
+    EventsExclusive { period_hns: i64 },
+}
+
 /// Sharemode for device
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShareMode {
@@ -539,22 +573,20 @@ impl AudioClient {
     ///
     /// # Example
     /// ```
-    /// use wasapi::{WaveFormat, SampleType, AudioClient, Direction, ShareMode, TimingMode, initialize_mta};
+    /// use wasapi::{WaveFormat, SampleType, AudioClient, Direction, StreamMode, initialize_mta};
     /// let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
-    /// let hnsbufferduration = 200_000; // 20ms in hundreds of nanoseconds
+    /// let buffer_duration_hns = 200_000; // 20ms in hundreds of nanoseconds
     /// let autoconvert = true;
     /// let include_tree = false;
     /// let process_id = std::process::id();
     ///
     /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
     /// let mut audio_client = AudioClient::new_application_loopback_client(process_id, include_tree).unwrap();
+    /// let mode = StreamMode::EventsShared { autoconvert, buffer_duration_hns };
     /// audio_client.initialize_client(
     ///     &desired_format,
-    ///     hnsbufferduration,
     ///     &Direction::Capture,
-    ///     &ShareMode::Shared,
-    ///     &TimingMode::Events,
-    ///     autoconvert
+    ///     &mode
     /// ).unwrap();
     /// ```
     pub fn new_application_loopback_client(process_id: u32, include_tree: bool) -> WasapiRes<Self> {
@@ -841,8 +873,7 @@ impl AudioClient {
     }
 
     /// Initialize an [AudioClient] for the given direction, sharemode, timing mode and format.
-    /// Setting `convert` to true enables automatic samplerate and format conversion,
-    /// meaning that almost any format will be accepted.
+    /// This method wraps [IAudioClient::Initialize()](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize).
     ///
     /// ### Sharing mode
     /// In WASAPI, sharing mode determines how multiple audio applications interact with the same audio endpoint.
@@ -851,6 +882,8 @@ impl AudioClient {
     /// - Multiple applications can simultaneously access the audio device.
     /// - The system's audio engine mixes the audio streams from all applications.
     /// - The application has no control over the sample rate and format used by the device.
+    /// - The audio engine can perform automatic sample rate and format conversion,
+    ///   meaning that almost any format can be accepted.
     ///
     /// #### Exclusive Mode ([ShareMode::Exclusive])
     /// - Only one application can access the audio device at a time.
@@ -881,15 +914,23 @@ impl AudioClient {
     pub fn initialize_client(
         &mut self,
         wavefmt: &WaveFormat,
-        period: i64,
         direction: &Direction,
-        sharemode: &ShareMode,
-        timing: &TimingMode,
-        convert: bool,
+        stream_mode: &StreamMode,
     ) -> WasapiRes<()> {
-        if sharemode == &ShareMode::Exclusive && convert {
-            return Err(WasapiError::AutomaticFormatConversionInExclusiveMode);
-        }
+        let sharemode = match stream_mode {
+            StreamMode::PollingShared { .. } | StreamMode::EventsShared { .. } => ShareMode::Shared,
+            StreamMode::PollingExclusive { .. } | StreamMode::EventsExclusive { .. } => {
+                ShareMode::Exclusive
+            }
+        };
+        let timing = match stream_mode {
+            StreamMode::PollingShared { .. } | StreamMode::PollingExclusive { .. } => {
+                TimingMode::Polling
+            }
+            StreamMode::EventsShared { .. } | StreamMode::EventsExclusive { .. } => {
+                TimingMode::Events
+            }
+        };
         let mut streamflags = match (&self.direction, direction, sharemode) {
             (Direction::Render, Direction::Capture, ShareMode::Shared) => {
                 AUDCLNT_STREAMFLAGS_LOOPBACK
@@ -902,33 +943,51 @@ impl AudioClient {
             }
             _ => 0,
         };
-        if convert {
-            streamflags |=
-                AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+        match stream_mode {
+            StreamMode::PollingShared { autoconvert, .. }
+            | StreamMode::EventsShared { autoconvert, .. } => {
+                if *autoconvert {
+                    streamflags |= AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
+                        | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+                }
+            }
+            _ => {}
         }
-        if timing == &TimingMode::Events {
+        if timing == TimingMode::Events {
             streamflags |= AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
         }
         let mode = match sharemode {
             ShareMode::Exclusive => AUDCLNT_SHAREMODE_EXCLUSIVE,
             ShareMode::Shared => AUDCLNT_SHAREMODE_SHARED,
         };
-        let device_period = match sharemode {
-            ShareMode::Exclusive => period,
-            ShareMode::Shared => 0,
+        let (period, buffer_duration) = match stream_mode {
+            StreamMode::PollingShared {
+                buffer_duration_hns,
+                ..
+            } => (0, *buffer_duration_hns),
+            StreamMode::EventsShared {
+                buffer_duration_hns,
+                ..
+            } => (0, *buffer_duration_hns),
+            StreamMode::PollingExclusive {
+                period_hns,
+                buffer_duration_hns,
+            } => (*period_hns, *buffer_duration_hns),
+            StreamMode::EventsExclusive { period_hns, .. } => (*period_hns, *period_hns),
         };
-        self.sharemode = Some(*sharemode);
-        self.timingmode = Some(*timing);
         unsafe {
             self.client.Initialize(
                 mode,
                 streamflags,
+                buffer_duration,
                 period,
-                device_period,
                 wavefmt.as_waveformatex_ref(),
                 None,
             )?;
         }
+        self.direction = *direction;
+        self.sharemode = Some(sharemode);
+        self.timingmode = Some(timing);
         self.bytes_per_frame = Some(wavefmt.get_blockalign() as usize);
         Ok(())
     }
