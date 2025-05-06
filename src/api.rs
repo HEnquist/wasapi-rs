@@ -7,15 +7,18 @@ use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use widestring::U16CString;
-use windows::Win32::Foundation::PROPERTYKEY;
+use windows::Win32::Foundation::{E_NOINTERFACE, PROPERTYKEY};
 use windows::Win32::Media::Audio::{
-    ActivateAudioInterfaceAsync, EDataFlow, ERole, IActivateAudioInterfaceAsyncOperation,
+    ActivateAudioInterfaceAsync, AudioClientProperties, EDataFlow, ERole,
+    IAcousticEchoCancellationControl, IActivateAudioInterfaceAsyncOperation,
     IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
-    IMMEndpoint, AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
-    AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
+    IAudioClient2, IAudioEffectsManager, IMMEndpoint, AUDIOCLIENT_ACTIVATION_PARAMS,
+    AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
+    AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, AUDIO_EFFECT, AUDIO_STREAM_CATEGORY,
     PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
+use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
 use windows::Win32::System::Variant::VT_BLOB;
 use windows::{
     core::{HRESULT, PCSTR},
@@ -46,7 +49,7 @@ use windows::{
     Win32::System::Com::{BLOB, STGM_READ},
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
 };
-use windows_core::{implement, IUnknown, Interface, Ref};
+use windows_core::{implement, IUnknown, Interface, Ref, HSTRING};
 
 use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WasapiError, WaveFormat};
 
@@ -1111,6 +1114,59 @@ impl AudioClient {
     pub fn get_timing_mode(&self) -> Option<TimingMode> {
         self.timingmode
     }
+
+    /// Get the Acoustic Echo Cancellation Control.
+    /// If it succeeds, the capture endpoint supports control of the loopback reference endpoint for AEC.
+    pub fn get_aec_control(&self) -> WasapiRes<AcousticEchoCancellationControl> {
+        let control = unsafe {
+            self.client
+                .GetService::<IAcousticEchoCancellationControl>()?
+        };
+        Ok(AcousticEchoCancellationControl { control })
+    }
+
+    /// Get the Audio Effects Manager.
+    pub fn get_audio_effects_manager(&self) -> WasapiRes<AudioEffectsManager> {
+        let manager = unsafe { self.client.GetService::<IAudioEffectsManager>()? };
+        Ok(AudioEffectsManager { manager })
+    }
+
+    /// Set the category of an audio stream.
+    pub fn set_audio_stream_category(&self, category: AUDIO_STREAM_CATEGORY) -> WasapiRes<()> {
+        let audio_client_2 = self.client.cast::<IAudioClient2>()?;
+
+        let audio_client_property = AudioClientProperties {
+            cbSize: size_of::<AudioClientProperties>() as u32,
+            eCategory: category,
+            ..Default::default()
+        };
+
+        unsafe { audio_client_2.SetClientProperties(&audio_client_property as *const _)? };
+        Ok(())
+    }
+
+    pub fn is_aec_effect_present(&self) -> WasapiRes<bool> {
+        // IAudioEffectsManager requires Windows 11 (build 22000 or higher).
+        let audio_effects_manager = match self.get_audio_effects_manager() {
+            Ok(manager) => manager,
+            Err(WasapiError::Windows(win_err)) if win_err == E_NOINTERFACE.into() => {
+                // Audio effects manager is not supported, so clearly not present.
+                return Ok(false);
+            }
+            Err(err) => return Err(err),
+        };
+
+        if let Some(audio_effects) = audio_effects_manager.get_audio_effects()? {
+            for effect in audio_effects {
+                // Check for acoustic echo cancellation Audio Processing Object (APO)
+                if effect.id == AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
+    }
 }
 
 /// Struct wrapping an [IAudioSessionControl](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessioncontrol).
@@ -1435,6 +1491,50 @@ impl Handle {
         if retval.0 != WAIT_OBJECT_0.0 {
             return Err(WasapiError::EventTimeout);
         }
+        Ok(())
+    }
+}
+
+// Struct wrapping an [IAudioEffectsManager](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioeffectsmanager).
+pub struct AudioEffectsManager {
+    manager: IAudioEffectsManager,
+}
+
+impl AudioEffectsManager {
+    /// Gets the current list of audio effects for the associated audio stream.
+    pub fn get_audio_effects(&self) -> WasapiRes<Option<Vec<AUDIO_EFFECT>>> {
+        let mut audio_effects: *mut AUDIO_EFFECT = std::ptr::null_mut();
+        let mut num_effects: u32 = 0;
+
+        unsafe {
+            self.manager
+                .GetAudioEffects(&mut audio_effects, &mut num_effects)?;
+        }
+
+        if num_effects > 0 {
+            let effects_slice =
+                unsafe { slice::from_raw_parts(audio_effects, num_effects as usize) };
+            let effects_vec = effects_slice.to_vec();
+            Ok(Some(effects_vec))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// Struct wrapping an [AcousticEchoCancellationControl](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iacousticechocancellationcontrol).
+pub struct AcousticEchoCancellationControl {
+    control: IAcousticEchoCancellationControl,
+}
+
+impl AcousticEchoCancellationControl {
+    /// Sets the audio render endpoint that should be used as the reference stream for acoustic echo cancellation (AEC).
+    pub fn set_echo_cancellation_render_endpoint(&self, endpoint_id: String) -> WasapiRes<()> {
+        let endpoint_id = HSTRING::from(endpoint_id);
+        unsafe {
+            self.control
+                .SetEchoCancellationRenderEndpoint(&endpoint_id)?
+        };
         Ok(())
     }
 }
