@@ -9,7 +9,6 @@ use wasapi::*;
 #[macro_use]
 extern crate log;
 use simplelog::*;
-use windows::Win32::Media::Audio::AudioCategory_Communications;
 
 type Res<T> = Result<T, Box<dyn error::Error>>;
 
@@ -28,10 +27,6 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
 
     let (def_time, min_time) = audio_client.get_device_period()?;
     debug!("default period {}, min period {}", def_time, min_time);
-
-    // Set the category as communications, so that audio effects like AEC can be applied.
-    // this category is not valid for speaker loopback stream, so only set it for input capture.
-    audio_client.set_audio_stream_category(AudioCategory_Communications)?;
 
     let mode = StreamMode::EventsShared {
         autoconvert: true,
