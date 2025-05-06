@@ -42,10 +42,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
 
     // Check and enable Acoustic Echo Cancellation if it is supported.
     if audio_client.is_aec_effect_present()? {
-        debug!("AEC is supported, enabling it");
-
         let aec_ctrl = audio_client.get_aec_control()?;
-        debug!("Try set reference render endpoint");
         let default_render_device = get_default_device(&Direction::Render)?;
         let render_endpoint_id = default_render_device.get_id()?;
         aec_ctrl.set_echo_cancellation_render_endpoint(render_endpoint_id)?;
