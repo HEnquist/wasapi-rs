@@ -49,7 +49,7 @@ use windows::{
     Win32::System::Com::{BLOB, STGM_READ},
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
 };
-use windows_core::{implement, IUnknown, Interface, Ref, HSTRING};
+use windows_core::{implement, IUnknown, Interface, Ref, HSTRING, PCWSTR};
 
 use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WasapiError, WaveFormat};
 
@@ -1145,7 +1145,20 @@ impl AudioClient {
         Ok(())
     }
 
-    pub fn is_aec_effect_present(&self) -> WasapiRes<bool> {
+    /// Check if the Acoustic Echo Cancellation (AEC) is supported.
+    pub fn is_aec_supported(&self) -> WasapiRes<bool> {
+        if !self.is_aec_effect_present()? {
+            return Ok(false);
+        }
+
+        match unsafe { self.client.GetService::<IAcousticEchoCancellationControl>() } {
+            Ok(_) => Ok(true),
+            Err(err) if err == E_NOINTERFACE.into() => Ok(false),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    fn is_aec_effect_present(&self) -> WasapiRes<bool> {
         // IAudioEffectsManager requires Windows 11 (build 22000 or higher).
         let audio_effects_manager = match self.get_audio_effects_manager() {
             Ok(manager) => manager,
@@ -1529,11 +1542,19 @@ pub struct AcousticEchoCancellationControl {
 
 impl AcousticEchoCancellationControl {
     /// Sets the audio render endpoint that should be used as the reference stream for acoustic echo cancellation (AEC).
-    pub fn set_echo_cancellation_render_endpoint(&self, endpoint_id: String) -> WasapiRes<()> {
-        let endpoint_id = HSTRING::from(endpoint_id);
+    /// Setting the value to None will result in Windows using its own algorithm to pick the loopback reference device.
+    pub fn set_echo_cancellation_render_endpoint(
+        &self,
+        endpoint_id: Option<String>,
+    ) -> WasapiRes<()> {
+        let endpoint_id = if let Some(endpoint_id) = endpoint_id {
+            PCWSTR::from_raw(HSTRING::from(endpoint_id).as_ptr())
+        } else {
+            PCWSTR::null()
+        };
         unsafe {
             self.control
-                .SetEchoCancellationRenderEndpoint(&endpoint_id)?
+                .SetEchoCancellationRenderEndpoint(endpoint_id)?
         };
         Ok(())
     }
