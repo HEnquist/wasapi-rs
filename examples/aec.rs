@@ -51,7 +51,10 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
             output_device.get_interface_friendlyname()?
         );
     } else {
-        warn!("AEC not supported on this device");
+        warn!(
+            "AEC not supported on input device: {}",
+            input_device.get_interface_friendlyname()?
+        );
     }
 
     let h_event = audio_client.set_get_eventhandle()?;
