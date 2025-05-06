@@ -9,6 +9,7 @@ use wasapi::*;
 #[macro_use]
 extern crate log;
 use simplelog::*;
+use windows::Win32::Media::Audio::AudioCategory_Communications;
 
 type Res<T> = Result<T, Box<dyn error::Error>>;
 
@@ -28,12 +29,31 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
     let (def_time, min_time) = audio_client.get_device_period()?;
     debug!("default period {}, min period {}", def_time, min_time);
 
+    // Set the category as communications, so that audio effects like AEC can be applied.
+    // this category is not valid for speaker loopback stream, so only set it for input capture.
+    audio_client.set_audio_stream_category(AudioCategory_Communications)?;
+
     let mode = StreamMode::EventsShared {
         autoconvert: true,
         buffer_duration_hns: min_time,
     };
     audio_client.initialize_client(&desired_format, &Direction::Capture, &mode)?;
     debug!("initialized capture");
+
+    // Check and enable Acoustic Echo Cancellation if it is supported.
+    if audio_client.is_aec_effect_present()? {
+        debug!("AEC is supported, enabling it");
+
+        let aec_ctrl = audio_client.get_aec_control()?;
+        debug!("Try set reference render endpoint");
+        let default_render_device = get_default_device(&Direction::Render)?;
+        let render_endpoint_id = default_render_device.get_id()?;
+        aec_ctrl.set_echo_cancellation_render_endpoint(render_endpoint_id)?;
+        debug!(
+            "AEC enabled with render endpoint: {}",
+            default_render_device.get_interface_friendlyname()?
+        );
+    }
 
     let h_event = audio_client.set_get_eventhandle()?;
 
