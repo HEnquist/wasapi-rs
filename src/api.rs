@@ -19,6 +19,7 @@ use windows::Win32::Media::Audio::{
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
+use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::System::Variant::VT_BLOB;
 use windows::{
     core::{HRESULT, PCSTR},
@@ -1527,6 +1528,8 @@ impl AudioEffectsManager {
             let effects_slice =
                 unsafe { slice::from_raw_parts(audio_effects, num_effects as usize) };
             let effects_vec = effects_slice.to_vec();
+            // Free the memory allocated for the audio effects.
+            unsafe { CoTaskMemFree(Some(audio_effects as *mut _)) };
             Ok(Some(effects_vec))
         } else {
             Ok(None)
