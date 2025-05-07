@@ -1170,12 +1170,11 @@ impl AudioClient {
         };
 
         if let Some(audio_effects) = audio_effects_manager.get_audio_effects()? {
-            for effect in audio_effects {
-                // Check for acoustic echo cancellation Audio Processing Object (APO)
-                if effect.id == AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION {
-                    return Ok(true);
-                }
-            }
+            // Check if the AEC effect is present in the list of audio effects.
+            let is_present = audio_effects
+                .iter()
+                .any(|effect| effect.id == AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION);
+            return Ok(is_present);
         }
 
         Ok(false)
