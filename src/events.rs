@@ -2,7 +2,6 @@ use std::slice;
 use widestring::U16CString;
 use windows::{
     core::{implement, Result, GUID, PCWSTR},
-    Win32::Foundation::BOOL,
     Win32::Media::Audio::{
         AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
         AudioSessionStateExpired, AudioSessionStateInactive, DisconnectReasonDeviceRemoval,
@@ -224,7 +223,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
     fn OnSimpleVolumeChanged(
         &self,
         newvolume: f32,
-        newmute: BOOL,
+        newmute: windows_core::BOOL,
         eventcontext: *const GUID,
     ) -> Result<()> {
         trace!("New volume: {}, mute: {:?}", newvolume, newmute);
