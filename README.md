@@ -31,3 +31,4 @@ These things have been implemented so far:
 | `record`                   | Records audio from the default device, and saves the raw samples to a file.                            |
 | `devices`                  | Lists all available audio devices and displays the default devices.                                    |
 | `record_application`       | Records audio from a single application, and saves the raw samples to a file.                          |
+| `aec`                      | Captures audio with Acoustic Echo Cancellation (AEC) enabled and saves the raw data to a file.         |
