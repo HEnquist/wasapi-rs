@@ -44,7 +44,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
 
         let output_device = get_default_device(&Direction::Render)?;
         let render_endpoint_id = output_device.get_id()?;
-        // Pass the endpoint id of the audio render endpoint that should be used as the reference stream.
+        // Pass the endpoint id of the audio render endpoint that should be used as the reference stream for AEC.
         aec_ctrl.set_echo_cancellation_render_endpoint(Some(render_endpoint_id))?;
         debug!(
             "AEC enabled with render endpoint: {}",
