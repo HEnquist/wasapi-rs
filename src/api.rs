@@ -1159,6 +1159,7 @@ impl AudioClient {
         }
     }
 
+    /// Check if the Acoustic Echo Cancellation (AEC) effect is currently present.
     fn is_aec_effect_present(&self) -> WasapiRes<bool> {
         // IAudioEffectsManager requires Windows 11 (build 22000 or higher).
         let audio_effects_manager = match self.get_audio_effects_manager() {
@@ -1188,7 +1189,7 @@ pub struct AudioSessionControl {
 }
 
 impl AudioSessionControl {
-    /// Get the current state
+    /// Get the current session state
     pub fn get_state(&self) -> WasapiRes<SessionState> {
         let state = unsafe { self.control.GetState()? };
         #[allow(non_upper_case_globals)]
@@ -1273,7 +1274,7 @@ pub struct AudioRenderClient {
 impl AudioRenderClient {
     /// Write raw bytes data to a device from a slice.
     /// The number of frames to write should first be checked with the
-    /// `get_available_space_in_frames()` method on the [AudioClient].
+    /// [AudioClient::get_available_space_in_frames()] method.
     /// The buffer_flags argument can be used to mark a buffer as silent.
     pub fn write_to_device(
         &self,
@@ -1305,7 +1306,7 @@ impl AudioRenderClient {
 
     /// Write raw bytes data to a device from a deque.
     /// The number of frames to write should first be checked with the
-    /// `get_available_space_in_frames()` method on the [AudioClient].
+    /// [AudioClient::get_available_space_in_frames()] method.
     /// The buffer_flags argument can be used to mark a buffer as silent.
     pub fn write_to_device_from_deque(
         &self,
@@ -1392,7 +1393,7 @@ pub struct AudioCaptureClient {
 
 impl AudioCaptureClient {
     /// Get number of frames in next packet when in shared mode.
-    /// In exclusive mode it returns None, instead use [AudioClient::get_buffer_size()] or [AudioClient::get_current_padding()].
+    /// In exclusive mode it returns `None`, instead use [AudioClient::get_buffer_size()] or [AudioClient::get_current_padding()].
     /// See [IAudioCaptureClient::GetNextPacketSize](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudiocaptureclient-getnextpacketsize).
     pub fn get_next_packet_size(&self) -> WasapiRes<Option<u32>> {
         if let Some(ShareMode::Exclusive) = self.sharemode {
@@ -1411,7 +1412,7 @@ impl AudioCaptureClient {
     }
 
     /// Read raw bytes from a device into a slice. Returns the number of frames
-    /// that was read, and the BufferFlags describing the buffer that the data was read from.
+    /// that was read, and the `BufferFlags` describing the buffer that the data was read from.
     /// The slice must be large enough to hold all data.
     /// If it is longer that needed, the unused elements will not be modified.
     pub fn read_from_device(&self, data: &mut [u8]) -> WasapiRes<(u32, BufferFlags)> {
@@ -1548,7 +1549,7 @@ impl AcousticEchoCancellationControl {
     /// # Parameters
     /// - `endpoint_id`: An optional string containing the device ID of the audio render endpoint to use as the loopback reference.
     ///   If set to `None`, Windows will automatically select the reference device.
-    ///   You can obtain the device ID by calling [`Device::get_id`].
+    ///   You can obtain the device ID by calling [Device::get_id()].
     ///
     /// # Errors
     /// Returns an error if setting the echo cancellation render endpoint fails.
