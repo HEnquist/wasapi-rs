@@ -1543,8 +1543,15 @@ pub struct AcousticEchoCancellationControl {
 }
 
 impl AcousticEchoCancellationControl {
-    /// Sets the audio render endpoint that should be used as the reference stream for acoustic echo cancellation (AEC).
-    /// Setting the value to None will result in Windows using its own algorithm to pick the loopback reference device.
+    /// Sets the audio render endpoint to be used as the reference stream for acoustic echo cancellation (AEC).
+    ///
+    /// # Parameters
+    /// - `endpoint_id`: An optional string containing the device ID of the audio render endpoint to use as the loopback reference.
+    ///   If set to `None`, Windows will automatically select the reference device.
+    ///   You can obtain the device ID by calling [`Device::get_id`].
+    ///
+    /// # Errors
+    /// Returns an error if setting the echo cancellation render endpoint fails.
     pub fn set_echo_cancellation_render_endpoint(
         &self,
         endpoint_id: Option<String>,
