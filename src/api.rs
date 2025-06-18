@@ -1339,6 +1339,36 @@ impl AudioRenderClient {
     }
 }
 
+/// Struct representing information on data read from an audio client buffer.
+#[derive(Debug)]
+pub struct BufferInfo {
+    /// Decoded audio client flags.
+    pub flags: BufferFlags,
+    /// The index of the first frame that was read from the buffer.
+    pub index: u64,
+    /// The timestamp of the first frame that was read from the buffer.
+    pub timestamp: u64,
+}
+
+impl BufferInfo {
+    /// Creates a new [BufferInfo] struct from the `u32` flags value, and `u64` index and timestamp.
+    pub fn new(flags: u32, index: u64, timestamp: u64) -> Self {
+        Self {
+            flags: BufferFlags::new(flags),
+            index,
+            timestamp,
+        }
+    }
+
+    pub fn none() -> Self {
+        Self {
+            flags: BufferFlags::none(),
+            index: 0,
+            timestamp: 0,
+        }
+    }
+}
+
 /// Struct representing the [ _AUDCLNT_BUFFERFLAGS enum values](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-_audclnt_bufferflags).
 #[derive(Debug)]
 pub struct BufferFlags {
@@ -1412,30 +1442,32 @@ impl AudioCaptureClient {
     }
 
     /// Read raw bytes from a device into a slice. Returns the number of frames
-    /// that was read, and the `BufferFlags` describing the buffer that the data was read from.
+    /// that was read, and the `BufferInfo` describing the buffer that the data was read from.
     /// The slice must be large enough to hold all data.
     /// If it is longer that needed, the unused elements will not be modified.
-    pub fn read_from_device(&self, data: &mut [u8]) -> WasapiRes<(u32, BufferFlags)> {
+    pub fn read_from_device(&self, data: &mut [u8]) -> WasapiRes<(u32, BufferInfo)> {
         let data_len_in_frames = data.len() / self.bytes_per_frame;
         if data_len_in_frames == 0 {
-            return Ok((0, BufferFlags::none()));
+            return Ok((0, BufferInfo::none()));
         }
         let mut buffer_ptr = ptr::null_mut();
         let mut nbr_frames_returned = 0;
+        let mut index: u64 = 0;
+        let mut timestamp: u64 = 0;
         let mut flags = 0;
         unsafe {
             self.client.GetBuffer(
                 &mut buffer_ptr,
                 &mut nbr_frames_returned,
                 &mut flags,
-                None,
-                None,
+                Some(&mut index),
+                Some(&mut timestamp),
             )?
         };
-        let bufferflags = BufferFlags::new(flags);
+        let buffer_info = BufferInfo::new(flags, index, timestamp);
         if nbr_frames_returned == 0 {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
-            return Ok((0, bufferflags));
+            return Ok((0, buffer_info));
         }
         if data_len_in_frames < nbr_frames_returned as usize {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
@@ -1451,28 +1483,30 @@ impl AudioCaptureClient {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
         }
         trace!("read {} frames", nbr_frames_returned);
-        Ok((nbr_frames_returned, bufferflags))
+        Ok((nbr_frames_returned, buffer_info))
     }
 
     /// Read raw bytes data from a device into a deque.
-    /// Returns the [BufferFlags] describing the buffer that the data was read from.
-    pub fn read_from_device_to_deque(&self, data: &mut VecDeque<u8>) -> WasapiRes<BufferFlags> {
+    /// Returns the [BufferInfo] describing the buffer that the data was read from.
+    pub fn read_from_device_to_deque(&self, data: &mut VecDeque<u8>) -> WasapiRes<BufferInfo> {
         let mut buffer_ptr = ptr::null_mut();
         let mut nbr_frames_returned = 0;
+        let mut index: u64 = 0;
+        let mut timestamp: u64 = 0;
         let mut flags = 0;
         unsafe {
             self.client.GetBuffer(
                 &mut buffer_ptr,
                 &mut nbr_frames_returned,
                 &mut flags,
-                None,
-                None,
+                Some(&mut index),
+                Some(&mut timestamp),
             )?
         };
-        let bufferflags = BufferFlags::new(flags);
+        let buffer_info = BufferInfo::new(flags, index, timestamp);
         if nbr_frames_returned == 0 {
             // There is no need to release a buffer of 0 bytes
-            return Ok(bufferflags);
+            return Ok(buffer_info);
         }
         let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
         let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
@@ -1483,7 +1517,7 @@ impl AudioCaptureClient {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned).unwrap() };
         }
         trace!("read {} frames", nbr_frames_returned);
-        Ok(bufferflags)
+        Ok(buffer_info)
     }
 
     /// Get the sharemode for this [AudioCaptureClient].
