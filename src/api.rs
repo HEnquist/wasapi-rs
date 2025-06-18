@@ -1346,7 +1346,7 @@ pub struct BufferInfo {
     pub flags: BufferFlags,
     /// The index of the first frame that was read from the buffer.
     pub index: u64,
-    /// The timestamp of the first frame that was read from the buffer.
+    /// The timestamp in 100-nanosecond units of the first frame that was read from the buffer.
     pub timestamp: u64,
 }
 
