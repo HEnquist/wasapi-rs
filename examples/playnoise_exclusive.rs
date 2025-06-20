@@ -122,7 +122,7 @@ fn main() {
         }
     };
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     let h_event = audio_client.set_get_eventhandle().unwrap();
 
@@ -134,7 +134,7 @@ fn main() {
 
         let mut data = vec![0u8; buffer_frame_count as usize * blockalign as usize];
         for frame in data.chunks_exact_mut(blockalign as usize) {
-            let sample: u32 = rng.gen();
+            let sample: u32 = rng.random();
             let sample_bytes = sample.to_le_bytes();
             for value in frame.chunks_exact_mut(blockalign as usize / channels) {
                 for (bufbyte, samplebyte) in value.iter_mut().zip(sample_bytes.iter()) {
