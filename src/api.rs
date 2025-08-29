@@ -494,7 +494,7 @@ impl Device {
         // SAFETY: PKEY_AudioEngine_DeviceFormat is guaranteed to be a WAVEFORMATEX structure based on MSFT docs:
         // https://learn.microsoft.com/en-us/windows/win32/coreaudio/pkey-audioengine-deviceformat
         let waveformatex: &WAVEFORMATEX = unsafe { &*(data.as_ptr() as *const _) };
-        WaveFormat::from_waveformatex(*waveformatex)
+        WaveFormat::parse(waveformatex)
     }
 
     /// Read a string property from an [IMMDevice]
