@@ -12,10 +12,10 @@ use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, AudioClientProperties, EDataFlow, ERole,
     IAcousticEchoCancellationControl, IActivateAudioInterfaceAsyncOperation,
     IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
-    IAudioClient2, IAudioEffectsManager, IMMEndpoint, AUDIOCLIENT_ACTIVATION_PARAMS,
-    AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
-    AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, AUDIO_EFFECT, AUDIO_STREAM_CATEGORY,
-    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    IAudioClient2, IAudioEffectsManager, IMMEndpoint, AUDCLNT_STREAMOPTIONS,
+    AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
+    AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
+    AUDIO_EFFECT, AUDIO_STREAM_CATEGORY, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
@@ -1140,6 +1140,26 @@ impl AudioClient {
             cbSize: size_of::<AudioClientProperties>() as u32,
             eCategory: category,
             ..Default::default()
+        };
+
+        unsafe { audio_client_2.SetClientProperties(&audio_client_property as *const _)? };
+        Ok(())
+    }
+
+    /// Set properties of the client's audio stream.
+    pub fn set_client_properties(
+        &self,
+        is_offload: bool,
+        category: AUDIO_STREAM_CATEGORY,
+        options: AUDCLNT_STREAMOPTIONS,
+    ) -> WasapiRes<()> {
+        let audio_client_2 = self.client.cast::<IAudioClient2>()?;
+
+        let audio_client_property = AudioClientProperties {
+            cbSize: size_of::<AudioClientProperties>() as u32,
+            bIsOffload: is_offload.into(),
+            eCategory: category,
+            Options: options,
         };
 
         unsafe { audio_client_2.SetClientProperties(&audio_client_property as *const _)? };
