@@ -1133,6 +1133,9 @@ impl AudioClient {
     }
 
     /// Set the category of an audio stream.
+    ///
+    /// This function is a subset of the `set_client_properties` method, as it only sets the audio stream category, and
+    /// hence it is recommended to use `set_client_properties` instead.
     pub fn set_audio_stream_category(&self, category: AUDIO_STREAM_CATEGORY) -> WasapiRes<()> {
         let audio_client_2 = self.client.cast::<IAudioClient2>()?;
 
