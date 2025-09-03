@@ -499,26 +499,12 @@ impl Device {
 
     /// Read a string property from an [IMMDevice]
     fn get_string_property(&self, key: &PROPERTYKEY) -> WasapiRes<String> {
-        self.get_property(key, |prop| {
-            let propstr = unsafe { PropVariantToStringAlloc(prop)? };
-            let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
-            let name = wide_name.to_string_lossy();
-            trace!("name: {}", name);
-            Ok(name)
-        })
+        self.get_property(key, Self::parse_string_property)
     }
 
     /// Read a BLOB property from an [IMMDevice]
     fn get_blob_property(&self, key: &PROPERTYKEY) -> WasapiRes<Vec<u8>> {
-        self.get_property(key, |prop| {
-            if prop.vt() != VT_BLOB {
-                return Err(windows::core::Error::from(E_INVALIDARG).into());
-            }
-            let blob = unsafe { prop.Anonymous.Anonymous.Anonymous.blob };
-            let blob_slice = unsafe { slice::from_raw_parts(blob.pBlobData, blob.cbSize as usize) };
-            let data = blob_slice.to_vec();
-            Ok(data)
-        })
+        self.get_property(key, Self::parse_blob_property)
     }
 
     /// Read a property from an [IMMDevice] and parse it
@@ -532,6 +518,26 @@ impl Device {
         let ret = parse(&prop);
         unsafe { PropVariantClear(&mut prop) }?;
         ret
+    }
+
+    /// Parse a device property to String
+    fn parse_string_property(prop: &PROPVARIANT) -> WasapiRes<String> {
+        let propstr = unsafe { PropVariantToStringAlloc(prop)? };
+        let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
+        let name = wide_name.to_string_lossy();
+        trace!("name: {}", name);
+        Ok(name)
+    }
+
+    /// Parse a device property to BLOB
+    fn parse_blob_property(prop: &PROPVARIANT) -> WasapiRes<Vec<u8>> {
+        if prop.vt() != VT_BLOB {
+            return Err(windows::core::Error::from(E_INVALIDARG).into());
+        }
+        let blob = unsafe { prop.Anonymous.Anonymous.Anonymous.blob };
+        let blob_slice = unsafe { slice::from_raw_parts(blob.pBlobData, blob.cbSize as usize) };
+        let data = blob_slice.to_vec();
+        Ok(data)
     }
 
     /// Get the Id of an [IMMDevice]
