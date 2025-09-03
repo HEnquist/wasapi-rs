@@ -520,7 +520,7 @@ impl Device {
         ret
     }
 
-    /// Parse a device property to String
+    /// Parse a device string property to String
     fn parse_string_property(prop: &PROPVARIANT) -> WasapiRes<String> {
         let propstr = unsafe { PropVariantToStringAlloc(prop)? };
         let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
@@ -529,7 +529,7 @@ impl Device {
         Ok(name)
     }
 
-    /// Parse a device property to BLOB
+    /// Parse a device blob property to Vec<u8>
     fn parse_blob_property(prop: &PROPVARIANT) -> WasapiRes<Vec<u8>> {
         if prop.vt() != VT_BLOB {
             return Err(windows::core::Error::from(E_INVALIDARG).into());
