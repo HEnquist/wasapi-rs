@@ -89,6 +89,25 @@ impl fmt::Debug for WaveFormat {
 }
 
 impl WaveFormat {
+    /// Parse a [WAVEFORMATEX](https://docs.microsoft.com/en-us/previous-versions/dd757713(v=vs.85)) structure and
+    /// return a [WaveFormat] instance. If the underlying structure is a WAVEFORMATEXTENSIBLE, as specified by
+    /// wFormatTag, then use as-is. If not, assume it is only a WAVEFORMATEX structure.
+    pub fn parse(waveformatex: &WAVEFORMATEX) -> WasapiRes<Self> {
+        if waveformatex.wFormatTag == WAVE_FORMAT_EXTENSIBLE as u16 {
+            const ATLEAST_SIZE: usize =
+                size_of::<WAVEFORMATEXTENSIBLE>() - size_of::<WAVEFORMATEX>();
+            if waveformatex.cbSize < ATLEAST_SIZE as u16 {
+                return Err(WasapiError::UnsupportedFormat);
+            }
+            // SAFETY: Both wFormatTag and size check passed, so the pointed-to memory is a full WAVEFORMATEXTENSIBLE.
+            let waveformatextensible: WAVEFORMATEXTENSIBLE = unsafe {
+                std::ptr::read(waveformatex as *const WAVEFORMATEX as *const WAVEFORMATEXTENSIBLE)
+            };
+            return Ok(waveformatextensible.into());
+        }
+        Self::from_waveformatex(*waveformatex)
+    }
+
     /// Build a [WAVEFORMATEXTENSIBLE](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible) struct for the given parameters.
     /// `channel_mask` is optional. If a mask is provided, it will be used. If not, a default mask will be created.
     /// This can be used to work around quirks for some device drivers.
@@ -248,6 +267,12 @@ impl WaveFormat {
             _ => return Err(WasapiError::UnsupportedSubformat(self.wave_fmt.SubFormat)),
         };
         Ok(subfmt)
+    }
+}
+
+impl From<WAVEFORMATEXTENSIBLE> for WaveFormat {
+    fn from(wave_fmt: WAVEFORMATEXTENSIBLE) -> Self {
+        WaveFormat { wave_fmt }
     }
 }
 
