@@ -1277,7 +1277,7 @@ impl AudioClientProperties {
         self
     }
 
-    /// Set an option for the audio stream. See ]StreamOption] for possible options.
+    /// Set an option for the audio stream.
     ///
     /// See [StreamOption] for possible options or use the
     /// [AUDCLNT_STREAMOPTIONS](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-audclnt_streamoptions)
