@@ -7,19 +7,20 @@ use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use widestring::U16CString;
-use windows::Win32::Foundation::{E_NOINTERFACE, PROPERTYKEY};
+use windows::Win32::Foundation::{E_INVALIDARG, E_NOINTERFACE, PROPERTYKEY};
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, AudioClientProperties, EDataFlow, ERole,
     IAcousticEchoCancellationControl, IActivateAudioInterfaceAsyncOperation,
     IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
-    IAudioClient2, IAudioEffectsManager, IMMEndpoint, AUDCLNT_STREAMOPTIONS,
-    AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
+    IAudioClient2, IAudioEffectsManager, IMMEndpoint, PKEY_AudioEngine_DeviceFormat,
+    AUDCLNT_STREAMOPTIONS, AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
     AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
     AUDIO_EFFECT, AUDIO_STREAM_CATEGORY, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
 use windows::Win32::System::Com::CoTaskMemFree;
+use windows::Win32::System::Com::StructuredStorage::PropVariantClear;
 use windows::Win32::System::Variant::VT_BLOB;
 use windows::{
     core::{HRESULT, PCSTR},
@@ -486,15 +487,57 @@ impl Device {
         self.get_string_property(&PKEY_Device_DeviceDesc)
     }
 
-    /// Read the FriendlyName of an [IMMDevice]
+    /// Read the device format of the endpoint device, which is the format that the user has selected for the stream
+    /// that flows between the audio engine and the audio endpoint device when the device operates in shared mode.
+    pub fn get_device_format(&self) -> WasapiRes<WaveFormat> {
+        let data = self.get_blob_property(&PKEY_AudioEngine_DeviceFormat)?;
+        // SAFETY: PKEY_AudioEngine_DeviceFormat is guaranteed to be a WAVEFORMATEX structure based on MSFT docs:
+        // https://learn.microsoft.com/en-us/windows/win32/coreaudio/pkey-audioengine-deviceformat
+        let waveformatex: &WAVEFORMATEX = unsafe { &*(data.as_ptr() as *const _) };
+        WaveFormat::parse(waveformatex)
+    }
+
+    /// Read a string property from an [IMMDevice]
     fn get_string_property(&self, key: &PROPERTYKEY) -> WasapiRes<String> {
+        self.get_property(key, Self::parse_string_property)
+    }
+
+    /// Read a BLOB property from an [IMMDevice]
+    fn get_blob_property(&self, key: &PROPERTYKEY) -> WasapiRes<Vec<u8>> {
+        self.get_property(key, Self::parse_blob_property)
+    }
+
+    /// Read a property from an [IMMDevice] and parse it
+    fn get_property<T>(
+        &self,
+        key: &PROPERTYKEY,
+        parse: impl FnOnce(&PROPVARIANT) -> WasapiRes<T>,
+    ) -> WasapiRes<T> {
         let store = unsafe { self.device.OpenPropertyStore(STGM_READ)? };
-        let prop = unsafe { store.GetValue(key)? };
-        let propstr = unsafe { PropVariantToStringAlloc(&prop)? };
+        let mut prop = unsafe { store.GetValue(key)? };
+        let ret = parse(&prop);
+        unsafe { PropVariantClear(&mut prop) }?;
+        ret
+    }
+
+    /// Parse a device string property to String
+    fn parse_string_property(prop: &PROPVARIANT) -> WasapiRes<String> {
+        let propstr = unsafe { PropVariantToStringAlloc(prop)? };
         let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
         let name = wide_name.to_string_lossy();
         trace!("name: {}", name);
         Ok(name)
+    }
+
+    /// Parse a device blob property to Vec<u8>
+    fn parse_blob_property(prop: &PROPVARIANT) -> WasapiRes<Vec<u8>> {
+        if prop.vt() != VT_BLOB {
+            return Err(windows::core::Error::from(E_INVALIDARG).into());
+        }
+        let blob = unsafe { prop.Anonymous.Anonymous.Anonymous.blob };
+        let blob_slice = unsafe { slice::from_raw_parts(blob.pBlobData, blob.cbSize as usize) };
+        let data = blob_slice.to_vec();
+        Ok(data)
     }
 
     /// Get the Id of an [IMMDevice]
