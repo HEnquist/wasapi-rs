@@ -1240,7 +1240,7 @@ impl AudioClient {
     }
 }
 
-/// A builder for constructing  parameters that describe the properties of the client's audio stream.
+/// A builder for constructing parameters that describe the properties of the client's audio stream.
 ///
 /// Wrapper for
 /// [AudioClientProperties](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/ns-audioclient-audioclientproperties-r1).
