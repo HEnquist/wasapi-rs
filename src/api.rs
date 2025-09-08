@@ -1183,23 +1183,23 @@ impl AudioClient {
 
     /// Set the category of an audio stream.
     ///
-    /// This function is a subset of the `set_client_properties` method, as it only sets the audio stream category, and
-    /// hence it is recommended to use `set_client_properties` instead.
+    /// It is recommended to use [Self::set_properties] with [AudioClientProperties] instead, as this method only
+    /// sets the audio stream category, and hence is a subset of available properties.
     #[deprecated(
         since = "0.20.0",
-        note = "please use the new function name `set_client_properties` instead"
+        note = "please use the new function name `set_properties` instead"
     )]
     pub fn set_audio_stream_category(&self, category: AUDIO_STREAM_CATEGORY) -> WasapiRes<()> {
         let audio_client_2 = self.client.cast::<IAudioClient2>()?;
         let properties = AudioClientProperties::new().set_category(category);
-        unsafe { audio_client_2.SetClientProperties(properties.as_raw())? };
+        unsafe { audio_client_2.SetClientProperties(&properties.0)? };
         Ok(())
     }
 
     /// Set properties of the client's audio stream.
-    pub fn set_client_properties(&self, properties: AudioClientProperties) -> WasapiRes<()> {
+    pub fn set_properties(&self, properties: AudioClientProperties) -> WasapiRes<()> {
         let audio_client_2 = self.client.cast::<IAudioClient2>()?;
-        unsafe { audio_client_2.SetClientProperties(properties.as_raw())? };
+        unsafe { audio_client_2.SetClientProperties(&properties.0)? };
         Ok(())
     }
 
@@ -1288,10 +1288,6 @@ impl AudioClientProperties {
     {
         self.0.Options |= option.into();
         self
-    }
-
-    fn as_raw(&self) -> &windows::Win32::Media::Audio::AudioClientProperties {
-        &self.0
     }
 }
 
