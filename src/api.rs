@@ -7,15 +7,21 @@ use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use widestring::U16CString;
-use windows::Win32::Foundation::{E_INVALIDARG, E_NOINTERFACE, PROPERTYKEY};
+use windows::Win32::Foundation::{E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
 use windows::Win32::Media::Audio::{
-    ActivateAudioInterfaceAsync, AudioClientProperties, EDataFlow, ERole,
+    ActivateAudioInterfaceAsync, AudioCategory_Alerts, AudioCategory_Communications,
+    AudioCategory_FarFieldSpeech, AudioCategory_ForegroundOnlyMedia, AudioCategory_GameChat,
+    AudioCategory_GameEffects, AudioCategory_GameMedia, AudioCategory_Media, AudioCategory_Movie,
+    AudioCategory_Other, AudioCategory_SoundEffects, AudioCategory_Speech,
+    AudioCategory_UniformSpeech, AudioCategory_VoiceTyping, EDataFlow, ERole,
     IAcousticEchoCancellationControl, IActivateAudioInterfaceAsyncOperation,
     IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
     IAudioClient2, IAudioEffectsManager, IMMEndpoint, PKEY_AudioEngine_DeviceFormat,
-    AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
-    AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
-    AUDIO_EFFECT, AUDIO_STREAM_CATEGORY, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    AUDCLNT_STREAMOPTIONS, AUDCLNT_STREAMOPTIONS_AMBISONICS, AUDCLNT_STREAMOPTIONS_MATCH_FORMAT,
+    AUDCLNT_STREAMOPTIONS_NONE, AUDCLNT_STREAMOPTIONS_RAW, AUDIOCLIENT_ACTIVATION_PARAMS,
+    AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
+    AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, AUDIO_EFFECT, AUDIO_STREAM_CATEGORY,
+    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
@@ -1176,16 +1182,24 @@ impl AudioClient {
     }
 
     /// Set the category of an audio stream.
+    ///
+    /// It is recommended to use [Self::set_properties] with [AudioClientProperties] instead, as this method only
+    /// sets the audio stream category, and hence is a subset of available properties.
+    #[deprecated(
+        since = "0.20.0",
+        note = "please use the new function name `set_properties` instead"
+    )]
     pub fn set_audio_stream_category(&self, category: AUDIO_STREAM_CATEGORY) -> WasapiRes<()> {
         let audio_client_2 = self.client.cast::<IAudioClient2>()?;
+        let properties = AudioClientProperties::new().set_category(category);
+        unsafe { audio_client_2.SetClientProperties(&properties.0)? };
+        Ok(())
+    }
 
-        let audio_client_property = AudioClientProperties {
-            cbSize: size_of::<AudioClientProperties>() as u32,
-            eCategory: category,
-            ..Default::default()
-        };
-
-        unsafe { audio_client_2.SetClientProperties(&audio_client_property as *const _)? };
+    /// Set properties of the client's audio stream.
+    pub fn set_properties(&self, properties: AudioClientProperties) -> WasapiRes<()> {
+        let audio_client_2 = self.client.cast::<IAudioClient2>()?;
+        unsafe { audio_client_2.SetClientProperties(&properties.0)? };
         Ok(())
     }
 
@@ -1223,6 +1237,152 @@ impl AudioClient {
         }
 
         Ok(false)
+    }
+}
+
+/// A builder for constructing parameters that describe the properties of the client's audio stream.
+///
+/// Wrapper for
+/// [AudioClientProperties](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/ns-audioclient-audioclientproperties-r1).
+#[derive(Copy, Clone, Debug)]
+pub struct AudioClientProperties(windows::Win32::Media::Audio::AudioClientProperties);
+
+impl AudioClientProperties {
+    /// Create a new [AudioClientProperties] struct with default values.
+    pub fn new() -> Self {
+        Self(windows::Win32::Media::Audio::AudioClientProperties {
+            cbSize: size_of::<windows::Win32::Media::Audio::AudioClientProperties>() as u32,
+            bIsOffload: FALSE,
+            eCategory: AudioCategory_Other,
+            Options: AUDCLNT_STREAMOPTIONS_NONE,
+        })
+    }
+
+    /// Set whether or not the audio stream is hardware-offloaded.
+    pub fn set_offload(mut self, is_offload: bool) -> Self {
+        self.0.bIsOffload = is_offload.into();
+        self
+    }
+
+    /// Specify the category of the audio stream.
+    ///
+    /// See [StreamCategory] for possible categories or use the
+    /// [AUDIO_STREAM_CATEGORY](https://learn.microsoft.com/en-us/windows/win32/api/audiosessiontypes/ne-audiosessiontypes-audio_stream_category)
+    /// constants directly.
+    pub fn set_category<T>(mut self, category: T) -> Self
+    where
+        T: Into<AUDIO_STREAM_CATEGORY>,
+    {
+        self.0.eCategory = category.into();
+        self
+    }
+
+    /// Set an option for the audio stream.
+    ///
+    /// See [StreamOption] for possible options or use the
+    /// [AUDCLNT_STREAMOPTIONS](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-audclnt_streamoptions)
+    /// constants directly.
+    pub fn set_option<T>(mut self, option: T) -> Self
+    where
+        T: Into<AUDCLNT_STREAMOPTIONS>,
+    {
+        self.0.Options |= option.into();
+        self
+    }
+}
+
+impl Default for AudioClientProperties {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Specifies the category of an audio stream.
+///
+/// Wrapper for
+/// [AUDIO_STREAM_CATEGORY](https://learn.microsoft.com/en-us/windows/win32/api/audiosessiontypes/ne-audiosessiontypes-audio_stream_category).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum StreamCategory {
+    /// Other audio stream.
+    Other,
+    /// Media that will only stream when the app is in the foreground. This enumeration value has been deprecated. For
+    /// more information, see the Remarks section.
+    #[deprecated = "See `Remarks` in the Microsoft documentation."]
+    ForegroundOnlyMedia,
+    /// Real-time communications, such as VOIP or chat.
+    Communications,
+    /// Alert sounds.
+    Alerts,
+    /// Sound effects.
+    SoundEffects,
+    /// Game sound effects.
+    GameEffects,
+    /// Background audio for games.
+    GameMedia,
+    /// Game chat audio. Similar to [StreamCategory::Communications] except that GameChat will not attenuate other
+    /// streams.
+    GameChat,
+    /// Speech.
+    Speech,
+    /// Stream that includes audio with dialog.
+    Movie,
+    /// Stream that includes audio without dialog.
+    Media,
+    /// Media is audio captured with the intent of capturing voice sources located in the ‘far field’. (Far away from
+    /// the microphone.)
+    FarFieldSpeech,
+    /// Media is captured audio that requires consistent speech processing for the captured audio stream across all
+    /// Windows devices. Used by applications that process speech data using machine learning algorithms.
+    UniformSpeech,
+    /// Media is audio captured with the intent of enabling dictation or typing by voice.
+    VoiceTyping,
+}
+
+impl From<StreamCategory> for AUDIO_STREAM_CATEGORY {
+    fn from(category: StreamCategory) -> Self {
+        #[allow(deprecated)]
+        match category {
+            StreamCategory::Other => AudioCategory_Other,
+            StreamCategory::ForegroundOnlyMedia => AudioCategory_ForegroundOnlyMedia,
+            StreamCategory::Communications => AudioCategory_Communications,
+            StreamCategory::Alerts => AudioCategory_Alerts,
+            StreamCategory::SoundEffects => AudioCategory_SoundEffects,
+            StreamCategory::GameEffects => AudioCategory_GameEffects,
+            StreamCategory::GameMedia => AudioCategory_GameMedia,
+            StreamCategory::GameChat => AudioCategory_GameChat,
+            StreamCategory::Speech => AudioCategory_Speech,
+            StreamCategory::Movie => AudioCategory_Movie,
+            StreamCategory::Media => AudioCategory_Media,
+            StreamCategory::FarFieldSpeech => AudioCategory_FarFieldSpeech,
+            StreamCategory::UniformSpeech => AudioCategory_UniformSpeech,
+            StreamCategory::VoiceTyping => AudioCategory_VoiceTyping,
+        }
+    }
+}
+
+/// Defines values that describe the characteristics of an audio stream.
+///
+/// Wrapper for
+/// [AUDCLNT_STREAMOPTIONS](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-audclnt_streamoptions).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum StreamOption {
+    /// The audio stream is a 'raw' stream that bypasses all signal processing except for endpoint specific, always-on
+    /// processing in the Audio Processing Object (APO), driver, and hardware.
+    Raw,
+    /// The audio client is requesting that the audio engine match the format proposed by the client. The audio engine
+    /// will match this format only if the format is supported by the audio driver and associated APOs.
+    MatchFormat,
+    /// The audio stream is an ambisonics stream.
+    Ambisonics,
+}
+
+impl From<StreamOption> for AUDCLNT_STREAMOPTIONS {
+    fn from(option: StreamOption) -> Self {
+        match option {
+            StreamOption::Raw => AUDCLNT_STREAMOPTIONS_RAW,
+            StreamOption::MatchFormat => AUDCLNT_STREAMOPTIONS_MATCH_FORMAT,
+            StreamOption::Ambisonics => AUDCLNT_STREAMOPTIONS_AMBISONICS,
+        }
     }
 }
 
