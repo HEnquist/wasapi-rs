@@ -161,7 +161,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
             AudioSessionStateExpired => "Expired",
             _ => "Unknown",
         };
-        trace!("state change to: {}", state_name);
+        trace!("state change to: {state_name}");
         #[allow(non_upper_case_globals)]
         let sessionstate = match newstate {
             AudioSessionStateActive => SessionState::Active,
@@ -201,7 +201,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
     ) -> Result<()> {
         let wide_name = unsafe { U16CString::from_ptr_str(newdisplayname.0) };
         let name = wide_name.to_string_lossy();
-        trace!("New display name: {}", name);
+        trace!("New display name: {name}");
         if let Some(callback) = &self.callbacks.displayname {
             let context = unsafe { *eventcontext };
             callback(name, context);
@@ -212,7 +212,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
     fn OnIconPathChanged(&self, newiconpath: &PCWSTR, eventcontext: *const GUID) -> Result<()> {
         let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
         let path = wide_path.to_string_lossy();
-        trace!("New icon path: {}", path);
+        trace!("New icon path: {path}");
         if let Some(callback) = &self.callbacks.iconpath {
             let context = unsafe { *eventcontext };
             callback(path, context);
@@ -226,7 +226,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         newmute: windows_core::BOOL,
         eventcontext: *const GUID,
     ) -> Result<()> {
-        trace!("New volume: {}, mute: {:?}", newvolume, newmute);
+        trace!("New volume: {newvolume}, mute: {newmute:?}");
         if let Some(callback) = &self.callbacks.simple_volume {
             let context = unsafe { *eventcontext };
             callback(newvolume, bool::from(newmute), context);
@@ -241,7 +241,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         changedchannel: u32,
         eventcontext: *const GUID,
     ) -> Result<()> {
-        trace!("New channel volume for channel: {}", changedchannel);
+        trace!("New channel volume for channel: {changedchannel}");
         let volslice =
             unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
         if let Some(callback) = &self.callbacks.channel_volume {
