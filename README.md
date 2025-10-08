@@ -6,7 +6,10 @@ The presented API is all safe Rust, but structs and functions closely follow the
 
 For details on how to use Wasapi, please see [the Windows documentation](https://docs.microsoft.com/en-us/windows/win32/coreaudio/core-audio-interfaces).
 
-Bindings are generated automatically using the [windows](https://crates.io/crates/windows) crate.
+## Sponsor: Recall.ai - API for desktop recording
+
+If you’re looking for a hosted desktop recording API, consider checking out [Recall.ai](https://www.recall.ai/?utm_source=github&utm_medium=sponsorship&utm_campaign=henquist-wasapi-rs),
+an API that records Zoom, Google Meet, Microsoft Teams, in-person meetings, and more.
 
 ## Supported functionality
 

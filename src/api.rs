@@ -374,7 +374,7 @@ impl DeviceCollection {
     /// Get a device from an [IMMDeviceCollection] using name
     pub fn get_device_with_name(&self, name: &str) -> WasapiRes<Device> {
         let count = unsafe { self.collection.GetCount()? };
-        trace!("nbr devices {}", count);
+        trace!("nbr devices {count}");
         for n in 0..count {
             let device = self.get_device_at_index(n)?;
             let devname = device.get_friendlyname()?;
@@ -467,7 +467,7 @@ impl Device {
     /// Read state from an [IMMDevice]
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
         let state = unsafe { self.device.GetState()? };
-        trace!("state: {:?}", state);
+        trace!("state: {state:?}");
         let state_enum = match state {
             _ if state == DEVICE_STATE_ACTIVE => DeviceState::Active,
             _ if state == DEVICE_STATE_DISABLED => DeviceState::Disabled,
@@ -531,7 +531,7 @@ impl Device {
         let propstr = unsafe { PropVariantToStringAlloc(prop)? };
         let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
         let name = wide_name.to_string_lossy();
-        trace!("name: {}", name);
+        trace!("name: {name}");
         Ok(name)
     }
 
@@ -551,7 +551,7 @@ impl Device {
         let idstr = unsafe { self.device.GetId()? };
         let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
         let id = wide_id.to_string_lossy();
-        trace!("id: {}", id);
+        trace!("id: {id}");
         Ok(id)
     }
 
@@ -851,13 +851,10 @@ impl AudioClient {
         }
         let masks = make_channelmasks(wave_fmt.get_nchannels() as usize);
         for mask in masks {
-            debug!("Repeating query with channel mask: {:#010b}", mask);
+            debug!("Repeating query with channel mask: {mask:#010b}");
             wave_fmt.wave_fmt.dwChannelMask = mask;
             if self.is_supported(&wave_fmt, &ShareMode::Exclusive).is_ok() {
-                debug!(
-                    "The requested format is supported with a modified mask: {:#010b}",
-                    mask
-                );
+                debug!("The requested format is supported with a modified mask: {mask:#010b}");
                 return Ok(wave_fmt);
             }
         }
@@ -872,7 +869,7 @@ impl AudioClient {
             self.client
                 .GetDevicePeriod(Some(&mut def_time), Some(&mut min_time))?
         };
-        trace!("default period {}, min period {}", def_time, min_time);
+        trace!("default period {def_time}, min period {min_time}");
         Ok((def_time, min_time))
     }
 
@@ -1057,7 +1054,7 @@ impl AudioClient {
     /// see [IAudioClient::GetBufferSize](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getbuffersize).
     pub fn get_buffer_size(&self) -> WasapiRes<u32> {
         let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
-        trace!("buffer_frame_count {}", buffer_frame_count);
+        trace!("buffer_frame_count {buffer_frame_count}");
         Ok(buffer_frame_count)
     }
 
@@ -1075,7 +1072,7 @@ impl AudioClient {
     /// [IAudioClient::GetCurrentPadding](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getcurrentpadding).
     pub fn get_current_padding(&self) -> WasapiRes<u32> {
         let padding_count = unsafe { self.client.GetCurrentPadding()? };
-        trace!("padding_count {}", padding_count);
+        trace!("padding_count {padding_count}");
         Ok(padding_count)
     }
 
@@ -1085,7 +1082,7 @@ impl AudioClient {
         let frames = match (self.sharemode, self.timingmode) {
             (Some(ShareMode::Exclusive), Some(TimingMode::Events)) => {
                 let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
-                trace!("buffer_frame_count {}", buffer_frame_count);
+                trace!("buffer_frame_count {buffer_frame_count}");
                 buffer_frame_count
             }
             (Some(_), Some(_)) => {
@@ -1503,7 +1500,7 @@ impl AudioRenderClient {
             None => 0,
         };
         unsafe { self.client.ReleaseBuffer(nbr_frames as u32, flags)? };
-        trace!("wrote {} frames", nbr_frames);
+        trace!("wrote {nbr_frames} frames");
         Ok(())
     }
 
@@ -1537,7 +1534,7 @@ impl AudioRenderClient {
             None => 0,
         };
         unsafe { self.client.ReleaseBuffer(nbr_frames as u32, flags)? };
-        trace!("wrote {} frames", nbr_frames);
+        trace!("wrote {nbr_frames} frames");
         Ok(())
     }
 }
@@ -1685,7 +1682,7 @@ impl AudioCaptureClient {
         if nbr_frames_returned > 0 {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
         }
-        trace!("read {} frames", nbr_frames_returned);
+        trace!("read {nbr_frames_returned} frames");
         Ok((nbr_frames_returned, buffer_info))
     }
 
@@ -1719,7 +1716,7 @@ impl AudioCaptureClient {
         if nbr_frames_returned > 0 {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned).unwrap() };
         }
-        trace!("read {} frames", nbr_frames_returned);
+        trace!("read {nbr_frames_returned} frames");
         Ok(buffer_info)
     }
 
