@@ -16,7 +16,8 @@ use windows::Win32::Media::Audio::{
     AudioCategory_UniformSpeech, AudioCategory_VoiceTyping, EDataFlow, ERole,
     IAcousticEchoCancellationControl, IActivateAudioInterfaceAsyncOperation,
     IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
-    IAudioClient2, IAudioEffectsManager, IMMEndpoint, PKEY_AudioEngine_DeviceFormat,
+    IAudioClient2, IAudioEffectsManager, IAudioSessionControl2, IAudioSessionEnumerator,
+    IAudioSessionManager, IAudioSessionManager2, IMMEndpoint, PKEY_AudioEngine_DeviceFormat,
     AUDCLNT_STREAMOPTIONS, AUDCLNT_STREAMOPTIONS_AMBISONICS, AUDCLNT_STREAMOPTIONS_MATCH_FORMAT,
     AUDCLNT_STREAMOPTIONS_NONE, AUDCLNT_STREAMOPTIONS_RAW, AUDIOCLIENT_ACTIVATION_PARAMS,
     AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
@@ -464,6 +465,15 @@ impl Device {
         })
     }
 
+    /// Gets an [IAudioSessionManager] from an [IMMDevice]
+    pub fn get_iaudiosessionmanager(&self) -> WasapiRes<AudioSessionManager> {
+        let session_manager = unsafe {
+            self.device
+                .Activate::<IAudioSessionManager>(CLSCTX_ALL, None)?
+        };
+        Ok(AudioSessionManager { session_manager })
+    }
+
     /// Read state from an [IMMDevice]
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
         let state = unsafe { self.device.GetState()? };
@@ -530,6 +540,7 @@ impl Device {
     fn parse_string_property(prop: &PROPVARIANT) -> WasapiRes<String> {
         let propstr = unsafe { PropVariantToStringAlloc(prop)? };
         let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
+        unsafe { CoTaskMemFree(Some(propstr.0 as _)) };
         let name = wide_name.to_string_lossy();
         trace!("name: {name}");
         Ok(name)
@@ -550,6 +561,7 @@ impl Device {
     pub fn get_id(&self) -> WasapiRes<String> {
         let idstr = unsafe { self.device.GetId()? };
         let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
+        unsafe { CoTaskMemFree(Some(idstr.0 as _)) };
         let id = wide_id.to_string_lossy();
         trace!("id: {id}");
         Ok(id)
@@ -1294,6 +1306,40 @@ impl Default for AudioClientProperties {
     }
 }
 
+/// Struct wrapping an [IAudioSessionManager](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionmanager)
+pub struct AudioSessionManager {
+    session_manager: IAudioSessionManager,
+}
+
+impl AudioSessionManager {
+    /// Get the [IAudioSessionEnumerator]
+    pub fn get_audiosessionenumerator(&self) -> WasapiRes<AudioSessionEnumerator> {
+        let session_manager2: IAudioSessionManager2 = self.session_manager.cast()?;
+        let session_enumerator = unsafe { session_manager2.GetSessionEnumerator()? };
+
+        Ok(AudioSessionEnumerator { session_enumerator })
+    }
+}
+
+/// Struct wrapping an [IAudioSessionEnumerator]
+pub struct AudioSessionEnumerator {
+    session_enumerator: IAudioSessionEnumerator,
+}
+
+impl AudioSessionEnumerator {
+    /// Get the count of sessions.
+    pub fn get_count(&self) -> WasapiRes<i32> {
+        Ok(unsafe { self.session_enumerator.GetCount()? })
+    }
+
+    /// Get the [IAudioSessionControl] at the specified index.
+    pub fn get_session(&self, index: i32) -> WasapiRes<AudioSessionControl> {
+        let session = unsafe { self.session_enumerator.GetSession(index)? };
+
+        Ok(AudioSessionControl { control: session })
+    }
+}
+
 /// Specifies the category of an audio stream.
 ///
 /// Wrapper for
@@ -1422,6 +1468,22 @@ impl AudioSessionControl {
             }),
             Err(err) => Err(WasapiError::RegisterNotifications(err)),
         }
+    }
+
+    /// Get the id of the process that owns this session.
+    pub fn get_process_id(&self) -> WasapiRes<u32> {
+        let control2: IAudioSessionControl2 = self.control.cast()?;
+
+        Ok(unsafe { control2.GetProcessId()? })
+    }
+
+    /// Sets the default stream attenuation experience (auto-ducking) provided by the system.
+    pub fn set_ducking_preference(&self, preference: bool) -> WasapiRes<()> {
+        let control2: IAudioSessionControl2 = self.control.cast()?;
+
+        unsafe { control2.SetDuckingPreference(preference)? };
+
+        Ok(())
     }
 }
 
