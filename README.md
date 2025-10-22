@@ -13,13 +13,16 @@ an API that records Zoom, Google Meet, Microsoft Teams, in-person meetings, and 
 
 ## Supported functionality
 
-These things have been implemented so far:
+The following is a selection of the functionality currently available in the library:
 
 - Audio playback and capture
 - Shared and exclusive modes
 - Event-driven and polled buffering
 - Loopback capture
 - Notifications for volume change, device disconnect etc
+- …and additional features beyond this list
+
+
 
 ## Included examples
 

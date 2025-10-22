@@ -1321,7 +1321,7 @@ impl AudioSessionManager {
     }
 }
 
-/// Struct wrapping an [IAudioSessionEnumerator]
+/// Struct wrapping an [IAudioSessionEnumerator](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionenumerator)
 pub struct AudioSessionEnumerator {
     session_enumerator: IAudioSessionEnumerator,
 }
