@@ -6,7 +6,6 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
-use widestring::U16CString;
 use windows::Win32::Foundation::{CloseHandle, E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, AudioCategory_Alerts, AudioCategory_Communications,
@@ -564,9 +563,8 @@ impl Device {
     /// Parse a device string property to String
     fn parse_string_property(prop: &PROPVARIANT) -> WasapiRes<String> {
         let propstr = unsafe { PropVariantToStringAlloc(prop)? };
-        let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
+        let name = unsafe { propstr.to_string()? };
         unsafe { CoTaskMemFree(Some(propstr.0 as _)) };
-        let name = wide_name.to_string_lossy();
         trace!("name: {name}");
         Ok(name)
     }
@@ -585,9 +583,10 @@ impl Device {
     /// Get the Id of an [IMMDevice]
     pub fn get_id(&self) -> WasapiRes<String> {
         let idstr = unsafe { self.device.GetId()? };
-        let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
+        //let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
+        let id = unsafe { idstr.to_string()? };
         unsafe { CoTaskMemFree(Some(idstr.0 as _)) };
-        let id = wide_id.to_string_lossy();
+        //let id = wide_id.to_string_lossy();
         trace!("id: {id}");
         Ok(id)
     }

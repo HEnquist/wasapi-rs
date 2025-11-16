@@ -29,7 +29,6 @@ features = ["Foundation",
             "Win32_Security",]
 
 [dependencies]
-widestring = "1.1.0"
 log = "0.4.22"
 num-integer = "0.1"
 windows-core = "0.62"
