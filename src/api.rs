@@ -310,32 +310,61 @@ impl fmt::Display for DeviceState {
     }
 }
 
-/// Get the default playback or capture device for the console role
-pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
-    get_default_device_for_role(direction, &Role::Console)
-}
-
-/// Get the default playback or capture device for a specific role
-pub fn get_default_device_for_role(direction: &Direction, role: &Role) -> WasapiRes<Device> {
-    let dir = direction.into();
-    let e_role = role.into();
-
-    let enumerator: IMMDeviceEnumerator =
-        unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
-    let device = unsafe { enumerator.GetDefaultAudioEndpoint(dir, e_role)? };
-
-    let dev = Device {
-        device,
-        direction: *direction,
-    };
-    debug!("default device {:?}", dev.get_friendlyname());
-    Ok(dev)
-}
-
 /// Calculate a period in units of 100ns that corresponds to the given number of buffer frames at the given sample rate.
 /// See the [IAudioClient documentation](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize#remarks).
 pub fn calculate_period_100ns(frames: i64, samplerate: i64) -> i64 {
     ((10000.0 * 1000.0 / samplerate as f64 * frames as f64) + 0.5) as i64
+}
+
+/// Struct wrapping an [IMMDeviceEnumerator](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdeviceenumerator)
+pub struct DeviceEnumerator {
+    enumerator: IMMDeviceEnumerator,
+}
+
+impl DeviceEnumerator {
+    /// Create a new [DeviceEnumerator]
+    pub fn new() -> WasapiRes<DeviceEnumerator> {
+        let enumerator: IMMDeviceEnumerator =
+            unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
+        Ok(DeviceEnumerator { enumerator })
+    }
+
+    /// Get an [IMMDeviceCollection] of all active playback or capture devices
+    pub fn get_device_collection(&self, direction: &Direction) -> WasapiRes<DeviceCollection> {
+        let dir: EDataFlow = direction.into();
+        let devs = unsafe {
+            self.enumerator
+                .EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE)?
+        };
+        Ok(DeviceCollection {
+            collection: devs,
+            direction: *direction,
+        })
+    }
+
+    /// Get the default playback or capture device for the console role
+    pub fn get_default_device(&self, direction: &Direction) -> WasapiRes<Device> {
+        self.get_default_device_for_role(direction, &Role::Console)
+    }
+
+    /// Get the default playback or capture device for a specific role
+    pub fn get_default_device_for_role(
+        &self,
+        direction: &Direction,
+        role: &Role,
+    ) -> WasapiRes<Device> {
+        let dir = direction.into();
+        let e_role = role.into();
+
+        let device = unsafe { self.enumerator.GetDefaultAudioEndpoint(dir, e_role)? };
+
+        let dev = Device {
+            device,
+            direction: *direction,
+        };
+        debug!("default device {:?}", dev.get_friendlyname());
+        Ok(dev)
+    }
 }
 
 /// Struct wrapping an [IMMDeviceCollection](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevicecollection).
@@ -345,18 +374,6 @@ pub struct DeviceCollection {
 }
 
 impl DeviceCollection {
-    /// Get an [IMMDeviceCollection] of all active playback or capture devices
-    pub fn new(direction: &Direction) -> WasapiRes<DeviceCollection> {
-        let dir: EDataFlow = direction.into();
-        let enumerator: IMMDeviceEnumerator =
-            unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
-        let devs = unsafe { enumerator.EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE)? };
-        Ok(DeviceCollection {
-            collection: devs,
-            direction: *direction,
-        })
-    }
-
     /// Get the number of devices in an [IMMDeviceCollection]
     pub fn get_nbr_devices(&self) -> WasapiRes<u32> {
         let count = unsafe { self.collection.GetCount()? };
