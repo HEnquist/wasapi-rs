@@ -7,7 +7,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use widestring::U16CString;
-use windows::Win32::Foundation::{E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
+use windows::Win32::Foundation::{CloseHandle, E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, AudioCategory_Alerts, AudioCategory_Communications,
     AudioCategory_FarFieldSpeech, AudioCategory_ForegroundOnlyMedia, AudioCategory_GameChat,
@@ -1792,6 +1792,12 @@ impl AudioCaptureClient {
 /// Struct wrapping a [HANDLE] to an [Event Object](https://docs.microsoft.com/en-us/windows/win32/sync/event-objects).
 pub struct Handle {
     handle: HANDLE,
+}
+
+impl Drop for Handle {
+    fn drop(&mut self) {
+        let _ = unsafe { CloseHandle(self.handle) };
+    }
 }
 
 impl Handle {
