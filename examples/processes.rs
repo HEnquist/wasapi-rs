@@ -3,8 +3,13 @@ use wasapi::*;
 fn main() {
     initialize_mta().unwrap();
 
+    let enumerator = DeviceEnumerator::new().unwrap();
+
     println!("The following input devices are being used by:");
-    for device in &DeviceCollection::new(&Direction::Capture).unwrap() {
+    for device in &enumerator
+        .get_device_collection(&Direction::Capture)
+        .unwrap()
+    {
         let dev = device.unwrap();
         let manager = dev.get_iaudiosessionmanager().unwrap();
         let enumerator = manager.get_audiosessionenumerator().unwrap();
