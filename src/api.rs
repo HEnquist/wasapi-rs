@@ -365,6 +365,14 @@ impl DeviceEnumerator {
         debug!("default device {:?}", dev.get_friendlyname());
         Ok(dev)
     }
+
+    /// Get the device of a given Id. The Id can be obtained by calling [Device::get_id()]
+    pub fn get_device(&self, device_id: &str) -> WasapiRes<Device> {
+        let w_id = PCWSTR::from_raw(HSTRING::from(device_id).as_ptr());
+        let immdevice = unsafe { self.enumerator.GetDevice(w_id)? };
+        let device = Device::from_immdevice(immdevice)?;
+        Ok(device)
+    }
 }
 
 /// Struct wrapping an [IMMDeviceCollection](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevicecollection).
