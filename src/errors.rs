@@ -32,4 +32,6 @@ pub enum WasapiError {
     RenderToCaptureDevice,
     #[error("Windows returned an error: {0}")]
     Windows(#[from] windows_core::Error),
+    #[error("String conversion error: {0}")]
+    FromUtf16Error(#[from] std::string::FromUtf16Error),
 }

@@ -1,5 +1,4 @@
 use std::slice;
-use widestring::U16CString;
 use windows::{
     core::{implement, Result, GUID, PCWSTR},
     Win32::Media::Audio::{
@@ -199,8 +198,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         newdisplayname: &PCWSTR,
         eventcontext: *const GUID,
     ) -> Result<()> {
-        let wide_name = unsafe { U16CString::from_ptr_str(newdisplayname.0) };
-        let name = wide_name.to_string_lossy();
+        let name = unsafe { newdisplayname.to_string().unwrap_or_default() };
         trace!("New display name: {name}");
         if let Some(callback) = &self.callbacks.displayname {
             let context = unsafe { *eventcontext };
@@ -210,8 +208,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
     }
 
     fn OnIconPathChanged(&self, newiconpath: &PCWSTR, eventcontext: *const GUID) -> Result<()> {
-        let wide_path = unsafe { U16CString::from_ptr_str(newiconpath.0) };
-        let path = wide_path.to_string_lossy();
+        let path = unsafe { newiconpath.to_string().unwrap_or_default() };
         trace!("New icon path: {path}");
         if let Some(callback) = &self.callbacks.iconpath {
             let context = unsafe { *eventcontext };

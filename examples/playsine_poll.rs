@@ -49,7 +49,9 @@ fn main() {
     let mut gen = SineGenerator::new(1000.0, 44100.0, 0.1);
 
     let channels = 2;
-    let device = get_default_device(&Direction::Render).unwrap();
+
+    let enumerator = DeviceEnumerator::new().unwrap();
+    let device = enumerator.get_default_device(&Direction::Render).unwrap();
     let mut audio_client = device.get_iaudioclient().unwrap();
     let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, channels, None);
 

@@ -6,7 +6,6 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
-use widestring::U16CString;
 use windows::Win32::Foundation::{CloseHandle, E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, AudioCategory_Alerts, AudioCategory_Communications,
@@ -310,32 +309,69 @@ impl fmt::Display for DeviceState {
     }
 }
 
-/// Get the default playback or capture device for the console role
-pub fn get_default_device(direction: &Direction) -> WasapiRes<Device> {
-    get_default_device_for_role(direction, &Role::Console)
-}
-
-/// Get the default playback or capture device for a specific role
-pub fn get_default_device_for_role(direction: &Direction, role: &Role) -> WasapiRes<Device> {
-    let dir = direction.into();
-    let e_role = role.into();
-
-    let enumerator: IMMDeviceEnumerator =
-        unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
-    let device = unsafe { enumerator.GetDefaultAudioEndpoint(dir, e_role)? };
-
-    let dev = Device {
-        device,
-        direction: *direction,
-    };
-    debug!("default device {:?}", dev.get_friendlyname());
-    Ok(dev)
-}
-
 /// Calculate a period in units of 100ns that corresponds to the given number of buffer frames at the given sample rate.
 /// See the [IAudioClient documentation](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize#remarks).
 pub fn calculate_period_100ns(frames: i64, samplerate: i64) -> i64 {
     ((10000.0 * 1000.0 / samplerate as f64 * frames as f64) + 0.5) as i64
+}
+
+/// Struct wrapping an [IMMDeviceEnumerator](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdeviceenumerator)
+pub struct DeviceEnumerator {
+    enumerator: IMMDeviceEnumerator,
+}
+
+impl DeviceEnumerator {
+    /// Create a new [DeviceEnumerator]
+    pub fn new() -> WasapiRes<DeviceEnumerator> {
+        let enumerator: IMMDeviceEnumerator =
+            unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
+        Ok(DeviceEnumerator { enumerator })
+    }
+
+    /// Get an [IMMDeviceCollection] of all active playback or capture devices
+    pub fn get_device_collection(&self, direction: &Direction) -> WasapiRes<DeviceCollection> {
+        let dir: EDataFlow = direction.into();
+        let devs = unsafe {
+            self.enumerator
+                .EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE)?
+        };
+        Ok(DeviceCollection {
+            collection: devs,
+            direction: *direction,
+        })
+    }
+
+    /// Get the default playback or capture device for the console role
+    pub fn get_default_device(&self, direction: &Direction) -> WasapiRes<Device> {
+        self.get_default_device_for_role(direction, &Role::Console)
+    }
+
+    /// Get the default playback or capture device for a specific role
+    pub fn get_default_device_for_role(
+        &self,
+        direction: &Direction,
+        role: &Role,
+    ) -> WasapiRes<Device> {
+        let dir = direction.into();
+        let e_role = role.into();
+
+        let device = unsafe { self.enumerator.GetDefaultAudioEndpoint(dir, e_role)? };
+
+        let dev = Device {
+            device,
+            direction: *direction,
+        };
+        debug!("default device {:?}", dev.get_friendlyname());
+        Ok(dev)
+    }
+
+    /// Get the device of a given Id. The Id can be obtained by calling [Device::get_id()]
+    pub fn get_device(&self, device_id: &str) -> WasapiRes<Device> {
+        let w_id = PCWSTR::from_raw(HSTRING::from(device_id).as_ptr());
+        let immdevice = unsafe { self.enumerator.GetDevice(w_id)? };
+        let device = Device::from_immdevice(immdevice)?;
+        Ok(device)
+    }
 }
 
 /// Struct wrapping an [IMMDeviceCollection](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevicecollection).
@@ -345,18 +381,6 @@ pub struct DeviceCollection {
 }
 
 impl DeviceCollection {
-    /// Get an [IMMDeviceCollection] of all active playback or capture devices
-    pub fn new(direction: &Direction) -> WasapiRes<DeviceCollection> {
-        let dir: EDataFlow = direction.into();
-        let enumerator: IMMDeviceEnumerator =
-            unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
-        let devs = unsafe { enumerator.EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE)? };
-        Ok(DeviceCollection {
-            collection: devs,
-            direction: *direction,
-        })
-    }
-
     /// Get the number of devices in an [IMMDeviceCollection]
     pub fn get_nbr_devices(&self) -> WasapiRes<u32> {
         let count = unsafe { self.collection.GetCount()? };
@@ -539,9 +563,8 @@ impl Device {
     /// Parse a device string property to String
     fn parse_string_property(prop: &PROPVARIANT) -> WasapiRes<String> {
         let propstr = unsafe { PropVariantToStringAlloc(prop)? };
-        let wide_name = unsafe { U16CString::from_ptr_str(propstr.0) };
+        let name = unsafe { propstr.to_string()? };
         unsafe { CoTaskMemFree(Some(propstr.0 as _)) };
-        let name = wide_name.to_string_lossy();
         trace!("name: {name}");
         Ok(name)
     }
@@ -560,9 +583,10 @@ impl Device {
     /// Get the Id of an [IMMDevice]
     pub fn get_id(&self) -> WasapiRes<String> {
         let idstr = unsafe { self.device.GetId()? };
-        let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
+        //let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
+        let id = unsafe { idstr.to_string()? };
         unsafe { CoTaskMemFree(Some(idstr.0 as _)) };
-        let id = wide_id.to_string_lossy();
+        //let id = wide_id.to_string_lossy();
         trace!("id: {id}");
         Ok(id)
     }

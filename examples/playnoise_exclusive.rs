@@ -25,8 +25,10 @@ fn main() {
 
     initialize_mta().unwrap();
 
+    let enumerator = DeviceEnumerator::new().unwrap();
+
     let channels = 2;
-    let device = get_default_device(&Direction::Render).unwrap();
+    let device = enumerator.get_default_device(&Direction::Render).unwrap();
     let mut audio_client = device.get_iaudioclient().unwrap();
     let desired_format = WaveFormat::new(24, 24, &SampleType::Int, 48000, channels, None);
 

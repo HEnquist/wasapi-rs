@@ -12,7 +12,8 @@ type Res<T> = Result<T, Box<dyn error::Error>>;
 
 // Playback loop, play samples received from channel
 fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
-    let device = get_default_device(&Direction::Render)?;
+    let enumerator = DeviceEnumerator::new()?;
+    let device = enumerator.get_default_device(&Direction::Render)?;
     let mut audio_client = device.get_iaudioclient()?;
     let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
 
@@ -83,7 +84,8 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
 
 // Capture loop, capture samples and send in chunks of "chunksize" frames to channel
 fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize) -> Res<()> {
-    let device = get_default_device(&Direction::Capture)?;
+    let enumerator = DeviceEnumerator::new()?;
+    let device = enumerator.get_default_device(&Direction::Capture)?;
     let mut audio_client = device.get_iaudioclient()?;
 
     let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
