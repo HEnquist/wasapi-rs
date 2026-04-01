@@ -850,6 +850,8 @@ impl AudioClient {
                             wave_fmt: temp_fmt_ext,
                         }
                     } else {
+                        unsafe { CoTaskMemFree(Some(supported_format.cast())) };
+
                         debug!("got the nearest matching format as a WAVEFORMATEX, converting..");
                         WaveFormat::from_waveformatex(temp_fmt)?
                     };
