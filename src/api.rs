@@ -762,14 +762,21 @@ impl AudioClient {
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
         let temp_fmt_ptr = unsafe { self.client.GetMixFormat()? };
         let temp_fmt = unsafe { *temp_fmt_ptr };
+
         let mix_format =
             if temp_fmt.cbSize == 22 && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE {
-                unsafe {
+                let format = unsafe {
                     WaveFormat {
                         wave_fmt: (temp_fmt_ptr as *const _ as *const WAVEFORMATEXTENSIBLE).read(),
                     }
-                }
+                };
+
+                unsafe { CoTaskMemFree(Some(temp_fmt_ptr.cast())) };
+
+                format
             } else {
+                unsafe { CoTaskMemFree(Some(temp_fmt_ptr.cast())) };
+
                 WaveFormat::from_waveformatex(temp_fmt)?
             };
         Ok(mix_format)
@@ -836,10 +843,15 @@ impl AudioClient {
                         let temp_fmt_ext: WAVEFORMATEXTENSIBLE = unsafe {
                             (supported_format as *const _ as *const WAVEFORMATEXTENSIBLE).read()
                         };
+
+                        unsafe { CoTaskMemFree(Some(supported_format.cast())) };
+
                         WaveFormat {
                             wave_fmt: temp_fmt_ext,
                         }
                     } else {
+                        unsafe { CoTaskMemFree(Some(supported_format.cast())) };
+
                         debug!("got the nearest matching format as a WAVEFORMATEX, converting..");
                         WaveFormat::from_waveformatex(temp_fmt)?
                     };
