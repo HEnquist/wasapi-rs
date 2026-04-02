@@ -531,10 +531,10 @@ impl Device {
     /// that flows between the audio engine and the audio endpoint device when the device operates in shared mode.
     pub fn get_device_format(&self) -> WasapiRes<WaveFormat> {
         let data = self.get_blob_property(&PKEY_AudioEngine_DeviceFormat)?;
-        // SAFETY: PKEY_AudioEngine_DeviceFormat is guaranteed to be a WAVEFORMATEX structure based on MSFT docs:
+        // PKEY_AudioEngine_DeviceFormat contains a WAVEFORMATEX/WAVEFORMATEXTENSIBLE blob:
         // https://learn.microsoft.com/en-us/windows/win32/coreaudio/pkey-audioengine-deviceformat
-        let waveformatex: &WAVEFORMATEX = unsafe { &*data.as_ptr().cast() };
-        WaveFormat::parse(waveformatex)
+        // The blob can be byte-aligned only, so parse without creating aligned references.
+        WaveFormat::parse_from_blob_bytes(&data)
     }
 
     /// Read a string property from an [IMMDevice]

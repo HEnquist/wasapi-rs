@@ -89,6 +89,34 @@ impl fmt::Debug for WaveFormat {
 }
 
 impl WaveFormat {
+    /// Parse a potentially unaligned byte slice containing a WAVEFORMATEX or WAVEFORMATEXTENSIBLE.
+    pub fn parse_from_blob_bytes(blob: &[u8]) -> WasapiRes<Self> {
+        if blob.len() < size_of::<WAVEFORMATEX>() {
+            return Err(WasapiError::UnsupportedFormat);
+        }
+
+        let waveformatex: WAVEFORMATEX = unsafe { std::ptr::read_unaligned(blob.as_ptr().cast()) };
+
+        if waveformatex.wFormatTag == WAVE_FORMAT_EXTENSIBLE as u16 {
+            const ATLEAST_SIZE: usize =
+                size_of::<WAVEFORMATEXTENSIBLE>() - size_of::<WAVEFORMATEX>();
+            if waveformatex.cbSize < ATLEAST_SIZE as u16 {
+                return Err(WasapiError::UnsupportedFormat);
+            }
+
+            let declared_size = size_of::<WAVEFORMATEX>() + waveformatex.cbSize as usize;
+            if blob.len() < declared_size {
+                return Err(WasapiError::UnsupportedFormat);
+            }
+
+            let waveformatextensible: WAVEFORMATEXTENSIBLE =
+                unsafe { std::ptr::read_unaligned(blob.as_ptr().cast()) };
+            return Ok(waveformatextensible.into());
+        }
+
+        Self::from_waveformatex(waveformatex)
+    }
+
     /// Parse a [WAVEFORMATEX](https://docs.microsoft.com/en-us/previous-versions/dd757713(v=vs.85)) structure and
     /// return a [WaveFormat] instance. If the underlying structure is a WAVEFORMATEXTENSIBLE, as specified by
     /// wFormatTag, then use as-is. If not, assume it is only a WAVEFORMATEX structure.
