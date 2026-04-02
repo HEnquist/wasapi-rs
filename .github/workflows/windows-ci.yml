@@ -36,7 +36,7 @@ jobs:
 
       - name: Cargo clippy
         if: ${{ always() }}
-        run: cargo clippy --workspace --all-targets
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Cargo test
         if: ${{ always() }}
