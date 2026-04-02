@@ -1,6 +1,6 @@
 [package]
 name = "wasapi"
-version = "0.22.0"
+version = "0.23.0"
 edition = "2021"
 rust-version = "1.74"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
@@ -29,15 +29,15 @@ features = ["Foundation",
             "Win32_Security",]
 
 [dependencies]
-log = "0.4.22"
+log = "0.4"
 num-integer = "0.1"
 windows-core = "0.62"
-thiserror = "2.0.9"
+thiserror = "2.0"
 
 [dev-dependencies]
-simplelog = "0.12.2"
-rand = "0.9.1"
-sysinfo = "0.37.1"
+simplelog = "0.12"
+rand = "0.10"
+sysinfo = "0.38"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"

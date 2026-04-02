@@ -533,7 +533,7 @@ impl Device {
         let data = self.get_blob_property(&PKEY_AudioEngine_DeviceFormat)?;
         // SAFETY: PKEY_AudioEngine_DeviceFormat is guaranteed to be a WAVEFORMATEX structure based on MSFT docs:
         // https://learn.microsoft.com/en-us/windows/win32/coreaudio/pkey-audioengine-deviceformat
-        let waveformatex: &WAVEFORMATEX = unsafe { &*(data.as_ptr() as *const _) };
+        let waveformatex: &WAVEFORMATEX = unsafe { &*data.as_ptr().cast() };
         WaveFormat::parse(waveformatex)
     }
 
@@ -564,7 +564,7 @@ impl Device {
     fn parse_string_property(prop: &PROPVARIANT) -> WasapiRes<String> {
         let propstr = unsafe { PropVariantToStringAlloc(prop)? };
         let name = unsafe { propstr.to_string()? };
-        unsafe { CoTaskMemFree(Some(propstr.0 as _)) };
+        unsafe { CoTaskMemFree(Some(propstr.0.cast())) };
         trace!("name: {name}");
         Ok(name)
     }
@@ -585,7 +585,7 @@ impl Device {
         let idstr = unsafe { self.device.GetId()? };
         //let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
         let id = unsafe { idstr.to_string()? };
-        unsafe { CoTaskMemFree(Some(idstr.0 as _)) };
+        unsafe { CoTaskMemFree(Some(idstr.0.cast())) };
         //let id = wide_id.to_string_lossy();
         trace!("id: {id}");
         Ok(id)
@@ -706,7 +706,7 @@ impl AudioClient {
                         Anonymous: PROPVARIANT_0_0_0 {
                             blob: BLOB {
                                 cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
-                                pBlobData: pinned_params.get_mut() as *const _ as *mut _,
+                                pBlobData: std::ptr::from_mut(pinned_params.get_mut()).cast(),
                             },
                         },
                     }),
@@ -715,7 +715,7 @@ impl AudioClient {
 
             let activation_prop = ManuallyDrop::new(raw_prop);
             let pinned_prop = Pin::new(activation_prop.deref());
-            let activation_params = Some(pinned_prop.get_ref() as *const _);
+            let activation_params = Some(std::ptr::from_ref(pinned_prop.get_ref()));
 
             // Create completion handler
             let setup = Arc::new((Mutex::new(false), Condvar::new()));
@@ -767,7 +767,7 @@ impl AudioClient {
             if temp_fmt.cbSize == 22 && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE {
                 let format = unsafe {
                     WaveFormat {
-                        wave_fmt: (temp_fmt_ptr as *const _ as *const WAVEFORMATEXTENSIBLE).read(),
+                        wave_fmt: temp_fmt_ptr.cast::<WAVEFORMATEXTENSIBLE>().read(),
                     }
                 };
 
@@ -840,9 +840,8 @@ impl AudioClient {
                         && temp_fmt.wFormatTag as u32 == WAVE_FORMAT_EXTENSIBLE
                     {
                         debug!("got the nearest matching format as a WAVEFORMATEXTENSIBLE");
-                        let temp_fmt_ext: WAVEFORMATEXTENSIBLE = unsafe {
-                            (supported_format as *const _ as *const WAVEFORMATEXTENSIBLE).read()
-                        };
+                        let temp_fmt_ext: WAVEFORMATEXTENSIBLE =
+                            unsafe { supported_format.cast::<WAVEFORMATEXTENSIBLE>().read() };
 
                         unsafe { CoTaskMemFree(Some(supported_format.cast())) };
 
@@ -1863,16 +1862,21 @@ impl AudioEffectsManager {
                 .GetAudioEffects(&mut audio_effects, &mut num_effects)?;
         }
 
-        if num_effects > 0 {
+        let effects = if num_effects > 0 {
             let effects_slice =
                 unsafe { slice::from_raw_parts(audio_effects, num_effects as usize) };
             let effects_vec = effects_slice.to_vec();
-            // Free the memory allocated for the audio effects.
-            unsafe { CoTaskMemFree(Some(audio_effects as *mut _)) };
-            Ok(Some(effects_vec))
+            Some(effects_vec)
         } else {
-            Ok(None)
+            None
+        };
+
+        if !audio_effects.is_null() {
+            // Free the memory allocated for the audio effects.
+            unsafe { CoTaskMemFree(Some(audio_effects.cast())) };
         }
+
+        Ok(effects)
     }
 }
 

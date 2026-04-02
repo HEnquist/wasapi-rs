@@ -101,7 +101,7 @@ impl WaveFormat {
             }
             // SAFETY: Both wFormatTag and size check passed, so the pointed-to memory is a full WAVEFORMATEXTENSIBLE.
             let waveformatextensible: WAVEFORMATEXTENSIBLE = unsafe {
-                std::ptr::read(waveformatex as *const WAVEFORMATEX as *const WAVEFORMATEXTENSIBLE)
+                std::ptr::read(std::ptr::from_ref(waveformatex).cast::<WAVEFORMATEXTENSIBLE>())
             };
             return Ok(waveformatextensible.into());
         }
