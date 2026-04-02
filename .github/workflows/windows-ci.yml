@@ -1,0 +1,63 @@
+name: Windows CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  release:
+    types:
+      - published
+
+jobs:
+  check-and-test:
+    if: ${{ github.event_name != 'release' }}
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cargo check (all targets)
+        run: cargo check --workspace --all-targets
+
+      - name: Cargo check (examples)
+        if: ${{ always() }}
+        run: cargo check --workspace --examples
+
+      - name: Cargo fmt (check)
+        if: ${{ always() }}
+        run: cargo fmt --all -- --check
+
+      - name: Cargo clippy
+        if: ${{ always() }}
+        run: cargo clippy --workspace --all-targets
+
+      - name: Cargo test
+        if: ${{ always() }}
+        run: cargo test --workspace --all-targets
+
+      - name: Cargo publish (dry run)
+        if: ${{ always() }}
+        run: cargo publish --dry-run
+
+  publish:
+    if: ${{ github.event_name == 'release' && github.event.action == 'published' }}
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish
