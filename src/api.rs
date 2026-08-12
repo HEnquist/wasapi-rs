@@ -1106,14 +1106,6 @@ impl AudioClient {
         Ok(buffer_frame_count)
     }
 
-    #[deprecated(
-        since = "0.17.0",
-        note = "please use the new function name `get_buffer_size` instead"
-    )]
-    pub fn get_bufferframecount(&self) -> WasapiRes<u32> {
-        self.get_buffer_size()
-    }
-
     /// Get current padding in frames.
     /// This represents the number of frames currently in the buffer, for both capture and render devices.
     /// The exact meaning depends on how the AudioClient was initialized, see
@@ -1694,6 +1686,7 @@ impl BufferFlags {
         }
     }
 
+    /// Create a new [BufferFlags] struct with all flags set to false.
     pub fn none() -> Self {
         BufferFlags {
             data_discontinuity: false,
