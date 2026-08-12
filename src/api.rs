@@ -1041,15 +1041,18 @@ impl AudioClient {
             }
             _ => 0,
         };
-        match stream_mode {
-            StreamMode::PollingShared { autoconvert, .. }
-            | StreamMode::EventsShared { autoconvert, .. } => {
-                if *autoconvert {
-                    streamflags |= AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
-                        | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
-                }
+        if matches!(
+            stream_mode,
+            StreamMode::PollingShared {
+                autoconvert: true,
+                ..
+            } | StreamMode::EventsShared {
+                autoconvert: true,
+                ..
             }
-            _ => {}
+        ) {
+            streamflags |=
+                AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
         }
         if timing == TimingMode::Events {
             streamflags |= AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
