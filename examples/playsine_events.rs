@@ -72,6 +72,24 @@ fn main() {
 
     let render_client = audio_client.get_audiorenderclient().unwrap();
 
+    let mut write_frames = |nbr_frames: usize| {
+        let mut data = vec![0u8; nbr_frames * blockalign as usize];
+        for frame in data.chunks_exact_mut(blockalign as usize) {
+            let sample = gen.next().unwrap();
+            let sample_bytes = sample.to_le_bytes();
+            for value in frame.chunks_exact_mut(blockalign as usize / channels) {
+                for (bufbyte, sinebyte) in value.iter_mut().zip(sample_bytes.iter()) {
+                    *bufbyte = *sinebyte;
+                }
+            }
+        }
+        trace!("write {} frames", nbr_frames);
+        render_client
+            .write_to_device(nbr_frames, &data, None)
+            .unwrap();
+        trace!("write ok");
+    };
+
     let mut callbacks = EventCallbacks::new();
 
     callbacks.set_simple_volume_callback(move |vol, mute, _guid| {
@@ -87,30 +105,20 @@ fn main() {
     let _registered_events = sessioncontrol
         .register_session_notification(callbacks)
         .unwrap();
+    // Fill the buffer before starting the stream, so that playback starts with
+    // real audio instead of an empty buffer.
+    // https://learn.microsoft.com/en-us/windows/win32/coreaudio/rendering-a-stream
+    let buffer_frame_count = audio_client.get_available_space_in_frames().unwrap();
+    write_frames(buffer_frame_count as usize);
+
     audio_client.start_stream().unwrap();
     loop {
-        let buffer_frame_count = audio_client.get_available_space_in_frames().unwrap();
-
-        let mut data = vec![0u8; buffer_frame_count as usize * blockalign as usize];
-        for frame in data.chunks_exact_mut(blockalign as usize) {
-            let sample = gen.next().unwrap();
-            let sample_bytes = sample.to_le_bytes();
-            for value in frame.chunks_exact_mut(blockalign as usize / channels) {
-                for (bufbyte, sinebyte) in value.iter_mut().zip(sample_bytes.iter()) {
-                    *bufbyte = *sinebyte;
-                }
-            }
-        }
-
-        trace!("write");
-        render_client
-            .write_to_device(buffer_frame_count as usize, &data, None)
-            .unwrap();
-        trace!("write ok");
         if h_event.wait_for_event(1000).is_err() {
             error!("error, stopping playback");
             audio_client.stop_stream().unwrap();
             break;
         }
+        let buffer_frame_count = audio_client.get_available_space_in_frames().unwrap();
+        write_frames(buffer_frame_count as usize);
     }
 }

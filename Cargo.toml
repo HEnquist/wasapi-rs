@@ -1,6 +1,6 @@
 [package]
 name = "wasapi"
-version = "0.23.0"
+version = "0.24.0"
 edition = "2021"
 rust-version = "1.76"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]

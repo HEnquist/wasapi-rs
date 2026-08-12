@@ -14,7 +14,7 @@ fn main() {
         let manager = dev.get_iaudiosessionmanager().unwrap();
         let enumerator = manager.get_audiosessionenumerator().unwrap();
 
-        println!("Device: {:?}", &dev.get_friendlyname().unwrap());
+        println!("Device: {:?}", dev.get_friendlyname().unwrap());
 
         for i in 0..enumerator.get_count().unwrap() {
             let control = enumerator.get_session(i).unwrap();

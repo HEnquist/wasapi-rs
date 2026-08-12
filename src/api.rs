@@ -367,8 +367,9 @@ impl DeviceEnumerator {
 
     /// Get the device of a given Id. The Id can be obtained by calling [Device::get_id()]
     pub fn get_device(&self, device_id: &str) -> WasapiRes<Device> {
-        let w_id = PCWSTR::from_raw(HSTRING::from(device_id).as_ptr());
-        let immdevice = unsafe { self.enumerator.GetDevice(w_id)? };
+        // Keep the HSTRING in a variable, to make sure it outlives the call to GetDevice.
+        let w_id = HSTRING::from(device_id);
+        let immdevice = unsafe { self.enumerator.GetDevice(&w_id)? };
         let device = Device::from_immdevice(immdevice)?;
         Ok(device)
     }
@@ -1040,15 +1041,18 @@ impl AudioClient {
             }
             _ => 0,
         };
-        match stream_mode {
-            StreamMode::PollingShared { autoconvert, .. }
-            | StreamMode::EventsShared { autoconvert, .. } => {
-                if *autoconvert {
-                    streamflags |= AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
-                        | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
-                }
+        if matches!(
+            stream_mode,
+            StreamMode::PollingShared {
+                autoconvert: true,
+                ..
+            } | StreamMode::EventsShared {
+                autoconvert: true,
+                ..
             }
-            _ => {}
+        ) {
+            streamflags |=
+                AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
         }
         if timing == TimingMode::Events {
             streamflags |= AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
@@ -1105,14 +1109,6 @@ impl AudioClient {
         Ok(buffer_frame_count)
     }
 
-    #[deprecated(
-        since = "0.17.0",
-        note = "please use the new function name `get_buffer_size` instead"
-    )]
-    pub fn get_bufferframecount(&self) -> WasapiRes<u32> {
-        self.get_buffer_size()
-    }
-
     /// Get current padding in frames.
     /// This represents the number of frames currently in the buffer, for both capture and render devices.
     /// The exact meaning depends on how the AudioClient was initialized, see
@@ -1144,6 +1140,12 @@ impl AudioClient {
     }
 
     /// Start the stream on an [IAudioClient]
+    ///
+    /// For playback, fill the buffer with data before starting the stream,
+    /// see [Rendering a Stream](https://learn.microsoft.com/en-us/windows/win32/coreaudio/rendering-a-stream).
+    /// Use [AudioClient::get_available_space_in_frames()] to get the number of frames to write.
+    /// When using [TimingMode::Events], the event should then be waited for
+    /// at the start of the playback loop, before writing more data.
     pub fn start_stream(&self) -> WasapiRes<()> {
         unsafe { self.client.Start()? };
         Ok(())
@@ -1687,6 +1689,7 @@ impl BufferFlags {
         }
     }
 
+    /// Create a new [BufferFlags] struct with all flags set to false.
     pub fn none() -> Self {
         BufferFlags {
             data_discontinuity: false,
@@ -1899,10 +1902,12 @@ impl AcousticEchoCancellationControl {
         &self,
         endpoint_id: Option<String>,
     ) -> WasapiRes<()> {
-        let endpoint_id = if let Some(endpoint_id) = endpoint_id {
-            PCWSTR::from_raw(HSTRING::from(endpoint_id).as_ptr())
-        } else {
-            PCWSTR::null()
+        // Keep the HSTRING in a variable, to make sure it outlives the call to
+        // SetEchoCancellationRenderEndpoint.
+        let w_id = endpoint_id.map(HSTRING::from);
+        let endpoint_id = match &w_id {
+            Some(id) => PCWSTR::from_raw(id.as_ptr()),
+            None => PCWSTR::null(),
         };
         unsafe {
             self.control

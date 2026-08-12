@@ -14,7 +14,7 @@ fn main() {
         let state = &dev.get_state().unwrap();
         println!(
             "Device: {:?}. State: {:?}",
-            &dev.get_friendlyname().unwrap(),
+            dev.get_friendlyname().unwrap(),
             state
         );
     }
