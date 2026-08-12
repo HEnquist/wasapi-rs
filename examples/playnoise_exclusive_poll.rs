@@ -149,12 +149,8 @@ fn main() {
         sleep_period.as_millis()
     );
 
-    audio_client.start_stream().unwrap();
-
-    loop {
-        let buffer_frame_count = audio_client.get_available_space_in_frames().unwrap();
-
-        let mut data = vec![0u8; buffer_frame_count as usize * blockalign as usize];
+    let mut write_frames = |nbr_frames: usize| {
+        let mut data = vec![0u8; nbr_frames * blockalign as usize];
         for frame in data.chunks_exact_mut(blockalign as usize) {
             let sample: u32 = rng.random();
             let sample_bytes = sample.to_le_bytes();
@@ -164,12 +160,24 @@ fn main() {
                 }
             }
         }
-
-        debug!("write {} frames", buffer_frame_count);
+        debug!("write {} frames", nbr_frames);
         render_client
-            .write_to_device(buffer_frame_count as usize, &data, None)
+            .write_to_device(nbr_frames, &data, None)
             .unwrap();
         trace!("write ok");
+    };
+
+    // Fill the buffer before starting the stream, so that playback starts with
+    // real audio instead of an empty buffer.
+    // https://learn.microsoft.com/en-us/windows/win32/coreaudio/rendering-a-stream
+    let buffer_frame_count = audio_client.get_available_space_in_frames().unwrap();
+    write_frames(buffer_frame_count as usize);
+
+    audio_client.start_stream().unwrap();
+
+    loop {
         thread::sleep(sleep_period);
+        let buffer_frame_count = audio_client.get_available_space_in_frames().unwrap();
+        write_frames(buffer_frame_count as usize);
     }
 }

@@ -367,8 +367,9 @@ impl DeviceEnumerator {
 
     /// Get the device of a given Id. The Id can be obtained by calling [Device::get_id()]
     pub fn get_device(&self, device_id: &str) -> WasapiRes<Device> {
-        let w_id = PCWSTR::from_raw(HSTRING::from(device_id).as_ptr());
-        let immdevice = unsafe { self.enumerator.GetDevice(w_id)? };
+        // Keep the HSTRING in a variable, to make sure it outlives the call to GetDevice.
+        let w_id = HSTRING::from(device_id);
+        let immdevice = unsafe { self.enumerator.GetDevice(&w_id)? };
         let device = Device::from_immdevice(immdevice)?;
         Ok(device)
     }
@@ -1144,6 +1145,12 @@ impl AudioClient {
     }
 
     /// Start the stream on an [IAudioClient]
+    ///
+    /// For playback, fill the buffer with data before starting the stream,
+    /// see [Rendering a Stream](https://learn.microsoft.com/en-us/windows/win32/coreaudio/rendering-a-stream).
+    /// Use [AudioClient::get_available_space_in_frames()] to get the number of frames to write.
+    /// When using [TimingMode::Events], the event should then be waited for
+    /// at the start of the playback loop, before writing more data.
     pub fn start_stream(&self) -> WasapiRes<()> {
         unsafe { self.client.Start()? };
         Ok(())
@@ -1899,10 +1906,12 @@ impl AcousticEchoCancellationControl {
         &self,
         endpoint_id: Option<String>,
     ) -> WasapiRes<()> {
-        let endpoint_id = if let Some(endpoint_id) = endpoint_id {
-            PCWSTR::from_raw(HSTRING::from(endpoint_id).as_ptr())
-        } else {
-            PCWSTR::null()
+        // Keep the HSTRING in a variable, to make sure it outlives the call to
+        // SetEchoCancellationRenderEndpoint.
+        let w_id = endpoint_id.map(HSTRING::from);
+        let endpoint_id = match &w_id {
+            Some(id) => PCWSTR::from_raw(id.as_ptr()),
+            None => PCWSTR::null(),
         };
         unsafe {
             self.control
