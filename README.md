@@ -20,6 +20,7 @@ The following is a selection of the functionality currently available in the lib
 - Event-driven and polled buffering
 - Loopback capture
 - Notifications for volume change, device disconnect etc
+- Notifications when devices are added or removed, or when the default device changes
 - …and additional features beyond this list
 
 
@@ -39,3 +40,4 @@ The following is a selection of the functionality currently available in the lib
 | `processes`                | Lists all audio devices and the processes that are using them, with the peak level of each session.    |
 | `record_application`       | Records audio from a single application, and saves the raw samples to a file.                          |
 | `aec`                      | Captures audio with Acoustic Echo Cancellation (AEC) enabled and saves the raw data to a file.         |
+| `device_notifications`     | Listens for devices being added, removed or changed, and for changes of the default device.            |

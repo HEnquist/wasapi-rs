@@ -40,13 +40,13 @@ use windows::{
         eCapture, eCommunications, eConsole, eMultimedia, eRender, AudioSessionStateActive,
         AudioSessionStateExpired, AudioSessionStateInactive, IAudioCaptureClient, IAudioClient,
         IAudioClock, IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
-        IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator,
+        IMMDeviceCollection, IMMDeviceEnumerator, IMMNotificationClient, MMDeviceEnumerator,
         AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
         AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
-        DEVICE_STATE_DISABLED, DEVICE_STATE_NOTPRESENT, DEVICE_STATE_UNPLUGGED, WAVEFORMATEX,
-        WAVEFORMATEXTENSIBLE,
+        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE,
+        DEVICE_STATE_ACTIVE, DEVICE_STATE_DISABLED, DEVICE_STATE_NOTPRESENT,
+        DEVICE_STATE_UNPLUGGED, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
     Win32::System::Com::StructuredStorage::{
@@ -61,7 +61,10 @@ use windows::{
 };
 use windows_core::{implement, IUnknown, Interface, Ref, HSTRING, PCWSTR, PWSTR};
 
-use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WasapiError, WaveFormat};
+use crate::{
+    make_channelmasks, AudioSessionEvents, DeviceEventCallbacks, EventCallbacks,
+    NotificationClient, WasapiError, WaveFormat,
+};
 
 pub(crate) type WasapiRes<T> = Result<T, WasapiError>;
 
@@ -281,7 +284,7 @@ impl fmt::Display for SessionState {
 
 /// Possible states for an [IMMDevice], an enum representing the
 /// [DEVICE_STATE_XXX constants](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-state-xxx-constants)
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DeviceState {
     /// The audio endpoint device is active. That is, the audio adapter that connects to the
     /// endpoint device is present and enabled. In addition, if the endpoint device plugs int
@@ -308,6 +311,27 @@ impl fmt::Display for DeviceState {
             DeviceState::NotPresent => write!(f, "NotPresent"),
             DeviceState::Unplugged => write!(f, "Unplugged"),
         }
+    }
+}
+
+impl TryFrom<&DEVICE_STATE> for DeviceState {
+    type Error = WasapiError;
+
+    fn try_from(value: &DEVICE_STATE) -> Result<Self, Self::Error> {
+        match *value {
+            x if x == DEVICE_STATE_ACTIVE => Ok(Self::Active),
+            x if x == DEVICE_STATE_DISABLED => Ok(Self::Disabled),
+            x if x == DEVICE_STATE_NOTPRESENT => Ok(Self::NotPresent),
+            x if x == DEVICE_STATE_UNPLUGGED => Ok(Self::Unplugged),
+            x => Err(WasapiError::IllegalDeviceState(x.0)),
+        }
+    }
+}
+impl TryFrom<DEVICE_STATE> for DeviceState {
+    type Error = WasapiError;
+
+    fn try_from(value: DEVICE_STATE) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
     }
 }
 
@@ -382,6 +406,52 @@ impl DeviceEnumerator {
         let immdevice = unsafe { self.enumerator.GetDevice(&w_id)? };
         let device = Device::from_immdevice(immdevice)?;
         Ok(device)
+    }
+
+    /// Register to receive notifications when audio endpoint devices are
+    /// added or removed, when the state or properties of a device change,
+    /// or when a different device becomes the default.
+    /// Returns a [DeviceEventRegistration] struct.
+    /// The notifications are unregistered when this struct is dropped.
+    /// Make sure to store the [DeviceEventRegistration] in a variable that remains
+    /// in scope for as long as the event notifications are needed.
+    ///
+    /// The function takes ownership of the provided [DeviceEventCallbacks].
+    ///
+    /// The callbacks are called from a thread owned by the Windows audio system.
+    /// They should return quickly, and must not call back into the
+    /// [DeviceEnumerator] that they were registered on.
+    pub fn register_notification_callback(
+        &self,
+        callbacks: DeviceEventCallbacks,
+    ) -> WasapiRes<DeviceEventRegistration> {
+        let client: IMMNotificationClient = NotificationClient::new(callbacks).into();
+
+        match unsafe {
+            self.enumerator
+                .RegisterEndpointNotificationCallback(&client)
+        } {
+            Ok(()) => Ok(DeviceEventRegistration {
+                client,
+                enumerator: self.enumerator.clone(),
+            }),
+            Err(err) => Err(WasapiError::RegisterNotifications(err)),
+        }
+    }
+}
+
+/// Struct for keeping track of the registered device notifications.
+pub struct DeviceEventRegistration {
+    client: IMMNotificationClient,
+    enumerator: IMMDeviceEnumerator,
+}
+
+impl Drop for DeviceEventRegistration {
+    fn drop(&mut self) {
+        let _ = unsafe {
+            self.enumerator
+                .UnregisterEndpointNotificationCallback(&self.client)
+        };
     }
 }
 
@@ -523,14 +593,7 @@ impl Device {
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
         let state = unsafe { self.device.GetState()? };
         trace!("state: {state:?}");
-        let state_enum = match state {
-            _ if state == DEVICE_STATE_ACTIVE => DeviceState::Active,
-            _ if state == DEVICE_STATE_DISABLED => DeviceState::Disabled,
-            _ if state == DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
-            _ if state == DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
-            x => return Err(WasapiError::IllegalDeviceState(x.0)),
-        };
-        Ok(state_enum)
+        DeviceState::try_from(state)
     }
 
     /// Read the friendly name of the endpoint device (for example, "Speakers (XYZ Audio Adapter)")
