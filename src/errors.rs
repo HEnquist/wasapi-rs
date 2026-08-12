@@ -16,7 +16,7 @@ pub enum WasapiError {
     UnsupportedSubformat(windows_core::GUID),
     #[error("Client has not been initialized")]
     ClientNotInit,
-    #[error("Couldn't register session notifications: {0}")]
+    #[error("Couldn't register notifications: {0}")]
     RegisterNotifications(windows_core::Error),
     #[error("Wrong length of data, got {received}, expected exactly {expected}")]
     DataLengthMismatch { received: usize, expected: usize },

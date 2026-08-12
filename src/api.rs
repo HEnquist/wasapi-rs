@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use windows::Win32::Foundation::{CloseHandle, E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
+use windows::Win32::Media::Audio::Endpoints::IAudioMeterInformation;
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, AudioCategory_Alerts, AudioCategory_Communications,
     AudioCategory_FarFieldSpeech, AudioCategory_ForegroundOnlyMedia, AudioCategory_GameChat,
@@ -21,7 +22,8 @@ use windows::Win32::Media::Audio::{
     AUDCLNT_STREAMOPTIONS_NONE, AUDCLNT_STREAMOPTIONS_RAW, AUDIOCLIENT_ACTIVATION_PARAMS,
     AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
     AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, AUDIO_EFFECT, AUDIO_STREAM_CATEGORY,
-    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    ENDPOINT_HARDWARE_SUPPORT_METER, ENDPOINT_HARDWARE_SUPPORT_MUTE,
+    ENDPOINT_HARDWARE_SUPPORT_VOLUME, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
@@ -38,13 +40,13 @@ use windows::{
         eCapture, eCommunications, eConsole, eMultimedia, eRender, AudioSessionStateActive,
         AudioSessionStateExpired, AudioSessionStateInactive, IAudioCaptureClient, IAudioClient,
         IAudioClock, IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
-        IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator,
+        IMMDeviceCollection, IMMDeviceEnumerator, IMMNotificationClient, MMDeviceEnumerator,
         AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
         AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE_ACTIVE,
-        DEVICE_STATE_DISABLED, DEVICE_STATE_NOTPRESENT, DEVICE_STATE_UNPLUGGED, WAVEFORMATEX,
-        WAVEFORMATEXTENSIBLE,
+        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE,
+        DEVICE_STATE_ACTIVE, DEVICE_STATE_DISABLED, DEVICE_STATE_NOTPRESENT,
+        DEVICE_STATE_UNPLUGGED, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
     Win32::System::Com::StructuredStorage::{
@@ -57,9 +59,12 @@ use windows::{
     Win32::System::Com::{BLOB, STGM_READ},
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
 };
-use windows_core::{implement, IUnknown, Interface, Ref, HSTRING, PCWSTR};
+use windows_core::{implement, IUnknown, Interface, Ref, HSTRING, PCWSTR, PWSTR};
 
-use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WasapiError, WaveFormat};
+use crate::{
+    make_channelmasks, AudioSessionEvents, DeviceEventCallbacks, EventCallbacks,
+    NotificationClient, WasapiError, WaveFormat,
+};
 
 pub(crate) type WasapiRes<T> = Result<T, WasapiError>;
 
@@ -279,7 +284,7 @@ impl fmt::Display for SessionState {
 
 /// Possible states for an [IMMDevice], an enum representing the
 /// [DEVICE_STATE_XXX constants](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-state-xxx-constants)
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DeviceState {
     /// The audio endpoint device is active. That is, the audio adapter that connects to the
     /// endpoint device is present and enabled. In addition, if the endpoint device plugs int
@@ -307,6 +312,35 @@ impl fmt::Display for DeviceState {
             DeviceState::Unplugged => write!(f, "Unplugged"),
         }
     }
+}
+
+impl TryFrom<&DEVICE_STATE> for DeviceState {
+    type Error = WasapiError;
+
+    fn try_from(value: &DEVICE_STATE) -> Result<Self, Self::Error> {
+        match *value {
+            x if x == DEVICE_STATE_ACTIVE => Ok(Self::Active),
+            x if x == DEVICE_STATE_DISABLED => Ok(Self::Disabled),
+            x if x == DEVICE_STATE_NOTPRESENT => Ok(Self::NotPresent),
+            x if x == DEVICE_STATE_UNPLUGGED => Ok(Self::Unplugged),
+            x => Err(WasapiError::IllegalDeviceState(x.0)),
+        }
+    }
+}
+impl TryFrom<DEVICE_STATE> for DeviceState {
+    type Error = WasapiError;
+
+    fn try_from(value: DEVICE_STATE) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
+
+/// Convert a [PWSTR] that was allocated by a Windows API to a String,
+/// and free the memory that the pointer refers to.
+fn take_pwstr(pwstr: PWSTR) -> WasapiRes<String> {
+    let value = unsafe { pwstr.to_string() };
+    unsafe { CoTaskMemFree(Some(pwstr.0.cast())) };
+    Ok(value?)
 }
 
 /// Calculate a period in units of 100ns that corresponds to the given number of buffer frames at the given sample rate.
@@ -372,6 +406,52 @@ impl DeviceEnumerator {
         let immdevice = unsafe { self.enumerator.GetDevice(&w_id)? };
         let device = Device::from_immdevice(immdevice)?;
         Ok(device)
+    }
+
+    /// Register to receive notifications when audio endpoint devices are
+    /// added or removed, when the state or properties of a device change,
+    /// or when a different device becomes the default.
+    /// Returns a [DeviceEventRegistration] struct.
+    /// The notifications are unregistered when this struct is dropped.
+    /// Make sure to store the [DeviceEventRegistration] in a variable that remains
+    /// in scope for as long as the event notifications are needed.
+    ///
+    /// The function takes ownership of the provided [DeviceEventCallbacks].
+    ///
+    /// The callbacks are called from a thread owned by the Windows audio system.
+    /// They should return quickly, and must not call back into the
+    /// [DeviceEnumerator] that they were registered on.
+    pub fn register_notification_callback(
+        &self,
+        callbacks: DeviceEventCallbacks,
+    ) -> WasapiRes<DeviceEventRegistration> {
+        let client: IMMNotificationClient = NotificationClient::new(callbacks).into();
+
+        match unsafe {
+            self.enumerator
+                .RegisterEndpointNotificationCallback(&client)
+        } {
+            Ok(()) => Ok(DeviceEventRegistration {
+                client,
+                enumerator: self.enumerator.clone(),
+            }),
+            Err(err) => Err(WasapiError::RegisterNotifications(err)),
+        }
+    }
+}
+
+/// Struct for keeping track of the registered device notifications.
+pub struct DeviceEventRegistration {
+    client: IMMNotificationClient,
+    enumerator: IMMDeviceEnumerator,
+}
+
+impl Drop for DeviceEventRegistration {
+    fn drop(&mut self) {
+        let _ = unsafe {
+            self.enumerator
+                .UnregisterEndpointNotificationCallback(&self.client)
+        };
     }
 }
 
@@ -499,18 +579,21 @@ impl Device {
         Ok(AudioSessionManager { session_manager })
     }
 
+    /// Get the [AudioMeterInformation] for reading the peak values of this device.
+    /// This measures the combined streams of all sessions on the device.
+    pub fn get_audiometerinformation(&self) -> WasapiRes<AudioMeterInformation> {
+        let meter = unsafe {
+            self.device
+                .Activate::<IAudioMeterInformation>(CLSCTX_ALL, None)?
+        };
+        Ok(AudioMeterInformation { meter })
+    }
+
     /// Read state from an [IMMDevice]
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
         let state = unsafe { self.device.GetState()? };
         trace!("state: {state:?}");
-        let state_enum = match state {
-            _ if state == DEVICE_STATE_ACTIVE => DeviceState::Active,
-            _ if state == DEVICE_STATE_DISABLED => DeviceState::Disabled,
-            _ if state == DEVICE_STATE_NOTPRESENT => DeviceState::NotPresent,
-            _ if state == DEVICE_STATE_UNPLUGGED => DeviceState::Unplugged,
-            x => return Err(WasapiError::IllegalDeviceState(x.0)),
-        };
-        Ok(state_enum)
+        DeviceState::try_from(state)
     }
 
     /// Read the friendly name of the endpoint device (for example, "Speakers (XYZ Audio Adapter)")
@@ -564,8 +647,7 @@ impl Device {
     /// Parse a device string property to String
     fn parse_string_property(prop: &PROPVARIANT) -> WasapiRes<String> {
         let propstr = unsafe { PropVariantToStringAlloc(prop)? };
-        let name = unsafe { propstr.to_string()? };
-        unsafe { CoTaskMemFree(Some(propstr.0.cast())) };
+        let name = take_pwstr(propstr)?;
         trace!("name: {name}");
         Ok(name)
     }
@@ -584,10 +666,7 @@ impl Device {
     /// Get the Id of an [IMMDevice]
     pub fn get_id(&self) -> WasapiRes<String> {
         let idstr = unsafe { self.device.GetId()? };
-        //let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
-        let id = unsafe { idstr.to_string()? };
-        unsafe { CoTaskMemFree(Some(idstr.0.cast())) };
-        //let id = wide_id.to_string_lossy();
+        let id = take_pwstr(idstr)?;
         trace!("id: {id}");
         Ok(id)
     }
@@ -1521,6 +1600,110 @@ impl AudioSessionControl {
         unsafe { control2.SetDuckingPreference(preference)? };
 
         Ok(())
+    }
+
+    /// Get the display name of this session.
+    /// This is empty unless the client that owns the session has set a name.
+    /// When it is empty, the volume mixer shows the name of the executable instead.
+    pub fn get_display_name(&self) -> WasapiRes<String> {
+        let name = unsafe { self.control.GetDisplayName()? };
+
+        take_pwstr(name)
+    }
+
+    /// Get the path of the icon of this session.
+    /// This is empty unless the client that owns the session has set an icon.
+    pub fn get_icon_path(&self) -> WasapiRes<String> {
+        let path = unsafe { self.control.GetIconPath()? };
+
+        take_pwstr(path)
+    }
+
+    /// Get the identifier of the audio session.
+    /// All sessions of the same application on the same device share this identifier.
+    pub fn get_session_identifier(&self) -> WasapiRes<String> {
+        let control2: IAudioSessionControl2 = self.control.cast()?;
+        let id = unsafe { control2.GetSessionIdentifier()? };
+
+        take_pwstr(id)
+    }
+
+    /// Get the identifier of this particular session instance,
+    /// which is unique across all session instances.
+    pub fn get_session_instance_identifier(&self) -> WasapiRes<String> {
+        let control2: IAudioSessionControl2 = self.control.cast()?;
+        let id = unsafe { control2.GetSessionInstanceIdentifier()? };
+
+        take_pwstr(id)
+    }
+
+    /// Get the [AudioMeterInformation] for reading the peak values of this session.
+    pub fn get_audiometerinformation(&self) -> WasapiRes<AudioMeterInformation> {
+        let meter: IAudioMeterInformation = self.control.cast()?;
+
+        Ok(AudioMeterInformation { meter })
+    }
+}
+
+/// Struct wrapping an [IAudioMeterInformation](https://learn.microsoft.com/en-us/windows/win32/api/endpointvolume/nn-endpointvolume-iaudiometerinformation).
+///
+/// The peak values are the peaks of the samples that were processed
+/// since the previous call, and are not affected by the volume settings.
+pub struct AudioMeterInformation {
+    meter: IAudioMeterInformation,
+}
+
+impl AudioMeterInformation {
+    /// Get the peak value of the channel with the largest peak,
+    /// as a value between 0.0 and 1.0.
+    pub fn get_peak_value(&self) -> WasapiRes<f32> {
+        Ok(unsafe { self.meter.GetPeakValue()? })
+    }
+
+    /// Get the number of channels that the peak meter monitors.
+    pub fn get_metering_channel_count(&self) -> WasapiRes<u32> {
+        Ok(unsafe { self.meter.GetMeteringChannelCount()? })
+    }
+
+    /// Get the peak value of each channel, as values between 0.0 and 1.0.
+    pub fn get_channels_peak_values(&self) -> WasapiRes<Vec<f32>> {
+        let nbr_channels = unsafe { self.meter.GetMeteringChannelCount()? };
+        let mut peaks = vec![0.0; nbr_channels as usize];
+        unsafe { self.meter.GetChannelsPeakValues(&mut peaks)? };
+
+        Ok(peaks)
+    }
+
+    /// Query which functions the audio endpoint device implements in hardware.
+    /// This is only meaningful for a meter that was fetched from a [Device],
+    /// a meter belonging to a session always reports no hardware support.
+    pub fn query_hardware_support(&self) -> WasapiRes<HardwareSupport> {
+        let mask = unsafe { self.meter.QueryHardwareSupport()? };
+
+        Ok(HardwareSupport::new(mask))
+    }
+}
+
+/// Struct representing the [ENDPOINT_HARDWARE_SUPPORT_XXX constants](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-hardware-support-xxx-constants),
+/// describing which functions an audio endpoint device implements in hardware.
+#[derive(Debug)]
+pub struct HardwareSupport {
+    /// ENDPOINT_HARDWARE_SUPPORT_VOLUME
+    pub volume: bool,
+    /// ENDPOINT_HARDWARE_SUPPORT_MUTE
+    pub mute: bool,
+    /// ENDPOINT_HARDWARE_SUPPORT_METER
+    pub meter: bool,
+}
+
+impl HardwareSupport {
+    /// Create a new [HardwareSupport] struct from a `u32` value.
+    pub fn new(mask: u32) -> Self {
+        HardwareSupport {
+            volume: mask & ENDPOINT_HARDWARE_SUPPORT_VOLUME > 0,
+            mute: mask & ENDPOINT_HARDWARE_SUPPORT_MUTE > 0,
+            meter: mask & ENDPOINT_HARDWARE_SUPPORT_METER > 0,
+        }
     }
 }
 
