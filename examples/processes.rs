@@ -12,7 +12,13 @@ fn main() {
             let manager = dev.get_iaudiosessionmanager().unwrap();
             let sessions = manager.get_audiosessionenumerator().unwrap();
 
-            println!("Device: {:?}", dev.get_friendlyname().unwrap());
+            let dev_meter = dev.get_audiometerinformation().unwrap();
+            let dev_peak = dev_meter.get_peak_value().unwrap();
+
+            println!(
+                "Device: {:?}, peak: {dev_peak:.3}",
+                dev.get_friendlyname().unwrap()
+            );
 
             for i in 0..sessions.get_count().unwrap() {
                 let control = sessions.get_session(i).unwrap();

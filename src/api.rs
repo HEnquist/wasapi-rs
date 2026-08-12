@@ -22,7 +22,8 @@ use windows::Win32::Media::Audio::{
     AUDCLNT_STREAMOPTIONS_NONE, AUDCLNT_STREAMOPTIONS_RAW, AUDIOCLIENT_ACTIVATION_PARAMS,
     AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
     AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, AUDIO_EFFECT, AUDIO_STREAM_CATEGORY,
-    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    ENDPOINT_HARDWARE_SUPPORT_METER, ENDPOINT_HARDWARE_SUPPORT_MUTE,
+    ENDPOINT_HARDWARE_SUPPORT_VOLUME, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
@@ -506,6 +507,16 @@ impl Device {
                 .Activate::<IAudioSessionManager>(CLSCTX_ALL, None)?
         };
         Ok(AudioSessionManager { session_manager })
+    }
+
+    /// Get the [AudioMeterInformation] for reading the peak values of this device.
+    /// This measures the combined streams of all sessions on the device.
+    pub fn get_audiometerinformation(&self) -> WasapiRes<AudioMeterInformation> {
+        let meter = unsafe {
+            self.device
+                .Activate::<IAudioMeterInformation>(CLSCTX_ALL, None)?
+        };
+        Ok(AudioMeterInformation { meter })
     }
 
     /// Read state from an [IMMDevice]
@@ -1598,6 +1609,38 @@ impl AudioMeterInformation {
         unsafe { self.meter.GetChannelsPeakValues(&mut peaks)? };
 
         Ok(peaks)
+    }
+
+    /// Query which functions the audio endpoint device implements in hardware.
+    /// This is only meaningful for a meter that was fetched from a [Device],
+    /// a meter belonging to a session always reports no hardware support.
+    pub fn query_hardware_support(&self) -> WasapiRes<HardwareSupport> {
+        let mask = unsafe { self.meter.QueryHardwareSupport()? };
+
+        Ok(HardwareSupport::new(mask))
+    }
+}
+
+/// Struct representing the [ENDPOINT_HARDWARE_SUPPORT_XXX constants](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-hardware-support-xxx-constants),
+/// describing which functions an audio endpoint device implements in hardware.
+#[derive(Debug)]
+pub struct HardwareSupport {
+    /// ENDPOINT_HARDWARE_SUPPORT_VOLUME
+    pub volume: bool,
+    /// ENDPOINT_HARDWARE_SUPPORT_MUTE
+    pub mute: bool,
+    /// ENDPOINT_HARDWARE_SUPPORT_METER
+    pub meter: bool,
+}
+
+impl HardwareSupport {
+    /// Create a new [HardwareSupport] struct from a `u32` value.
+    pub fn new(mask: u32) -> Self {
+        HardwareSupport {
+            volume: mask & ENDPOINT_HARDWARE_SUPPORT_VOLUME > 0,
+            mute: mask & ENDPOINT_HARDWARE_SUPPORT_MUTE > 0,
+            meter: mask & ENDPOINT_HARDWARE_SUPPORT_METER > 0,
+        }
     }
 }
 
