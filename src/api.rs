@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use windows::Win32::Foundation::{CloseHandle, E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
+use windows::Win32::Media::Audio::Endpoints::IAudioMeterInformation;
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, AudioCategory_Alerts, AudioCategory_Communications,
     AudioCategory_FarFieldSpeech, AudioCategory_ForegroundOnlyMedia, AudioCategory_GameChat,
@@ -57,7 +58,7 @@ use windows::{
     Win32::System::Com::{BLOB, STGM_READ},
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
 };
-use windows_core::{implement, IUnknown, Interface, Ref, HSTRING, PCWSTR};
+use windows_core::{implement, IUnknown, Interface, Ref, HSTRING, PCWSTR, PWSTR};
 
 use crate::{make_channelmasks, AudioSessionEvents, EventCallbacks, WasapiError, WaveFormat};
 
@@ -307,6 +308,14 @@ impl fmt::Display for DeviceState {
             DeviceState::Unplugged => write!(f, "Unplugged"),
         }
     }
+}
+
+/// Convert a [PWSTR] that was allocated by a Windows API to a String,
+/// and free the memory that the pointer refers to.
+fn take_pwstr(pwstr: PWSTR) -> WasapiRes<String> {
+    let value = unsafe { pwstr.to_string() };
+    unsafe { CoTaskMemFree(Some(pwstr.0.cast())) };
+    Ok(value?)
 }
 
 /// Calculate a period in units of 100ns that corresponds to the given number of buffer frames at the given sample rate.
@@ -564,8 +573,7 @@ impl Device {
     /// Parse a device string property to String
     fn parse_string_property(prop: &PROPVARIANT) -> WasapiRes<String> {
         let propstr = unsafe { PropVariantToStringAlloc(prop)? };
-        let name = unsafe { propstr.to_string()? };
-        unsafe { CoTaskMemFree(Some(propstr.0.cast())) };
+        let name = take_pwstr(propstr)?;
         trace!("name: {name}");
         Ok(name)
     }
@@ -584,10 +592,7 @@ impl Device {
     /// Get the Id of an [IMMDevice]
     pub fn get_id(&self) -> WasapiRes<String> {
         let idstr = unsafe { self.device.GetId()? };
-        //let wide_id = unsafe { U16CString::from_ptr_str(idstr.0) };
-        let id = unsafe { idstr.to_string()? };
-        unsafe { CoTaskMemFree(Some(idstr.0.cast())) };
-        //let id = wide_id.to_string_lossy();
+        let id = take_pwstr(idstr)?;
         trace!("id: {id}");
         Ok(id)
     }
@@ -1521,6 +1526,78 @@ impl AudioSessionControl {
         unsafe { control2.SetDuckingPreference(preference)? };
 
         Ok(())
+    }
+
+    /// Get the display name of this session.
+    /// This is empty unless the client that owns the session has set a name.
+    /// When it is empty, the volume mixer shows the name of the executable instead.
+    pub fn get_display_name(&self) -> WasapiRes<String> {
+        let name = unsafe { self.control.GetDisplayName()? };
+
+        take_pwstr(name)
+    }
+
+    /// Get the path of the icon of this session.
+    /// This is empty unless the client that owns the session has set an icon.
+    pub fn get_icon_path(&self) -> WasapiRes<String> {
+        let path = unsafe { self.control.GetIconPath()? };
+
+        take_pwstr(path)
+    }
+
+    /// Get the identifier of the audio session.
+    /// All sessions of the same application on the same device share this identifier.
+    pub fn get_session_identifier(&self) -> WasapiRes<String> {
+        let control2: IAudioSessionControl2 = self.control.cast()?;
+        let id = unsafe { control2.GetSessionIdentifier()? };
+
+        take_pwstr(id)
+    }
+
+    /// Get the identifier of this particular session instance,
+    /// which is unique across all session instances.
+    pub fn get_session_instance_identifier(&self) -> WasapiRes<String> {
+        let control2: IAudioSessionControl2 = self.control.cast()?;
+        let id = unsafe { control2.GetSessionInstanceIdentifier()? };
+
+        take_pwstr(id)
+    }
+
+    /// Get the [AudioMeterInformation] for reading the peak values of this session.
+    pub fn get_audiometerinformation(&self) -> WasapiRes<AudioMeterInformation> {
+        let meter: IAudioMeterInformation = self.control.cast()?;
+
+        Ok(AudioMeterInformation { meter })
+    }
+}
+
+/// Struct wrapping an [IAudioMeterInformation](https://learn.microsoft.com/en-us/windows/win32/api/endpointvolume/nn-endpointvolume-iaudiometerinformation).
+///
+/// The peak values are the peaks of the samples that were processed
+/// since the previous call, and are not affected by the volume settings.
+pub struct AudioMeterInformation {
+    meter: IAudioMeterInformation,
+}
+
+impl AudioMeterInformation {
+    /// Get the peak value of the channel with the largest peak,
+    /// as a value between 0.0 and 1.0.
+    pub fn get_peak_value(&self) -> WasapiRes<f32> {
+        Ok(unsafe { self.meter.GetPeakValue()? })
+    }
+
+    /// Get the number of channels that the peak meter monitors.
+    pub fn get_metering_channel_count(&self) -> WasapiRes<u32> {
+        Ok(unsafe { self.meter.GetMeteringChannelCount()? })
+    }
+
+    /// Get the peak value of each channel, as values between 0.0 and 1.0.
+    pub fn get_channels_peak_values(&self) -> WasapiRes<Vec<f32>> {
+        let nbr_channels = unsafe { self.meter.GetMeteringChannelCount()? };
+        let mut peaks = vec![0.0; nbr_channels as usize];
+        unsafe { self.meter.GetChannelsPeakValues(&mut peaks)? };
+
+        Ok(peaks)
     }
 }
 
