@@ -1,4 +1,5 @@
 use std::slice;
+use std::string::FromUtf16Error;
 use windows::{
     core::{implement, Result, GUID, PCWSTR},
     Win32::Foundation::PROPERTYKEY,
@@ -17,13 +18,31 @@ use crate::{DeviceState, Direction, Role, SessionState};
 type OptionBox<T> = Option<Box<T>>;
 
 /// Read a [PCWSTR] that points to a string owned by the caller.
-/// Returns None if the pointer is null, which the audio system uses
+/// Returns Ok(None) if the pointer is null, which the audio system uses
 /// to signal that there is no device.
-fn read_pcwstr(pcwstr: &PCWSTR) -> Option<String> {
+/// An unreadable string gives an error, and must not be confused
+/// with the absence of a device.
+fn read_pcwstr(pcwstr: &PCWSTR) -> std::result::Result<Option<String>, FromUtf16Error> {
     if pcwstr.is_null() {
-        return None;
+        return Ok(None);
     }
-    unsafe { pcwstr.to_string().ok() }
+    unsafe { pcwstr.to_string() }.map(Some)
+}
+
+/// Read the id of the device that a notification refers to.
+/// Returns None, after logging the reason, if no usable id was provided.
+fn read_device_id(pcwstr: &PCWSTR, notification: &str) -> Option<String> {
+    match read_pcwstr(pcwstr) {
+        Ok(Some(id)) => Some(id),
+        Ok(None) => {
+            warn!("{notification}: received a null device id");
+            None
+        }
+        Err(err) => {
+            warn!("{notification}: received an unreadable device id, {err}");
+            None
+        }
+    }
 }
 
 /// A structure holding the callbacks for notifications
@@ -396,8 +415,7 @@ impl NotificationClient {
 
 impl IMMNotificationClient_Impl for NotificationClient_Impl {
     fn OnDeviceStateChanged(&self, pwstrdeviceid: &PCWSTR, dwnewstate: DEVICE_STATE) -> Result<()> {
-        let Some(id) = read_pcwstr(pwstrdeviceid) else {
-            warn!("OnDeviceStateChanged: received an unreadable device id");
+        let Some(id) = read_device_id(pwstrdeviceid, "OnDeviceStateChanged") else {
             return Ok(());
         };
         let state = match DeviceState::try_from(dwnewstate) {
@@ -415,8 +433,7 @@ impl IMMNotificationClient_Impl for NotificationClient_Impl {
     }
 
     fn OnDeviceAdded(&self, pwstrdeviceid: &PCWSTR) -> Result<()> {
-        let Some(id) = read_pcwstr(pwstrdeviceid) else {
-            warn!("OnDeviceAdded: received an unreadable device id");
+        let Some(id) = read_device_id(pwstrdeviceid, "OnDeviceAdded") else {
             return Ok(());
         };
         trace!("Device added: {id}");
@@ -427,8 +444,7 @@ impl IMMNotificationClient_Impl for NotificationClient_Impl {
     }
 
     fn OnDeviceRemoved(&self, pwstrdeviceid: &PCWSTR) -> Result<()> {
-        let Some(id) = read_pcwstr(pwstrdeviceid) else {
-            warn!("OnDeviceRemoved: received an unreadable device id");
+        let Some(id) = read_device_id(pwstrdeviceid, "OnDeviceRemoved") else {
             return Ok(());
         };
         trace!("Device removed: {id}");
@@ -445,7 +461,14 @@ impl IMMNotificationClient_Impl for NotificationClient_Impl {
         pwstrdefaultdeviceid: &PCWSTR,
     ) -> Result<()> {
         // A null id means that there is no longer a default device.
-        let id = read_pcwstr(pwstrdefaultdeviceid);
+        // An unreadable id must not be reported as no device, so it is skipped.
+        let id = match read_pcwstr(pwstrdefaultdeviceid) {
+            Ok(id) => id,
+            Err(err) => {
+                warn!("OnDefaultDeviceChanged: received an unreadable device id, {err}");
+                return Ok(());
+            }
+        };
         let direction = match Direction::try_from(flow) {
             Ok(direction) => direction,
             Err(err) => {
@@ -468,8 +491,7 @@ impl IMMNotificationClient_Impl for NotificationClient_Impl {
     }
 
     fn OnPropertyValueChanged(&self, pwstrdeviceid: &PCWSTR, key: &PROPERTYKEY) -> Result<()> {
-        let Some(id) = read_pcwstr(pwstrdeviceid) else {
-            warn!("OnPropertyValueChanged: received an unreadable device id");
+        let Some(id) = read_device_id(pwstrdeviceid, "OnPropertyValueChanged") else {
             return Ok(());
         };
         trace!("Property {key:?} changed for device {id}");
@@ -570,6 +592,25 @@ mod tests {
         }
 
         assert_eq!(*log.lock().unwrap(), vec!["default Render Console None"]);
+    }
+
+    /// An id that cannot be read is not the same thing as a missing device,
+    /// and must not be reported as one.
+    #[test]
+    fn an_unreadable_device_id_is_skipped() {
+        let (client, log) = logging_client();
+        // A lone surrogate is not valid UTF-16.
+        let invalid = [0xd800u16, 0];
+        let id = PCWSTR::from_raw(invalid.as_ptr());
+
+        unsafe {
+            client
+                .OnDefaultDeviceChanged(eRender, eConsole, id)
+                .unwrap();
+            client.OnDeviceAdded(id).unwrap();
+        }
+
+        assert!(log.lock().unwrap().is_empty());
     }
 
     /// Values that have no counterpart in the wrapper enums are skipped, not passed on.
