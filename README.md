@@ -21,6 +21,7 @@ The following is a selection of the functionality currently available in the lib
 - Loopback capture
 - Notifications for volume change, device disconnect etc
 - Notifications when devices are added or removed, or when the default device changes
+- Probing of the sample rates, channel counts and formats a device supports in exclusive mode
 - …and additional features beyond this list
 
 
@@ -41,3 +42,4 @@ The following is a selection of the functionality currently available in the lib
 | `record_application`       | Records audio from a single application, and saves the raw samples to a file.                          |
 | `aec`                      | Captures audio with Acoustic Echo Cancellation (AEC) enabled and saves the raw data to a file.         |
 | `device_notifications`     | Listens for devices being added, removed or changed, and for changes of the default device.            |
+| `capabilities`             | Scans the default output device for the formats it supports in exclusive mode.                         |
