@@ -1,7 +1,7 @@
 use num_integer::Integer;
 use std::cmp;
 use std::collections::VecDeque;
-use std::mem::{size_of, ManuallyDrop};
+use std::mem::{ManuallyDrop, size_of};
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
@@ -9,21 +9,21 @@ use std::{fmt, ptr, slice};
 use windows::Win32::Foundation::{CloseHandle, E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
 use windows::Win32::Media::Audio::Endpoints::IAudioMeterInformation;
 use windows::Win32::Media::Audio::{
+    AUDCLNT_STREAMOPTIONS, AUDCLNT_STREAMOPTIONS_AMBISONICS, AUDCLNT_STREAMOPTIONS_MATCH_FORMAT,
+    AUDCLNT_STREAMOPTIONS_NONE, AUDCLNT_STREAMOPTIONS_RAW, AUDIO_EFFECT, AUDIO_STREAM_CATEGORY,
+    AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
+    AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
     ActivateAudioInterfaceAsync, AudioCategory_Alerts, AudioCategory_Communications,
     AudioCategory_FarFieldSpeech, AudioCategory_ForegroundOnlyMedia, AudioCategory_GameChat,
     AudioCategory_GameEffects, AudioCategory_GameMedia, AudioCategory_Media, AudioCategory_Movie,
     AudioCategory_Other, AudioCategory_SoundEffects, AudioCategory_Speech,
-    AudioCategory_UniformSpeech, AudioCategory_VoiceTyping, EDataFlow, ERole,
-    IAcousticEchoCancellationControl, IActivateAudioInterfaceAsyncOperation,
-    IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
-    IAudioClient2, IAudioEffectsManager, IAudioSessionControl2, IAudioSessionEnumerator,
-    IAudioSessionManager, IAudioSessionManager2, IMMEndpoint, PKEY_AudioEngine_DeviceFormat,
-    AUDCLNT_STREAMOPTIONS, AUDCLNT_STREAMOPTIONS_AMBISONICS, AUDCLNT_STREAMOPTIONS_MATCH_FORMAT,
-    AUDCLNT_STREAMOPTIONS_NONE, AUDCLNT_STREAMOPTIONS_RAW, AUDIOCLIENT_ACTIVATION_PARAMS,
-    AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
-    AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, AUDIO_EFFECT, AUDIO_STREAM_CATEGORY,
+    AudioCategory_UniformSpeech, AudioCategory_VoiceTyping, EDataFlow,
     ENDPOINT_HARDWARE_SUPPORT_METER, ENDPOINT_HARDWARE_SUPPORT_MUTE,
-    ENDPOINT_HARDWARE_SUPPORT_VOLUME, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    ENDPOINT_HARDWARE_SUPPORT_VOLUME, ERole, IAcousticEchoCancellationControl,
+    IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
+    IActivateAudioInterfaceCompletionHandler_Impl, IAudioClient2, IAudioEffectsManager,
+    IAudioSessionControl2, IAudioSessionEnumerator, IAudioSessionManager, IAudioSessionManager2,
+    IMMEndpoint, PKEY_AudioEngine_DeviceFormat, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
@@ -31,39 +31,39 @@ use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::System::Com::StructuredStorage::PropVariantClear;
 use windows::Win32::System::Variant::VT_BLOB;
 use windows::{
-    core::{HRESULT, PCSTR},
     Win32::Devices::FunctionDiscovery::{
-        PKEY_DeviceInterface_FriendlyName, PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
+        PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName, PKEY_DeviceInterface_FriendlyName,
     },
     Win32::Foundation::{HANDLE, WAIT_OBJECT_0},
     Win32::Media::Audio::{
-        eCapture, eCommunications, eConsole, eMultimedia, eRender, AudioSessionStateActive,
-        AudioSessionStateExpired, AudioSessionStateInactive, IAudioCaptureClient, IAudioClient,
-        IAudioClock, IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
-        IMMDeviceCollection, IMMDeviceEnumerator, IMMNotificationClient, MMDeviceEnumerator,
         AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
         AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE,
+        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+        AudioSessionStateActive, AudioSessionStateExpired, AudioSessionStateInactive, DEVICE_STATE,
         DEVICE_STATE_ACTIVE, DEVICE_STATE_DISABLED, DEVICE_STATE_NOTPRESENT,
-        DEVICE_STATE_UNPLUGGED, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
+        DEVICE_STATE_UNPLUGGED, IAudioCaptureClient, IAudioClient, IAudioClock, IAudioRenderClient,
+        IAudioSessionControl, IAudioSessionEvents, IMMDevice, IMMDeviceCollection,
+        IMMDeviceEnumerator, IMMNotificationClient, MMDeviceEnumerator, WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE, eCapture, eCommunications, eConsole, eMultimedia, eRender,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
     Win32::System::Com::StructuredStorage::{
-        PropVariantToStringAlloc, PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0,
-    },
-    Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
-        COINIT_MULTITHREADED,
+        PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0, PropVariantToStringAlloc,
     },
     Win32::System::Com::{BLOB, STGM_READ},
+    Win32::System::Com::{
+        CLSCTX_ALL, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED, CoCreateInstance,
+        CoInitializeEx, CoUninitialize,
+    },
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
+    core::{HRESULT, PCSTR},
 };
-use windows_core::{implement, IUnknown, Interface, Ref, HSTRING, PCWSTR, PWSTR};
+use windows_core::{HSTRING, IUnknown, Interface, PCWSTR, PWSTR, Ref, implement};
 
 use crate::{
-    make_channelmasks, AudioSessionEvents, DeviceEventCallbacks, EventCallbacks,
-    NotificationClient, WasapiError, WaveFormat,
+    AudioSessionEvents, DeviceEventCallbacks, EventCallbacks, NotificationClient, WasapiError,
+    WaveFormat, make_channelmasks,
 };
 
 pub(crate) type WasapiRes<T> = Result<T, WasapiError>;

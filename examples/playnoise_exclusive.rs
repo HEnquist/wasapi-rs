@@ -73,7 +73,9 @@ fn main() {
                 match werr.code() {
                     E_INVALIDARG => error!("IAudioClient::Initialize: Invalid argument"),
                     AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED => {
-                        warn!("IAudioClient::Initialize: Unaligned buffer, trying to adjust the period.");
+                        warn!(
+                            "IAudioClient::Initialize: Unaligned buffer, trying to adjust the period."
+                        );
                         // Try to recover following the example in the docs.
                         // https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize#examples
                         // Just panic on errors to keep it short and simple.

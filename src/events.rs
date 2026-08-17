@@ -1,16 +1,17 @@
 use std::slice;
 use std::string::FromUtf16Error;
 use windows::{
-    core::{implement, Result, GUID, PCWSTR},
     Win32::Foundation::PROPERTYKEY,
     Win32::Media::Audio::{
         AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
-        AudioSessionStateExpired, AudioSessionStateInactive, DisconnectReasonDeviceRemoval,
-        DisconnectReasonExclusiveModeOverride, DisconnectReasonFormatChanged,
-        DisconnectReasonServerShutdown, DisconnectReasonSessionDisconnected,
-        DisconnectReasonSessionLogoff, EDataFlow, ERole, IAudioSessionEvents,
-        IAudioSessionEvents_Impl, IMMNotificationClient, IMMNotificationClient_Impl, DEVICE_STATE,
+        AudioSessionStateExpired, AudioSessionStateInactive, DEVICE_STATE,
+        DisconnectReasonDeviceRemoval, DisconnectReasonExclusiveModeOverride,
+        DisconnectReasonFormatChanged, DisconnectReasonServerShutdown,
+        DisconnectReasonSessionDisconnected, DisconnectReasonSessionLogoff, EDataFlow, ERole,
+        IAudioSessionEvents, IAudioSessionEvents_Impl, IMMNotificationClient,
+        IMMNotificationClient_Impl,
     },
+    core::{GUID, PCWSTR, Result, implement},
 };
 
 use crate::{DeviceState, Direction, Role, SessionState};
@@ -286,10 +287,10 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
                 callback(changedchannel as usize, newvol, context);
             } else {
                 warn!(
-                        "OnChannelVolumeChanged: received unsupported changedchannel value {} for volume array length of {}",
-                        changedchannel,
-                        volslice.len()
-                    );
+                    "OnChannelVolumeChanged: received unsupported changedchannel value {} for volume array length of {}",
+                    changedchannel,
+                    volslice.len()
+                );
                 return Ok(());
             }
         }
@@ -506,10 +507,10 @@ impl IMMNotificationClient_Impl for NotificationClient_Impl {
 mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
-    use windows::core::HSTRING;
     use windows::Win32::Media::Audio::{
-        eAll, eCapture, eConsole, eRender, DEVICE_STATE_ACTIVE, DEVICE_STATE_UNPLUGGED,
+        DEVICE_STATE_ACTIVE, DEVICE_STATE_UNPLUGGED, eAll, eCapture, eConsole, eRender,
     };
+    use windows::core::HSTRING;
 
     const TEST_ID: &str = "{0.0.0.00000000}.{6e6f7420-6120-7265-616c-206465766963}";
 

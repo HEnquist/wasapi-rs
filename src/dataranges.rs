@@ -10,16 +10,15 @@ use std::collections::HashSet;
 use std::mem::size_of;
 use std::ptr::from_ref;
 
-use windows::core::{Interface, GUID, HRESULT, PCWSTR};
 use windows::Win32::Foundation::{
     CloseHandle, ERROR_INSUFFICIENT_BUFFER, ERROR_MORE_DATA, GENERIC_READ, GENERIC_WRITE, HANDLE,
 };
 use windows::Win32::Media::Audio::{Connector, IConnector, IDeviceTopology, IMMDevice, IPart};
 use windows::Win32::Media::KernelStreaming::{
-    KSPROPSETID_Pin, IOCTL_KS_PROPERTY, KSDATAFORMAT_0, KSDATAFORMAT_SUBTYPE_PCM,
-    KSDATAFORMAT_TYPE_AUDIO, KSIDENTIFIER_0_0, KSMULTIPLE_ITEM, KSPIN_DATAFLOW_IN,
-    KSPIN_DATAFLOW_OUT, KSPROPERTY_PIN, KSPROPERTY_PIN_CTYPES, KSPROPERTY_PIN_DATAFLOW,
-    KSPROPERTY_PIN_DATARANGES, KSPROPERTY_TYPE_GET, KSP_PIN,
+    IOCTL_KS_PROPERTY, KSDATAFORMAT_0, KSDATAFORMAT_SUBTYPE_PCM, KSDATAFORMAT_TYPE_AUDIO,
+    KSIDENTIFIER_0_0, KSMULTIPLE_ITEM, KSP_PIN, KSPIN_DATAFLOW_IN, KSPIN_DATAFLOW_OUT,
+    KSPROPERTY_PIN, KSPROPERTY_PIN_CTYPES, KSPROPERTY_PIN_DATAFLOW, KSPROPERTY_PIN_DATARANGES,
+    KSPROPERTY_TYPE_GET, KSPROPSETID_Pin,
 };
 use windows::Win32::Media::Multimedia::KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
 use windows::Win32::Storage::FileSystem::{
@@ -27,6 +26,7 @@ use windows::Win32::Storage::FileSystem::{
 };
 use windows::Win32::System::Com::CLSCTX_ALL;
 use windows::Win32::System::IO::DeviceIoControl;
+use windows::core::{GUID, HRESULT, Interface, PCWSTR};
 
 use crate::{Direction, SampleType, WasapiRes, WaveFormat};
 

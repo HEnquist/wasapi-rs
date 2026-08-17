@@ -3,6 +3,10 @@
 //
 // This example captures from Firefox, edit the process name in main()
 // to capture from another application.
+//
+// Note: this example needs Rust 1.88, which is newer than the rust-version
+// of the library. This is because it uses the 'sysinfo' crate to look up
+// the process id of the application.
 
 use std::collections::VecDeque;
 use std::error::{self};

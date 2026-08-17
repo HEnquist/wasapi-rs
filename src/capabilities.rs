@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use crate::{covered_by_any, AudioClient, DataRange, Device, SampleType, WasapiRes, WaveFormat};
+use crate::{AudioClient, DataRange, Device, SampleType, WasapiRes, WaveFormat, covered_by_any};
 use windows::Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE;
 
 /// The channel count ceiling that a scan uses for a device
@@ -308,7 +308,9 @@ impl<C: FormatChecker> Probing<'_, C> {
                 preferred_mask,
             );
             if !covered_by_any(self.data_ranges, &requested) {
-                trace!("Skipping {samplerate} Hz, {channels} ch, format {candidate:?}, the driver declares no range for it");
+                trace!(
+                    "Skipping {samplerate} Hz, {channels} ch, format {candidate:?}, the driver declares no range for it"
+                );
                 continue;
             }
             let Ok(accepted) = self.checker.check_exclusive(&requested) else {
@@ -528,7 +530,7 @@ struct RateProbe {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{make_channelmasks, WasapiError};
+    use crate::{WasapiError, make_channelmasks};
     use std::cell::RefCell;
 
     /// Build a probing state for a fake device, without any declared ranges.
@@ -693,15 +695,21 @@ mod tests {
     fn probe_returns_nothing_for_unsupported_rates_and_channel_counts() {
         let device = FakeDevice::new(&[48000], 2, &[S16]);
         let mut masks = ChannelMaskMap::new();
-        assert!(probing(&device, &mut masks)
-            .formats(44100, 2, CANDIDATE_FORMATS)
-            .is_empty());
-        assert!(probing(&device, &mut masks)
-            .formats(48000, 4, CANDIDATE_FORMATS)
-            .is_empty());
-        assert!(probing(&device, &mut masks)
-            .formats(48000, 0, CANDIDATE_FORMATS)
-            .is_empty());
+        assert!(
+            probing(&device, &mut masks)
+                .formats(44100, 2, CANDIDATE_FORMATS)
+                .is_empty()
+        );
+        assert!(
+            probing(&device, &mut masks)
+                .formats(48000, 4, CANDIDATE_FORMATS)
+                .is_empty()
+        );
+        assert!(
+            probing(&device, &mut masks)
+                .formats(48000, 0, CANDIDATE_FORMATS)
+                .is_empty()
+        );
     }
 
     #[test]
@@ -717,10 +725,12 @@ mod tests {
 
         probing(&device, &mut masks).formats(96000, 2, CANDIDATE_FORMATS);
         // The cached mask is used from the very first query of the second probe.
-        assert!(device
-            .queries_for(96000, 2)
-            .iter()
-            .all(|q| q.mask == accepted));
+        assert!(
+            device
+                .queries_for(96000, 2)
+                .iter()
+                .all(|q| q.mask == accepted)
+        );
     }
 
     #[test]
@@ -801,15 +811,19 @@ mod tests {
 
         // The first rate probes the full range, the ceiling drops to two after that.
         assert!(device.queries().iter().any(|q| q.channels == 8));
-        assert!(!device
-            .queries()
-            .iter()
-            .any(|q| q.samplerate == 44100 && q.channels > 2));
+        assert!(
+            !device
+                .queries()
+                .iter()
+                .any(|q| q.samplerate == 44100 && q.channels > 2)
+        );
         // The low rates only use the channel counts that were found.
-        assert!(!device
-            .queries()
-            .iter()
-            .any(|q| q.samplerate == 32000 && q.channels > 2));
+        assert!(
+            !device
+                .queries()
+                .iter()
+                .any(|q| q.samplerate == 32000 && q.channels > 2)
+        );
     }
 
     #[test]
@@ -834,14 +848,18 @@ mod tests {
             ]
         );
         // Nothing outside the declared ranges is even asked about.
-        assert!(device
-            .queries()
-            .iter()
-            .all(|q| q.channels <= 2 && q.candidate == S16));
-        assert!(!device
-            .queries()
-            .iter()
-            .any(|q| q.samplerate < 44100 || q.samplerate > 48000));
+        assert!(
+            device
+                .queries()
+                .iter()
+                .all(|q| q.channels <= 2 && q.candidate == S16)
+        );
+        assert!(
+            !device
+                .queries()
+                .iter()
+                .any(|q| q.samplerate < 44100 || q.samplerate > 48000)
+        );
     }
 
     #[test]
@@ -881,9 +899,11 @@ mod tests {
         for channels in 1..=4 {
             let queries = device.queries_for(48000, channels);
             assert_eq!(queries.len(), 4);
-            assert!(queries
-                .iter()
-                .all(|q| q.candidate.sample_type == SampleType::Int));
+            assert!(
+                queries
+                    .iter()
+                    .all(|q| q.candidate.sample_type == SampleType::Int)
+            );
         }
     }
 
@@ -906,9 +926,11 @@ mod tests {
         assert!(probing(&device, &mut masks).all_rates(2).is_empty());
         assert!(masks.is_empty());
         // Nothing was found, so the low rates are probed with the full channel range.
-        assert!(device
-            .queries()
-            .iter()
-            .any(|q| q.samplerate == 32000 && q.channels == 2));
+        assert!(
+            device
+                .queries()
+                .iter()
+                .any(|q| q.samplerate == 32000 && q.channels == 2)
+        );
     }
 }
