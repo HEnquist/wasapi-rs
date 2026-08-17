@@ -126,7 +126,7 @@ impl FormatChecker for AudioClient {
 /// - The 48 kHz and 44.1 kHz families are probed interleaved from the base rate upward.
 ///   The first hit establishes an upper channel count limit,
 ///   and a reduced sample format set that all later probes reuse.
-/// - Within a single rate, the sample format candidates are narrowed
+/// - Within each rate of the scan, the sample format candidates are narrowed
 ///   as soon as the first channel count succeeds with fewer than the full set.
 /// - Each family gets an early cutoff. Once a family has a hit,
 ///   a miss at the next rate deactivates it, and the upward scan stops
@@ -235,15 +235,16 @@ impl CapabilityProbe {
     /// [struct documentation](CapabilityProbe).
     /// A single rate gives nothing to learn from, unlike the full scan,
     /// so a device that declares no [DataRange]s is probed all the way up to
-    /// [DEFAULT_MAX_CHANNELS] here.
+    /// [DEFAULT_MAX_CHANNELS] here, and every sample format is tried for every
+    /// channel count. None of the pruning of the full scan is used,
+    /// so a format that only works at a single channel count is still found.
     /// Use [CapabilityProbe::supported_formats] instead
     /// when only one channel count is of interest.
     pub fn supported_formats_at_rate(&mut self, samplerate: usize) -> Vec<WaveFormat> {
-        let narrow = self.data_ranges.is_empty();
         let mut probing = self.probing();
         let ceiling = probing.channel_ceiling();
         probing
-            .rate(samplerate, 1..=ceiling, CANDIDATE_FORMATS, narrow)
+            .rate(samplerate, 1..=ceiling, CANDIDATE_FORMATS, false)
             .formats
     }
 
@@ -747,6 +748,22 @@ mod tests {
             let queries = device.queries_for(48000, channels);
             assert_eq!(queries.len(), 1);
             assert_eq!(queries[0].candidate, S32);
+        }
+    }
+
+    #[test]
+    fn without_narrowing_all_formats_are_probed_at_every_channel_count() {
+        // S32 only works with one channel, which narrowing would drop after the first count.
+        let device = FakeDevice::new(&[48000], 4, &[S16, S32]).only_with_one_channel(&[S32]);
+        let mut masks = ChannelMaskMap::new();
+        let result = probing(&device, &mut masks).rate(48000, 1..=4, CANDIDATE_FORMATS, false);
+
+        assert_eq!(result.supported_candidates, vec![S16, S32]);
+        for channels in 1..=4 {
+            assert_eq!(
+                device.queries_for(48000, channels).len(),
+                CANDIDATE_FORMATS.len()
+            );
         }
     }
 

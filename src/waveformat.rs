@@ -5,7 +5,6 @@ use windows::{
     },
     Win32::Media::KernelStreaming::{KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE},
     Win32::Media::Multimedia::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, WAVE_FORMAT_IEEE_FLOAT},
-    core::GUID,
 };
 
 /// The [18 defined channel positions](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)
@@ -228,6 +227,11 @@ impl WaveFormat {
     /// or padded in a four byte container, and the two cannot be told apart
     /// in a reliable way without `wValidBitsPerSample`.
     /// This method returns an error for any format that would be ambiguous.
+    ///
+    /// The returned value is still stored as a WAVEFORMATEXTENSIBLE, with `cbSize` set to zero
+    /// so that only the WAVEFORMATEX part of it is passed on to Wasapi.
+    /// The extensible fields are copied over unchanged, so that the accessors
+    /// keep describing the same format as the original.
     pub fn to_waveformatex(&self) -> WasapiRes<Self> {
         let blockalign = self.wave_fmt.Format.nBlockAlign;
         let samplerate = self.wave_fmt.Format.nSamplesPerSec;
@@ -252,16 +256,13 @@ impl WaveFormat {
             wBitsPerSample: storebits,
             wFormatTag: sample_type as u16,
         };
-        let sample = WAVEFORMATEXTENSIBLE_0 {
-            wValidBitsPerSample: 0,
-        };
-        let subformat = GUID::zeroed();
-        let mask = 0;
         let wave_fmt = WAVEFORMATEXTENSIBLE {
             Format: wave_format,
-            Samples: sample,
-            SubFormat: subformat,
-            dwChannelMask: mask,
+            Samples: WAVEFORMATEXTENSIBLE_0 {
+                wValidBitsPerSample: validbits,
+            },
+            SubFormat: self.wave_fmt.SubFormat,
+            dwChannelMask: self.wave_fmt.dwChannelMask,
         };
         Ok(WaveFormat { wave_fmt })
     }
@@ -456,6 +457,10 @@ mod tests {
             assert_eq!(fmtex.get_bitspersample(), storebits as u16);
             assert_eq!(fmtex.get_blockalign(), fmt.get_blockalign());
             assert_eq!(fmtex.get_avgbytespersec(), fmt.get_avgbytespersec());
+            // The accessors still describe the same format as the original.
+            assert_eq!(fmtex.get_validbitspersample(), storebits as u16);
+            assert_eq!(fmtex.get_subformat().unwrap(), sample_type);
+            assert_eq!(fmtex.get_dwchannelmask(), fmt.get_dwchannelmask());
         }
     }
 
