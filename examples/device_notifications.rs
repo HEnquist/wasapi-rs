@@ -1,10 +1,12 @@
+// Listen to device change notifications for one minute.
+//
+// Plug or unplug a device, or change the default device in the
+// Windows sound settings, to see the notifications arrive.
+
 use std::thread;
 use std::time::Duration;
 use wasapi::*;
 
-// Listen to device change notifications for one minute.
-// Plug or unplug a device, or change the default device in the
-// Windows sound settings, to see the notifications arrive.
 fn main() {
     initialize_mta().unwrap();
 

@@ -1,7 +1,7 @@
 use num_integer::Integer;
 use std::cmp;
 use std::collections::VecDeque;
-use std::mem::{size_of, ManuallyDrop};
+use std::mem::{ManuallyDrop, size_of};
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
@@ -9,21 +9,21 @@ use std::{fmt, ptr, slice};
 use windows::Win32::Foundation::{CloseHandle, E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
 use windows::Win32::Media::Audio::Endpoints::IAudioMeterInformation;
 use windows::Win32::Media::Audio::{
+    AUDCLNT_STREAMOPTIONS, AUDCLNT_STREAMOPTIONS_AMBISONICS, AUDCLNT_STREAMOPTIONS_MATCH_FORMAT,
+    AUDCLNT_STREAMOPTIONS_NONE, AUDCLNT_STREAMOPTIONS_RAW, AUDIO_EFFECT, AUDIO_STREAM_CATEGORY,
+    AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
+    AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
     ActivateAudioInterfaceAsync, AudioCategory_Alerts, AudioCategory_Communications,
     AudioCategory_FarFieldSpeech, AudioCategory_ForegroundOnlyMedia, AudioCategory_GameChat,
     AudioCategory_GameEffects, AudioCategory_GameMedia, AudioCategory_Media, AudioCategory_Movie,
     AudioCategory_Other, AudioCategory_SoundEffects, AudioCategory_Speech,
-    AudioCategory_UniformSpeech, AudioCategory_VoiceTyping, EDataFlow, ERole,
-    IAcousticEchoCancellationControl, IActivateAudioInterfaceAsyncOperation,
-    IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
-    IAudioClient2, IAudioEffectsManager, IAudioSessionControl2, IAudioSessionEnumerator,
-    IAudioSessionManager, IAudioSessionManager2, IMMEndpoint, PKEY_AudioEngine_DeviceFormat,
-    AUDCLNT_STREAMOPTIONS, AUDCLNT_STREAMOPTIONS_AMBISONICS, AUDCLNT_STREAMOPTIONS_MATCH_FORMAT,
-    AUDCLNT_STREAMOPTIONS_NONE, AUDCLNT_STREAMOPTIONS_RAW, AUDIOCLIENT_ACTIVATION_PARAMS,
-    AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
-    AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, AUDIO_EFFECT, AUDIO_STREAM_CATEGORY,
+    AudioCategory_UniformSpeech, AudioCategory_VoiceTyping, EDataFlow,
     ENDPOINT_HARDWARE_SUPPORT_METER, ENDPOINT_HARDWARE_SUPPORT_MUTE,
-    ENDPOINT_HARDWARE_SUPPORT_VOLUME, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    ENDPOINT_HARDWARE_SUPPORT_VOLUME, ERole, IAcousticEchoCancellationControl,
+    IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
+    IActivateAudioInterfaceCompletionHandler_Impl, IAudioClient2, IAudioEffectsManager,
+    IAudioSessionControl2, IAudioSessionEnumerator, IAudioSessionManager, IAudioSessionManager2,
+    IMMEndpoint, PKEY_AudioEngine_DeviceFormat, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
@@ -31,39 +31,39 @@ use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::System::Com::StructuredStorage::PropVariantClear;
 use windows::Win32::System::Variant::VT_BLOB;
 use windows::{
-    core::{HRESULT, PCSTR},
     Win32::Devices::FunctionDiscovery::{
-        PKEY_DeviceInterface_FriendlyName, PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName,
+        PKEY_Device_DeviceDesc, PKEY_Device_FriendlyName, PKEY_DeviceInterface_FriendlyName,
     },
     Win32::Foundation::{HANDLE, WAIT_OBJECT_0},
     Win32::Media::Audio::{
-        eCapture, eCommunications, eConsole, eMultimedia, eRender, AudioSessionStateActive,
-        AudioSessionStateExpired, AudioSessionStateInactive, IAudioCaptureClient, IAudioClient,
-        IAudioClock, IAudioRenderClient, IAudioSessionControl, IAudioSessionEvents, IMMDevice,
-        IMMDeviceCollection, IMMDeviceEnumerator, IMMNotificationClient, MMDeviceEnumerator,
         AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
         AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, DEVICE_STATE,
+        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+        AudioSessionStateActive, AudioSessionStateExpired, AudioSessionStateInactive, DEVICE_STATE,
         DEVICE_STATE_ACTIVE, DEVICE_STATE_DISABLED, DEVICE_STATE_NOTPRESENT,
-        DEVICE_STATE_UNPLUGGED, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
+        DEVICE_STATE_UNPLUGGED, IAudioCaptureClient, IAudioClient, IAudioClock, IAudioRenderClient,
+        IAudioSessionControl, IAudioSessionEvents, IMMDevice, IMMDeviceCollection,
+        IMMDeviceEnumerator, IMMNotificationClient, MMDeviceEnumerator, WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE, eCapture, eCommunications, eConsole, eMultimedia, eRender,
     },
     Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE,
     Win32::System::Com::StructuredStorage::{
-        PropVariantToStringAlloc, PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0,
-    },
-    Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
-        COINIT_MULTITHREADED,
+        PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0, PropVariantToStringAlloc,
     },
     Win32::System::Com::{BLOB, STGM_READ},
+    Win32::System::Com::{
+        CLSCTX_ALL, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED, CoCreateInstance,
+        CoInitializeEx, CoUninitialize,
+    },
     Win32::System::Threading::{CreateEventA, WaitForSingleObject},
+    core::{HRESULT, PCSTR},
 };
-use windows_core::{implement, IUnknown, Interface, Ref, HSTRING, PCWSTR, PWSTR};
+use windows_core::{HSTRING, IUnknown, Interface, PCWSTR, PWSTR, Ref, implement};
 
 use crate::{
-    make_channelmasks, AudioSessionEvents, DeviceEventCallbacks, EventCallbacks,
-    NotificationClient, WasapiError, WaveFormat,
+    AudioSessionEvents, DeviceEventCallbacks, EventCallbacks, NotificationClient, WasapiError,
+    WaveFormat, make_channelmasks,
 };
 
 pub(crate) type WasapiRes<T> = Result<T, WasapiError>;
@@ -191,6 +191,10 @@ impl From<Role> for ERole {
 /// There are four main modes that can be specified,
 /// corresponding to the four possible combinations of sharing mode and timing.
 /// The enum variants only expose the parameters that can be set in each mode.
+///
+/// See the documentation of [AudioClient::initialize_client()]
+/// for a description of the sharing and timing modes,
+/// and how to choose between them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StreamMode {
     /// Shared mode using polling for timing.
@@ -221,14 +225,18 @@ pub enum StreamMode {
     EventsExclusive { period_hns: i64 },
 }
 
-/// Sharemode for device
+/// Sharemode for device.
+/// See the documentation of [AudioClient::initialize_client()]
+/// for a description of the two sharing modes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShareMode {
     Shared,
     Exclusive,
 }
 
-/// Timing mode for device
+/// Timing mode for device.
+/// See the documentation of [AudioClient::initialize_client()]
+/// for a description of the two timing modes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TimingMode {
     Polling,
@@ -570,6 +578,24 @@ impl Device {
         })
     }
 
+    /// Get the [DataRange](crate::DataRange)s that the driver declares for this device.
+    ///
+    /// The ranges are an upper bound on what the device supports,
+    /// see [DataRange](crate::DataRange) for the details and the limitations.
+    /// They can be used to narrow down the search of a [CapabilityProbe](crate::CapabilityProbe).
+    ///
+    /// This needs a device that is backed by a driver with a kernel streaming filter.
+    /// Being virtual is no obstacle, a virtual cable with a normal driver
+    /// declares its ranges like any sound card does.
+    /// A device without such a filter, a remote desktop endpoint for instance,
+    /// has nothing to ask, and then this returns an error or an empty list.
+    ///
+    /// This works even for a device that cannot be opened for streaming,
+    /// an unplugged headset for example, since it asks the driver and not the endpoint.
+    pub fn get_data_ranges(&self) -> WasapiRes<Vec<crate::DataRange>> {
+        crate::dataranges::read_data_ranges(&self.device, self.direction)
+    }
+
     /// Gets an [IAudioSessionManager] from an [IMMDevice]
     pub fn get_iaudiosessionmanager(&self) -> WasapiRes<AudioSessionManager> {
         let session_manager = unsafe {
@@ -877,6 +903,9 @@ impl AudioClient {
     /// Then call this function again with the new WafeFormat structure.
     /// If the driver then reports that the format is supported, use the original WaveFormat structure when calling [AudioClient::initialize_client].
     ///
+    /// Note that [WaveFormat::to_waveformatex] returns an error for formats that a WAVEFORMATEX cannot describe without ambiguity.
+    /// A 24 bit format must never be queried as WAVEFORMATEX, since a driver may then accept it and treat it as 24 bit padded in 32 bit containers.
+    ///
     /// See also the helper function [is_supported_exclusive_with_quirks](AudioClient::is_supported_exclusive_with_quirks).
     pub fn is_supported(
         &self,
@@ -948,12 +977,17 @@ impl AudioClient {
     /// The alternatives it tries are:
     /// - The format as given.
     /// - If one or two channels, try with the format as WAVEFORMATEX.
-    /// - Try with different channel masks:
+    ///   This is skipped for formats that a WAVEFORMATEX cannot describe without ambiguity,
+    ///   such as 24 bit samples, see [WaveFormat::to_waveformatex].
+    /// - Try with different channel masks, see [make_channelmasks]:
     ///   - If channels <= 8: Recommended mask(s) from ksmedia.h.
     ///   - If channels <= 18: Simple mask.
-    ///   - Zero mask.
+    ///   - Zero mask, which assigns no speaker positions.
+    ///     Few devices accept it, but for some it is the only one that works.
     ///
     /// If an accepted format is found, this is returned.
+    /// The returned format carries the mask that was accepted, which may differ
+    /// from the one that was asked for.
     /// An error means no accepted format was found.
     pub fn is_supported_exclusive_with_quirks(
         &self,
@@ -966,14 +1000,22 @@ impl AudioClient {
             return Ok(wave_fmt);
         }
         if wave_fmt.get_nchannels() <= 2 {
-            debug!("Repeating query with format as WAVEFORMATEX");
-            let wave_formatex = wave_fmt.to_waveformatex().unwrap();
-            if self
-                .is_supported(&wave_formatex, &ShareMode::Exclusive)
-                .is_ok()
-            {
-                debug!("The requested format is supported as WAVEFORMATEX");
-                return Ok(wave_formatex);
+            // The WAVEFORMATEX representation is only tried for formats where it is unambiguous,
+            // see the note on WaveFormat::to_waveformatex.
+            match wave_fmt.to_waveformatex() {
+                Ok(wave_formatex) => {
+                    debug!("Repeating query with format as WAVEFORMATEX");
+                    if self
+                        .is_supported(&wave_formatex, &ShareMode::Exclusive)
+                        .is_ok()
+                    {
+                        debug!("The requested format is supported as WAVEFORMATEX");
+                        return Ok(wave_formatex);
+                    }
+                }
+                Err(err) => {
+                    debug!("Skipping query with format as WAVEFORMATEX, {err}");
+                }
             }
         }
         let masks = make_channelmasks(wave_fmt.get_nchannels() as usize);

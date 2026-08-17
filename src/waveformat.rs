@@ -1,16 +1,20 @@
 use std::fmt;
 use windows::{
-    core::GUID,
     Win32::Media::Audio::{
-        WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0, WAVE_FORMAT_PCM,
+        WAVE_FORMAT_PCM, WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
     },
-    Win32::Media::KernelStreaming::{
-        KSDATAFORMAT_SUBTYPE_PCM, SPEAKER_BACK_CENTER, SPEAKER_BACK_LEFT, SPEAKER_BACK_RIGHT,
-        SPEAKER_FRONT_CENTER, SPEAKER_FRONT_LEFT, SPEAKER_FRONT_LEFT_OF_CENTER,
-        SPEAKER_FRONT_RIGHT, SPEAKER_FRONT_RIGHT_OF_CENTER, SPEAKER_LOW_FREQUENCY,
-        SPEAKER_SIDE_LEFT, SPEAKER_SIDE_RIGHT, WAVE_FORMAT_EXTENSIBLE,
-    },
+    Win32::Media::KernelStreaming::{KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE},
     Win32::Media::Multimedia::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, WAVE_FORMAT_IEEE_FLOAT},
+};
+
+/// The [18 defined channel positions](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)
+/// of a channel mask, see [make_channelmasks] for how to use them.
+pub use windows::Win32::Media::KernelStreaming::{
+    SPEAKER_BACK_CENTER, SPEAKER_BACK_LEFT, SPEAKER_BACK_RIGHT, SPEAKER_FRONT_CENTER,
+    SPEAKER_FRONT_LEFT, SPEAKER_FRONT_LEFT_OF_CENTER, SPEAKER_FRONT_RIGHT,
+    SPEAKER_FRONT_RIGHT_OF_CENTER, SPEAKER_LOW_FREQUENCY, SPEAKER_SIDE_LEFT, SPEAKER_SIDE_RIGHT,
+    SPEAKER_TOP_BACK_CENTER, SPEAKER_TOP_BACK_LEFT, SPEAKER_TOP_BACK_RIGHT, SPEAKER_TOP_CENTER,
+    SPEAKER_TOP_FRONT_CENTER, SPEAKER_TOP_FRONT_LEFT, SPEAKER_TOP_FRONT_RIGHT,
 };
 
 use crate::{SampleType, WasapiError, WasapiRes};
@@ -139,7 +143,9 @@ impl WaveFormat {
     /// Build a [WAVEFORMATEXTENSIBLE](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible) struct for the given parameters.
     /// `channel_mask` is optional. If a mask is provided, it will be used. If not, a default mask will be created.
     /// This can be used to work around quirks for some device drivers.
-    /// If the default is not accepted, try again using a zero mask, `Some(0)`.
+    /// If the default is not accepted, try again using a zero mask, `Some(0)`,
+    /// which assigns no speaker positions.
+    /// See [make_channelmasks] for the masks that are worth trying, and in which order.
     pub fn new(
         storebits: usize,
         validbits: usize,
@@ -213,12 +219,29 @@ impl WaveFormat {
     }
 
     /// Return a copy in the simpler [WAVEFORMATEX](https://docs.microsoft.com/en-us/previous-versions/dd757713(v=vs.85)) format.
+    ///
+    /// A WAVEFORMATEX has no `wValidBitsPerSample`, so it can only describe formats
+    /// where the sample layout follows from `wBitsPerSample` alone.
+    /// This holds for 8, 16, 32 and 64 bits when all bits are valid.
+    /// A 24 bit sample can be stored either packed in three bytes,
+    /// or padded in a four byte container, and the two cannot be told apart
+    /// in a reliable way without `wValidBitsPerSample`.
+    /// This method returns an error for any format that would be ambiguous.
+    ///
+    /// The returned value is still stored as a WAVEFORMATEXTENSIBLE, with `cbSize` set to zero
+    /// so that only the WAVEFORMATEX part of it is passed on to Wasapi.
+    /// The extensible fields are copied over unchanged, so that the accessors
+    /// keep describing the same format as the original.
     pub fn to_waveformatex(&self) -> WasapiRes<Self> {
         let blockalign = self.wave_fmt.Format.nBlockAlign;
         let samplerate = self.wave_fmt.Format.nSamplesPerSec;
         let channels = self.wave_fmt.Format.nChannels;
         let byterate = self.wave_fmt.Format.nAvgBytesPerSec;
         let storebits = self.wave_fmt.Format.wBitsPerSample;
+        let validbits = unsafe { self.wave_fmt.Samples.wValidBitsPerSample };
+        if !matches!(storebits, 8 | 16 | 32 | 64) || validbits != storebits {
+            return Err(WasapiError::UnsupportedFormat);
+        }
         let sample_type = match self.wave_fmt.SubFormat {
             KSDATAFORMAT_SUBTYPE_IEEE_FLOAT => WAVE_FORMAT_IEEE_FLOAT,
             KSDATAFORMAT_SUBTYPE_PCM => WAVE_FORMAT_PCM,
@@ -233,16 +256,13 @@ impl WaveFormat {
             wBitsPerSample: storebits,
             wFormatTag: sample_type as u16,
         };
-        let sample = WAVEFORMATEXTENSIBLE_0 {
-            wValidBitsPerSample: 0,
-        };
-        let subformat = GUID::zeroed();
-        let mask = 0;
         let wave_fmt = WAVEFORMATEXTENSIBLE {
             Format: wave_format,
-            Samples: sample,
-            SubFormat: subformat,
-            dwChannelMask: mask,
+            Samples: WAVEFORMATEXTENSIBLE_0 {
+                wValidBitsPerSample: validbits,
+            },
+            SubFormat: self.wave_fmt.SubFormat,
+            dwChannelMask: self.wave_fmt.dwChannelMask,
         };
         Ok(WaveFormat { wave_fmt })
     }
@@ -283,6 +303,9 @@ impl WaveFormat {
     }
 
     /// Read dwChannelMask.
+    ///
+    /// The mask is a bit field of channel positions,
+    /// see [make_channelmasks] for how to read one.
     pub fn get_dwchannelmask(&self) -> u32 {
         self.wave_fmt.dwChannelMask
     }
@@ -305,8 +328,61 @@ impl From<WAVEFORMATEXTENSIBLE> for WaveFormat {
 }
 
 /// Return a vector with suggested channel masks for the given number of channels.
-/// Used to find a format that a device accepts in exclusive mode.
-/// The values are sorted according to how likely they are to be accepted, with the most likely first.
+///
+/// Channel masks are one of the more awkward corners of Wasapi.
+/// A mask is meant to describe where the channels are supposed to end up,
+/// but in exclusive mode it also decides whether the device accepts the format at all,
+/// and drivers do not agree on which masks are acceptable.
+/// Since there is no way of asking a device what it wants,
+/// finding a mask it likes comes down to trying them until one is accepted.
+///
+/// This function gives the list worth trying for a channel count,
+/// sorted according to how likely they are to be accepted, with the most likely first.
+/// The masks are the recommended layouts from ksmedia.h where there is one,
+/// then a simple mask with the lowest bits set, and last a zero mask.
+///
+/// The zero mask at the end is a special case.
+/// It assigns no speaker positions at all, `KSAUDIO_SPEAKER_DIRECTOUT` in ksmedia.h,
+/// and leaves it unspecified where the channels are meant to end up.
+/// It is last because few devices accept it, so it is only worth trying
+/// when nothing else works, but for some devices it is the only one that works.
+/// Which mask a device accepts can also differ between its channel counts,
+/// so a mask that was accepted for two channels is no promise for six.
+///
+/// A mask is a bit field of channel positions, so one is built by or-ing
+/// the [SPEAKER_FRONT_LEFT] and friends constants together,
+/// and a position is tested for with an and.
+/// Build one yourself to ask a device about a layout that is not in the list.
+///
+/// The samples of a frame come in the order the positions are defined,
+/// which is the order of the bits from the least significant one and up,
+/// no matter in which order the mask was written.
+///
+/// ```
+/// use wasapi::{make_channelmasks, SPEAKER_FRONT_CENTER, SPEAKER_FRONT_LEFT,
+///              SPEAKER_FRONT_RIGHT, SPEAKER_LOW_FREQUENCY};
+///
+/// // Every position is a single bit, and they are numbered in the order
+/// // the samples of a frame come in. These are the four lowest ones.
+/// assert_eq!(SPEAKER_FRONT_LEFT, 0x1);
+/// assert_eq!(SPEAKER_FRONT_RIGHT, 0x2);
+/// assert_eq!(SPEAKER_FRONT_CENTER, 0x4);
+/// assert_eq!(SPEAKER_LOW_FREQUENCY, 0x8);
+///
+/// // The most likely layout for three channels is 2.1.
+/// let mask = make_channelmasks(3)[0];
+/// assert_eq!(mask, SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_LOW_FREQUENCY);
+/// assert_eq!(mask, 0xb);
+///
+/// // Ask which positions it holds.
+/// assert!(mask & SPEAKER_LOW_FREQUENCY != 0);
+/// assert!(mask & SPEAKER_FRONT_CENTER == 0);
+///
+/// // The number of positions is the number of channels of the format.
+/// // This layout skips the center channel, so the subwoofer bit 0x8 is the
+/// // highest of the three, and its sample is the last one of a frame.
+/// assert_eq!(mask.count_ones(), 3);
+/// ```
 pub fn make_channelmasks(channels: usize) -> Vec<u32> {
     match channels {
         1 => vec![KSAUDIO_SPEAKER_MONO, make_simple_channelmask(channels), 0],
@@ -349,7 +425,8 @@ pub fn make_channelmasks(channels: usize) -> Vec<u32> {
 
 /// Make a simple channel mask by adding the correct number of bits.
 /// Above the 18 channel positions [that are defined](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)
-/// it returns a zero.
+/// it returns a zero, which is the only option left for such formats,
+/// since there are no positions to assign, see [make_channelmasks].
 pub fn make_simple_channelmask(channels: usize) -> u32 {
     match channels {
         1..=18 => {
@@ -357,5 +434,43 @@ pub fn make_simple_channelmask(channels: usize) -> u32 {
             (1 << channels) - 1
         }
         _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn convert_unambiguous_formats() {
+        for (storebits, sample_type, formattag) in [
+            (8, SampleType::Int, WAVE_FORMAT_PCM),
+            (16, SampleType::Int, WAVE_FORMAT_PCM),
+            (32, SampleType::Int, WAVE_FORMAT_PCM),
+            (32, SampleType::Float, WAVE_FORMAT_IEEE_FLOAT),
+            (64, SampleType::Float, WAVE_FORMAT_IEEE_FLOAT),
+        ] {
+            let fmt = WaveFormat::new(storebits, storebits, &sample_type, 48000, 2, None);
+            let fmtex = fmt.to_waveformatex().unwrap();
+            assert_eq!(fmtex.wave_fmt.Format.wFormatTag as u32, formattag);
+            assert_eq!({ fmtex.wave_fmt.Format.cbSize }, 0);
+            assert_eq!(fmtex.get_bitspersample(), storebits as u16);
+            assert_eq!(fmtex.get_blockalign(), fmt.get_blockalign());
+            assert_eq!(fmtex.get_avgbytespersec(), fmt.get_avgbytespersec());
+            // The accessors still describe the same format as the original.
+            assert_eq!(fmtex.get_validbitspersample(), storebits as u16);
+            assert_eq!(fmtex.get_subformat().unwrap(), sample_type);
+            assert_eq!(fmtex.get_dwchannelmask(), fmt.get_dwchannelmask());
+        }
+    }
+
+    #[test]
+    fn refuse_converting_ambiguous_formats() {
+        // The two 24 bit layouts, packed in three bytes and padded in four,
+        // cannot be told apart without wValidBitsPerSample.
+        let packed = WaveFormat::new(24, 24, &SampleType::Int, 48000, 2, None);
+        assert!(packed.to_waveformatex().is_err());
+        let padded = WaveFormat::new(32, 24, &SampleType::Int, 48000, 2, None);
+        assert!(padded.to_waveformatex().is_err());
     }
 }

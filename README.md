@@ -21,9 +21,21 @@ The following is a selection of the functionality currently available in the lib
 - Loopback capture
 - Notifications for volume change, device disconnect etc
 - Notifications when devices are added or removed, or when the default device changes
+- Probing of the sample rates, channel counts and formats a device supports in exclusive mode
+- Reading the capabilities that a driver declares for a device
 - …and additional features beyond this list
 
+The sharing modes (shared and exclusive) and timing modes (event-driven and polled) are described in
+the documentation of
+[`AudioClient::initialize_client`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.initialize_client),
+including how to choose between them.
 
+## Minimum supported Rust version
+
+The library requires Rust 1.85, and uses edition 2024.
+
+The `record_application` example needs Rust 1.88, since it depends on `sysinfo`.
+This also applies to `cargo test`, which builds all examples.
 
 ## Included examples
 
@@ -38,6 +50,8 @@ The following is a selection of the functionality currently available in the lib
 | `record`                   | Records audio from the default device, and saves the raw samples to a file.                            |
 | `devices`                  | Lists all available audio devices and displays the default devices.                                    |
 | `processes`                | Lists all audio devices and the processes that are using them, with the peak level of each session.    |
-| `record_application`       | Records audio from a single application, and saves the raw samples to a file.                          |
+| `record_application`       | Records audio from a single application, and saves the raw samples to a file. Needs Rust 1.88.         |
 | `aec`                      | Captures audio with Acoustic Echo Cancellation (AEC) enabled and saves the raw data to a file.         |
 | `device_notifications`     | Listens for devices being added, removed or changed, and for changes of the default device.            |
+| `capabilities`             | Lists the formats a single output device supports in exclusive mode.                                   |
+| `dataranges`               | Checks the capabilities every driver declares against what its device really accepts.                  |

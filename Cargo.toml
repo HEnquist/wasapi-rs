@@ -1,8 +1,10 @@
 [package]
 name = "wasapi"
 version = "0.24.0"
-edition = "2021"
-rust-version = "1.76"
+edition = "2024"
+# The library itself builds with 1.85. Note that some examples need a newer
+# compiler, see the comments in [dev-dependencies].
+rust-version = "1.85"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 description = "Bindings for the Wasapi API on Windows"
 license = "MIT"
@@ -27,7 +29,9 @@ features = ["Foundation",
             "Win32_Media_Multimedia",
             "Win32_System_Threading",
             "Win32_System_Variant",
-            "Win32_Security",]
+            "Win32_Security",
+            "Win32_Storage_FileSystem",
+            "Win32_System_IO",]
 
 [dependencies]
 log = "0.4"
@@ -38,6 +42,9 @@ thiserror = "2.0"
 [dev-dependencies]
 simplelog = "0.12"
 rand = "0.10"
+# sysinfo 0.38 requires Rust 1.88, which is higher than the rust-version of the
+# library. Only the 'record_application' example uses it, so building the library
+# still works with 1.85. Building the examples and running the tests needs 1.88.
 sysinfo = "0.38"
 
 [package.metadata.docs.rs]
