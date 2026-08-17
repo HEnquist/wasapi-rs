@@ -22,6 +22,7 @@ The following is a selection of the functionality currently available in the lib
 - Notifications for volume change, device disconnect etc
 - Notifications when devices are added or removed, or when the default device changes
 - Probing of the sample rates, channel counts and formats a device supports in exclusive mode
+- Reading the capabilities that a driver declares for a device
 - …and additional features beyond this list
 
 
@@ -43,3 +44,4 @@ The following is a selection of the functionality currently available in the lib
 | `aec`                      | Captures audio with Acoustic Echo Cancellation (AEC) enabled and saves the raw data to a file.         |
 | `device_notifications`     | Listens for devices being added, removed or changed, and for changes of the default device.            |
 | `capabilities`             | Scans the default output device for the formats it supports in exclusive mode.                         |
+| `dataranges`               | Prints the capabilities each device driver declares, and verifies them with a scan.                    |

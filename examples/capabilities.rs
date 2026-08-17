@@ -33,13 +33,25 @@ fn main() {
     initialize_mta().unwrap();
 
     let enumerator = DeviceEnumerator::new().unwrap();
-    let device = enumerator.get_default_device(&Direction::Render).unwrap();
+    // Give a device name as an argument, or nothing to use the default device.
+    let device = match std::env::args().nth(1) {
+        Some(name) => enumerator
+            .get_device_collection(&Direction::Render)
+            .unwrap()
+            .get_device_with_name(&name)
+            .unwrap(),
+        None => enumerator.get_default_device(&Direction::Render).unwrap(),
+    };
     println!(
         "Scanning device {:?}, this takes a while..",
         device.get_friendlyname().unwrap()
     );
 
-    let mut probe = CapabilityProbe::new(device.get_iaudioclient().unwrap());
+    // This uses the capabilities that the driver declares, when it has any.
+    let mut probe = CapabilityProbe::for_device(&device).unwrap();
+    if !probe.data_ranges().is_empty() {
+        println!("The driver declares {} ranges.", probe.data_ranges().len());
+    }
     let start = Instant::now();
     let formats = probe.supported_formats_all_rates(DEFAULT_MAX_CHANNELS);
     println!("The scan took {:.1} s.", start.elapsed().as_secs_f32());

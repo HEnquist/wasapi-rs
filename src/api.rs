@@ -570,6 +570,19 @@ impl Device {
         })
     }
 
+    /// Get the [DataRange]s that the driver declares for this device.
+    ///
+    /// The ranges are an upper bound on what the device supports,
+    /// see [DataRange](crate::DataRange) for the details and the limitations.
+    /// They can be used to narrow down the search of a [CapabilityProbe](crate::CapabilityProbe).
+    ///
+    /// This only works for devices that are backed by a driver with a
+    /// kernel streaming filter. Devices that are implemented in software
+    /// have nothing to ask, and then this returns an error or an empty list.
+    pub fn get_data_ranges(&self) -> WasapiRes<Vec<crate::DataRange>> {
+        crate::dataranges::read_data_ranges(&self.device, self.direction)
+    }
+
     /// Gets an [IAudioSessionManager] from an [IMMDevice]
     pub fn get_iaudiosessionmanager(&self) -> WasapiRes<AudioSessionManager> {
         let session_manager = unsafe {
