@@ -5,7 +5,8 @@ use std::collections::{BTreeSet, HashMap};
 use crate::{covered_by_any, AudioClient, DataRange, Device, SampleType, WasapiRes, WaveFormat};
 use windows::Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE;
 
-/// The channel count ceiling used when nothing better is known.
+/// The channel count ceiling that a scan uses for a device
+/// that declares no [DataRange]s of its own.
 pub const DEFAULT_MAX_CHANNELS: usize = 32;
 
 // Standard rates in each family, from the base rate upward through the multiples.
@@ -91,9 +92,16 @@ impl FormatChecker for AudioClient {
 /// which avoids repeating the mask renegotiation of
 /// [is_supported_exclusive_with_quirks](AudioClient::is_supported_exclusive_with_quirks).
 ///
+/// The channel counts run from one up to a ceiling.
+/// With [DataRange]s that ceiling is the largest channel count the driver declares,
+/// which is exact. Without them it is [DEFAULT_MAX_CHANNELS], a guess that is
+/// deliberately generous, since a channel count above it would go unnoticed.
+/// The staged scan below then lowers it to the highest count that worked,
+/// as soon as any rate succeeds.
+///
 /// ## With the ranges the driver declares
 ///
-/// When the probe has [DataRange]s, from [CapabilityProbe::for_device] or
+/// When the probe has [DataRange]s, from [CapabilityProbe::new] or
 /// [CapabilityProbe::set_data_ranges], they give real bounds on the rates,
 /// channel counts and sample formats.
 /// The scan then only asks about the combinations that fall inside them,
@@ -107,7 +115,13 @@ impl FormatChecker for AudioClient {
 ///
 /// ## Without them
 ///
-/// A device that declares nothing gets a staged scan that guesses instead:
+/// A probe without ranges, because the device declares none or because they were
+/// cleared with [CapabilityProbe::set_data_ranges], falls back to a staged scan
+/// that guesses instead.
+/// Reading the ranges means walking the topology of the device,
+/// and drivers build those in ways that are hard to cover in full,
+/// so this is what keeps a device that cannot be walked from
+/// looking like a device without any capabilities:
 ///
 /// - The 48 kHz and 44.1 kHz families are probed interleaved from the base rate upward.
 ///   The first hit establishes an upper channel count limit,
@@ -139,20 +153,25 @@ impl FormatChecker for AudioClient {
 /// A device may well accept several masks for the same channel count,
 /// for example both of the 5.1 layouts for six channels,
 /// but the probing stops at the first one and the others are never tried.
-/// Use [is_supported_exclusive_with_quirks](AudioClient::is_supported_exclusive_with_quirks)
-/// directly to find out whether a specific layout is accepted.
+///
+/// To find every layout a device accepts, build the formats with
+/// [WaveFormat::new] and a mask from [make_channelmasks](crate::make_channelmasks),
+/// and query them one by one with [AudioClient::is_supported].
+/// That function returns the masks that are worth trying for a channel count,
+/// with the most likely one first, and a mask of your own is built from the
+/// [SPEAKER_FRONT_LEFT](crate::SPEAKER_FRONT_LEFT) and friends constants.
 ///
 /// ```no_run
-/// use wasapi::{CapabilityProbe, Direction, DeviceEnumerator, DEFAULT_MAX_CHANNELS};
+/// use wasapi::{CapabilityProbe, Direction, DeviceEnumerator};
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let device = DeviceEnumerator::new()?.get_default_device(&Direction::Render)?;
-/// let mut probe = CapabilityProbe::for_device(&device)?;
+/// let mut probe = CapabilityProbe::new(&device)?;
 ///
-/// // Everything the device accepts at 48 kHz, for up to eight channels.
-/// let formats = probe.supported_formats_at_rate(48000, 8);
+/// // Everything the device accepts at 48 kHz.
+/// let formats = probe.supported_formats_at_rate(48000);
 ///
 /// // Everything the device accepts, at any rate.
-/// let all = probe.supported_formats_all_rates(DEFAULT_MAX_CHANNELS);
+/// let all = probe.supported_formats_all_rates();
 /// # Ok(())
 /// # }
 /// ```
@@ -163,27 +182,16 @@ pub struct CapabilityProbe {
 }
 
 impl CapabilityProbe {
-    /// Create a new probe for the device of the given [AudioClient].
+    /// Create a new probe for a [Device].
     ///
-    /// The client must not have been initialized,
-    /// and it can not be used for streaming while the probing runs.
+    /// This gets an [AudioClient] of its own for the device, and reads the
+    /// [DataRange]s that the driver declares, which are used to narrow down the search.
+    /// A device that declares none, see [Device::get_data_ranges],
+    /// gets the staged scan instead.
     ///
-    /// Use [CapabilityProbe::for_device] instead to get the faster and
-    /// more thorough scan that the declared capabilities of the driver allow.
-    pub fn new(client: AudioClient) -> Self {
-        CapabilityProbe {
-            client,
-            channel_masks: ChannelMaskMap::new(),
-            data_ranges: Vec::new(),
-        }
-    }
-
-    /// Create a new probe for a [Device], using the [DataRange]s
-    /// that its driver declares to narrow down the search.
-    ///
-    /// Falls back to a probe without any ranges if the device has none,
-    /// which is the case for devices that are implemented in software.
-    pub fn for_device(device: &Device) -> WasapiRes<Self> {
+    /// The probing only queries the client it holds, and never initializes it,
+    /// so it does not interfere with a client used for streaming.
+    pub fn new(device: &Device) -> WasapiRes<Self> {
         let client = device.get_iaudioclient()?;
         let data_ranges = device.get_data_ranges().unwrap_or_else(|err| {
             debug!("Could not read the data ranges of the device, {err}");
@@ -203,13 +211,10 @@ impl CapabilityProbe {
     }
 
     /// Set the [DataRange]s the probe uses to narrow down the search.
+    /// An empty list turns the narrowing off,
+    /// which is the way to ignore what the driver declares.
     pub fn set_data_ranges(&mut self, data_ranges: Vec<DataRange>) {
         self.data_ranges = data_ranges;
-    }
-
-    /// Get a reference to the [AudioClient] the probe was created with.
-    pub fn client(&self) -> &AudioClient {
-        &self.client
     }
 
     /// Get the formats the device accepts at the given sample rate and channel count.
@@ -224,30 +229,38 @@ impl CapabilityProbe {
     }
 
     /// Get the formats the device accepts at the given sample rate,
-    /// for every channel count from one up to and including `max_channels`.
-    pub fn supported_formats_at_rate(
-        &mut self,
-        samplerate: usize,
-        max_channels: usize,
-    ) -> Vec<WaveFormat> {
+    /// for every channel count the device can have.
+    ///
+    /// The channel counts go up to the ceiling described in the
+    /// [struct documentation](CapabilityProbe).
+    /// A single rate gives nothing to learn from, unlike the full scan,
+    /// so a device that declares no [DataRange]s is probed all the way up to
+    /// [DEFAULT_MAX_CHANNELS] here.
+    /// Use [CapabilityProbe::supported_formats] instead
+    /// when only one channel count is of interest.
+    pub fn supported_formats_at_rate(&mut self, samplerate: usize) -> Vec<WaveFormat> {
         let narrow = self.data_ranges.is_empty();
-        self.probing()
-            .rate(samplerate, 1..=max_channels, CANDIDATE_FORMATS, narrow)
+        let mut probing = self.probing();
+        let ceiling = probing.channel_ceiling();
+        probing
+            .rate(samplerate, 1..=ceiling, CANDIDATE_FORMATS, narrow)
             .formats
     }
 
     /// Get the formats the device accepts at any of the standard sample rates,
-    /// for channel counts up to and including `max_channels`.
+    /// for every channel count the device can have,
+    /// see the [struct documentation](CapabilityProbe) for the ceiling that is used.
     ///
-    /// This is the full scan. It is the most expensive probe by far.
+    /// This is the full scan, and the most expensive probe by far.
     /// Without any [DataRange]s it is also the one that leans hardest
     /// on the pruning heuristics, see the [struct documentation](CapabilityProbe).
-    /// Pass [DEFAULT_MAX_CHANNELS] unless the channel count is known to be lower.
-    pub fn supported_formats_all_rates(&mut self, max_channels: usize) -> Vec<WaveFormat> {
-        self.probing().all_rates(max_channels)
+    pub fn supported_formats_all_rates(&mut self) -> Vec<WaveFormat> {
+        let mut probing = self.probing();
+        let ceiling = probing.channel_ceiling();
+        probing.all_rates(ceiling)
     }
 
-    /// Borrow the parts that the probing needs.
+    /// Borrow the client, the channel mask cache and the data ranges as a [Probing].
     fn probing(&mut self) -> Probing<'_, AudioClient> {
         Probing {
             checker: &self.client,
@@ -257,7 +270,11 @@ impl CapabilityProbe {
     }
 }
 
-/// The state that is shared between the probes.
+/// The state that the probing logic works on, borrowed from a [CapabilityProbe].
+///
+/// The logic lives here instead of directly on [CapabilityProbe] so that it can be
+/// generic over [FormatChecker]. That is what lets the unit tests run the real
+/// pruning logic against a fake device, since the real one needs hardware.
 struct Probing<'a, C: FormatChecker> {
     checker: &'a C,
     channel_masks: &'a mut ChannelMaskMap,
@@ -338,8 +355,7 @@ impl<C: FormatChecker> Probing<'_, C> {
         };
         let mut narrowed: Option<Vec<Candidate>> = None;
         for channels in channel_counts {
-            let active = narrowed.clone();
-            let active = active.as_deref().unwrap_or(candidates);
+            let active = narrowed.as_deref().unwrap_or(candidates);
             let supported = self.formats(samplerate, channels, active);
             if supported.is_empty() {
                 trace!("No supported formats at {samplerate} Hz, {channels} ch");
@@ -366,12 +382,23 @@ impl<C: FormatChecker> Probing<'_, C> {
         result
     }
 
+    /// The highest channel count to probe.
+    /// The declared ranges give a real bound, and without them
+    /// there is nothing better than a generous guess.
+    fn channel_ceiling(&self) -> usize {
+        self.data_ranges
+            .iter()
+            .map(|range| range.max_channels as usize)
+            .max()
+            .unwrap_or(DEFAULT_MAX_CHANNELS)
+    }
+
     /// Probe all the standard rates, up to the given channel count.
-    fn all_rates(&mut self, max_channels: usize) -> Vec<WaveFormat> {
+    fn all_rates(&mut self, ceiling: usize) -> Vec<WaveFormat> {
         if !self.data_ranges.is_empty() {
-            return self.all_rates_within_ranges(max_channels);
+            return self.all_rates_within_ranges(ceiling);
         }
-        self.all_rates_staged(max_channels)
+        self.all_rates_staged(ceiling)
     }
 
     /// Probe the rates and channel counts that the driver declares support for.
@@ -436,8 +463,7 @@ impl<C: FormatChecker> Probing<'_, C> {
                 } else {
                     max_channels
                 };
-                let candidates = learned.clone();
-                let candidates = candidates.as_deref().unwrap_or(CANDIDATE_FORMATS);
+                let candidates = learned.as_deref().unwrap_or(CANDIDATE_FORMATS);
                 let result = self.rate(rate, 1..=limit, candidates, true);
                 if let Some(&highest) = result.channel_counts.iter().next_back() {
                     hit[family_nbr] = true;
@@ -473,8 +499,7 @@ impl<C: FormatChecker> Probing<'_, C> {
             channel_counts.iter().copied().collect()
         };
         for &rate in REMAINING_RATES {
-            let candidates = learned.clone();
-            let candidates = candidates.as_deref().unwrap_or(CANDIDATE_FORMATS);
+            let candidates = learned.as_deref().unwrap_or(CANDIDATE_FORMATS);
             let result = self.rate(rate, remaining_counts.iter().copied(), candidates, true);
             if learned.is_none() && !result.supported_candidates.is_empty() {
                 debug!(

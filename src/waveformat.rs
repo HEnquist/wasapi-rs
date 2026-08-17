@@ -4,13 +4,18 @@ use windows::{
     Win32::Media::Audio::{
         WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0, WAVE_FORMAT_PCM,
     },
-    Win32::Media::KernelStreaming::{
-        KSDATAFORMAT_SUBTYPE_PCM, SPEAKER_BACK_CENTER, SPEAKER_BACK_LEFT, SPEAKER_BACK_RIGHT,
-        SPEAKER_FRONT_CENTER, SPEAKER_FRONT_LEFT, SPEAKER_FRONT_LEFT_OF_CENTER,
-        SPEAKER_FRONT_RIGHT, SPEAKER_FRONT_RIGHT_OF_CENTER, SPEAKER_LOW_FREQUENCY,
-        SPEAKER_SIDE_LEFT, SPEAKER_SIDE_RIGHT, WAVE_FORMAT_EXTENSIBLE,
-    },
+    Win32::Media::KernelStreaming::{KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE},
     Win32::Media::Multimedia::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, WAVE_FORMAT_IEEE_FLOAT},
+};
+
+/// The [18 defined channel positions](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)
+/// of a channel mask, see [make_channelmasks] for how to use them.
+pub use windows::Win32::Media::KernelStreaming::{
+    SPEAKER_BACK_CENTER, SPEAKER_BACK_LEFT, SPEAKER_BACK_RIGHT, SPEAKER_FRONT_CENTER,
+    SPEAKER_FRONT_LEFT, SPEAKER_FRONT_LEFT_OF_CENTER, SPEAKER_FRONT_RIGHT,
+    SPEAKER_FRONT_RIGHT_OF_CENTER, SPEAKER_LOW_FREQUENCY, SPEAKER_SIDE_LEFT, SPEAKER_SIDE_RIGHT,
+    SPEAKER_TOP_BACK_CENTER, SPEAKER_TOP_BACK_LEFT, SPEAKER_TOP_BACK_RIGHT, SPEAKER_TOP_CENTER,
+    SPEAKER_TOP_FRONT_CENTER, SPEAKER_TOP_FRONT_LEFT, SPEAKER_TOP_FRONT_RIGHT,
 };
 
 use crate::{SampleType, WasapiError, WasapiRes};
@@ -139,7 +144,9 @@ impl WaveFormat {
     /// Build a [WAVEFORMATEXTENSIBLE](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible) struct for the given parameters.
     /// `channel_mask` is optional. If a mask is provided, it will be used. If not, a default mask will be created.
     /// This can be used to work around quirks for some device drivers.
-    /// If the default is not accepted, try again using a zero mask, `Some(0)`.
+    /// If the default is not accepted, try again using a zero mask, `Some(0)`,
+    /// which assigns no speaker positions.
+    /// See [make_channelmasks] for the masks that are worth trying, and in which order.
     pub fn new(
         storebits: usize,
         validbits: usize,
@@ -295,6 +302,9 @@ impl WaveFormat {
     }
 
     /// Read dwChannelMask.
+    ///
+    /// The mask is a bit field of channel positions,
+    /// see [make_channelmasks] for how to read one.
     pub fn get_dwchannelmask(&self) -> u32 {
         self.wave_fmt.dwChannelMask
     }
@@ -317,8 +327,61 @@ impl From<WAVEFORMATEXTENSIBLE> for WaveFormat {
 }
 
 /// Return a vector with suggested channel masks for the given number of channels.
-/// Used to find a format that a device accepts in exclusive mode.
-/// The values are sorted according to how likely they are to be accepted, with the most likely first.
+///
+/// Channel masks are one of the more awkward corners of Wasapi.
+/// A mask is meant to describe where the channels are supposed to end up,
+/// but in exclusive mode it also decides whether the device accepts the format at all,
+/// and drivers do not agree on which masks are acceptable.
+/// Since there is no way of asking a device what it wants,
+/// finding a mask it likes comes down to trying them until one is accepted.
+///
+/// This function gives the list worth trying for a channel count,
+/// sorted according to how likely they are to be accepted, with the most likely first.
+/// The masks are the recommended layouts from ksmedia.h where there is one,
+/// then a simple mask with the lowest bits set, and last a zero mask.
+///
+/// The zero mask at the end is a special case.
+/// It assigns no speaker positions at all, `KSAUDIO_SPEAKER_DIRECTOUT` in ksmedia.h,
+/// and leaves it unspecified where the channels are meant to end up.
+/// It is last because few devices accept it, so it is only worth trying
+/// when nothing else works, but for some devices it is the only one that works.
+/// Which mask a device accepts can also differ between its channel counts,
+/// so a mask that was accepted for two channels is no promise for six.
+///
+/// A mask is a bit field of channel positions, so one is built by or-ing
+/// the [SPEAKER_FRONT_LEFT] and friends constants together,
+/// and a position is tested for with an and.
+/// Build one yourself to ask a device about a layout that is not in the list.
+///
+/// The samples of a frame come in the order the positions are defined,
+/// which is the order of the bits from the least significant one and up,
+/// no matter in which order the mask was written.
+///
+/// ```
+/// use wasapi::{make_channelmasks, SPEAKER_FRONT_CENTER, SPEAKER_FRONT_LEFT,
+///              SPEAKER_FRONT_RIGHT, SPEAKER_LOW_FREQUENCY};
+///
+/// // Every position is a single bit, and they are numbered in the order
+/// // the samples of a frame come in. These are the four lowest ones.
+/// assert_eq!(SPEAKER_FRONT_LEFT, 0x1);
+/// assert_eq!(SPEAKER_FRONT_RIGHT, 0x2);
+/// assert_eq!(SPEAKER_FRONT_CENTER, 0x4);
+/// assert_eq!(SPEAKER_LOW_FREQUENCY, 0x8);
+///
+/// // The most likely layout for three channels is 2.1.
+/// let mask = make_channelmasks(3)[0];
+/// assert_eq!(mask, SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_LOW_FREQUENCY);
+/// assert_eq!(mask, 0xb);
+///
+/// // Ask which positions it holds.
+/// assert!(mask & SPEAKER_LOW_FREQUENCY != 0);
+/// assert!(mask & SPEAKER_FRONT_CENTER == 0);
+///
+/// // The number of positions is the number of channels of the format.
+/// // This layout skips the center channel, so the subwoofer bit 0x8 is the
+/// // highest of the three, and its sample is the last one of a frame.
+/// assert_eq!(mask.count_ones(), 3);
+/// ```
 pub fn make_channelmasks(channels: usize) -> Vec<u32> {
     match channels {
         1 => vec![KSAUDIO_SPEAKER_MONO, make_simple_channelmask(channels), 0],
@@ -361,7 +424,8 @@ pub fn make_channelmasks(channels: usize) -> Vec<u32> {
 
 /// Make a simple channel mask by adding the correct number of bits.
 /// Above the 18 channel positions [that are defined](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)
-/// it returns a zero.
+/// it returns a zero, which is the only option left for such formats,
+/// since there are no positions to assign, see [make_channelmasks].
 pub fn make_simple_channelmask(channels: usize) -> u32 {
     match channels {
         1..=18 => {

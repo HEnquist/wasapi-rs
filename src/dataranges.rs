@@ -10,8 +10,10 @@ use std::collections::HashSet;
 use std::mem::size_of;
 use std::ptr::from_ref;
 
-use windows::core::{Interface, GUID, PCWSTR};
-use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE};
+use windows::core::{Interface, GUID, HRESULT, PCWSTR};
+use windows::Win32::Foundation::{
+    CloseHandle, ERROR_INSUFFICIENT_BUFFER, ERROR_MORE_DATA, GENERIC_READ, GENERIC_WRITE, HANDLE,
+};
 use windows::Win32::Media::Audio::{Connector, IConnector, IDeviceTopology, IMMDevice, IPart};
 use windows::Win32::Media::KernelStreaming::{
     KSPROPSETID_Pin, IOCTL_KS_PROPERTY, KSDATAFORMAT_0, KSDATAFORMAT_SUBTYPE_PCM,
@@ -31,9 +33,9 @@ use crate::{Direction, SampleType, WasapiRes, WaveFormat};
 /// A KSDATAFORMAT is 64 bytes, the audio fields of a KSDATARANGE_AUDIO follow after it.
 const AUDIO_RANGE_SIZE: usize = size_of::<KSDATAFORMAT_0>() + 5 * size_of::<u32>();
 
-/// The error codes that mean the reply did not fit in the buffer.
-const ERROR_MORE_DATA: u32 = 0x800700EA;
-const ERROR_INSUFFICIENT_BUFFER: u32 = 0x8007007A;
+/// The errors that mean the reply did not fit in the buffer.
+const MORE_DATA: HRESULT = HRESULT::from_win32(ERROR_MORE_DATA.0);
+const INSUFFICIENT_BUFFER: HRESULT = HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER.0);
 
 /// One capability range, as declared by a device driver.
 ///
@@ -59,13 +61,20 @@ pub struct DataRange {
     /// The highest sample rate.
     pub max_samplerate: u32,
     /// The subformat, normally PCM or IEEE float.
-    /// An all zero GUID is a wildcard that matches anything.
+    /// An all zero GUID is a wildcard, see [DataRange::sample_type].
     pub subformat: GUID,
 }
 
 impl DataRange {
-    /// Get the sample type of the range.
-    /// Returns `None` for a wildcard, and for anything that is neither PCM nor float.
+    /// Get the sample type of the range, if it has one.
+    ///
+    /// This returns `None` in two cases.
+    /// The first is a wildcard, an all zero GUID,
+    /// `KSDATAFORMAT_SUBTYPE_WILDCARD` in ksmedia.h.
+    /// A driver declares a wildcard for a property it does not want to restrict,
+    /// so a wildcard subformat means the pin takes any of them.
+    /// The second is a subformat that is neither PCM nor float,
+    /// a compressed one for instance, which has no [SampleType] to map to.
     pub fn sample_type(&self) -> Option<SampleType> {
         match self.subformat {
             KSDATAFORMAT_SUBTYPE_PCM => Some(SampleType::Int),
@@ -75,7 +84,12 @@ impl DataRange {
     }
 
     /// Check if a format falls inside this range.
-    /// A range that declares neither PCM nor float only matches on the other properties.
+    ///
+    /// A range without a sample type of its own, see [DataRange::sample_type],
+    /// is matched on the other properties alone.
+    /// A range that cannot be interpreted then never excludes a format,
+    /// which is the safe direction to err in,
+    /// since the cost is a query that comes back negative.
     pub fn covers(&self, wave_fmt: &WaveFormat) -> bool {
         let samplerate = wave_fmt.get_samplespersec();
         let storebits = wave_fmt.get_bitspersample() as u32;
@@ -92,15 +106,14 @@ impl DataRange {
 
 /// Check if a format falls inside any of the ranges.
 /// An empty set of ranges means nothing is known, and everything is then accepted.
-pub fn covered_by_any(ranges: &[DataRange], wave_fmt: &WaveFormat) -> bool {
+pub(crate) fn covered_by_any(ranges: &[DataRange], wave_fmt: &WaveFormat) -> bool {
     ranges.is_empty() || ranges.iter().any(|range| range.covers(wave_fmt))
 }
 
 /// Read the data ranges that the driver declares for a device.
 ///
-/// This only works for devices that are backed by a WDM driver.
-/// Devices that are implemented in software, such as some virtual
-/// and remote devices, have no kernel streaming filter to ask.
+/// This needs a device with a kernel streaming filter behind it.
+/// A device without one has nothing to ask, and gets an empty list.
 pub(crate) fn read_data_ranges(
     device: &IMMDevice,
     direction: Direction,
@@ -151,7 +164,7 @@ pub(crate) fn read_data_ranges(
     // Some drivers have no separate wave filter, and then the streaming pins
     // are on the same filter as the endpoint connects to.
     if wave_filters.is_empty() {
-        if let Some(filter) = topology_filter.clone() {
+        if let Some(filter) = topology_filter {
             debug!("Found no wave filter, trying the filter of the endpoint itself");
             match open_filter(&filter) {
                 Ok(handle) => wave_filters.push((filter, handle)),
@@ -294,14 +307,7 @@ fn ks_property(filter: HANDLE, property: &KSP_PIN, buffer: Option<&mut [u8]>) ->
         Ok(()) => Ok(returned),
         // A buffer that is too small is not a failure here,
         // the driver then reports the size it needs.
-        Err(err)
-            if matches!(
-                err.code().0 as u32,
-                ERROR_MORE_DATA | ERROR_INSUFFICIENT_BUFFER
-            ) =>
-        {
-            Ok(returned)
-        }
+        Err(err) if matches!(err.code(), MORE_DATA | INSUFFICIENT_BUFFER) => Ok(returned),
         Err(err) => Err(err.into()),
     }
 }

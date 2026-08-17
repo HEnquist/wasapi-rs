@@ -1,3 +1,9 @@
+// Scan an output device for the formats it supports in exclusive mode.
+// Give a device name as an argument, or nothing to use the default device.
+//
+// See the dataranges example to check what a driver declares
+// against what its device really accepts.
+
 use std::collections::BTreeMap;
 use std::time::Instant;
 use wasapi::*;
@@ -19,7 +25,6 @@ fn format_name(wave_fmt: &WaveFormat) -> String {
     }
 }
 
-// Scan the default output device for the formats it supports in exclusive mode.
 fn main() {
     let _ = SimpleLogger::init(
         LevelFilter::Info,
@@ -42,19 +47,16 @@ fn main() {
             .unwrap(),
         None => enumerator.get_default_device(&Direction::Render).unwrap(),
     };
-    println!(
-        "Scanning device {:?}, this takes a while..",
-        device.get_friendlyname().unwrap()
-    );
+    println!("Scanning device {:?}..", device.get_friendlyname().unwrap());
 
     // This uses the capabilities that the driver declares, when it has any.
-    let mut probe = CapabilityProbe::for_device(&device).unwrap();
+    let mut probe = CapabilityProbe::new(&device).unwrap();
     if !probe.data_ranges().is_empty() {
         println!("The driver declares {} ranges.", probe.data_ranges().len());
     }
     let start = Instant::now();
-    let formats = probe.supported_formats_all_rates(DEFAULT_MAX_CHANNELS);
-    println!("The scan took {:.1} s.", start.elapsed().as_secs_f32());
+    let formats = probe.supported_formats_all_rates();
+    println!("The scan took {} ms.", start.elapsed().as_millis());
 
     // Group the formats by channel count and sample rate.
     let mut grouped: BTreeMap<u16, BTreeMap<u32, Vec<String>>> = BTreeMap::new();

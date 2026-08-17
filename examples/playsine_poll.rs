@@ -1,3 +1,8 @@
+// Play a sine wave in shared mode on the default output device,
+// using polling instead of event driven timing mode.
+//
+// See the playsine example for the event driven version.
+
 use std::f64::consts::PI;
 use std::{thread, time};
 use wasapi::*;

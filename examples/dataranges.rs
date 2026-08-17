@@ -1,9 +1,12 @@
 // Compare the capabilities that a driver declares with what the device really accepts.
 //
-// For every active output device this prints the declared data ranges,
+// For every active output and input device this prints the declared data ranges,
 // then runs a full scan both with and without them, and compares the results.
 // It answers two questions, whether the declared ranges can be trusted,
 // and how much they help.
+//
+// This is a check of the data ranges themselves.
+// To simply list what a device supports, use the capabilities example instead.
 //
 // Give a substring of a device name as an argument to only check the matching devices.
 
@@ -31,10 +34,10 @@ fn describe(wave_fmt: &WaveFormat) -> Described {
     )
 }
 
-fn scan(probe: &mut CapabilityProbe) -> (BTreeSet<Described>, f32) {
+fn scan(probe: &mut CapabilityProbe) -> (BTreeSet<Described>, u128) {
     let start = Instant::now();
-    let formats = probe.supported_formats_all_rates(DEFAULT_MAX_CHANNELS);
-    let elapsed = start.elapsed().as_secs_f32();
+    let formats = probe.supported_formats_all_rates();
+    let elapsed = start.elapsed().as_millis();
     (formats.iter().map(describe).collect(), elapsed)
 }
 
@@ -96,21 +99,23 @@ fn main() {
             }
         };
 
-        let mut plain = CapabilityProbe::new(device.get_iaudioclient().unwrap());
+        // Clear the ranges to get the staged scan, for comparison.
+        let mut plain = CapabilityProbe::new(&device).unwrap();
+        plain.set_data_ranges(Vec::new());
         let (staged, staged_time) = scan(&mut plain);
         println!(
-            "  the staged scan found {} formats in {staged_time:.2} s",
+            "  the staged scan found {} formats in {staged_time} ms",
             staged.len()
         );
 
         if ranges.is_empty() {
             continue;
         }
-        let mut bounded = CapabilityProbe::new(device.get_iaudioclient().unwrap());
+        let mut bounded = CapabilityProbe::new(&device).unwrap();
         bounded.set_data_ranges(ranges);
         let (found, found_time) = scan(&mut bounded);
         println!(
-            "  the bounded scan found {} formats in {found_time:.2} s",
+            "  the bounded scan found {} formats in {found_time} ms",
             found.len()
         );
 

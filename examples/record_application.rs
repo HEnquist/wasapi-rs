@@ -1,3 +1,9 @@
+// Record audio from a single application, and save the raw samples
+// to the file 'recorded.raw'.
+//
+// This example captures from Firefox, edit the process name in main()
+// to capture from another application.
+
 use std::collections::VecDeque;
 use std::error::{self};
 use std::ffi::OsStr;

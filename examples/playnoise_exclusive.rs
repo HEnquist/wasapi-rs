@@ -1,3 +1,10 @@
+// Play white noise in exclusive mode on the default output device.
+//
+// Shows how to handle the HRESULT errors that initializing an
+// exclusive mode stream can return.
+// Uses event driven timing mode, see the playnoise_exclusive_poll
+// example for polling.
+
 use rand::prelude::*;
 use wasapi::*;
 

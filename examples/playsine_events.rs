@@ -1,3 +1,9 @@
+// Play a sine wave in shared mode on the default output device,
+// while listening to session notifications.
+//
+// Change the volume or mute the stream in the Windows volume mixer
+// to see the notifications arrive.
+
 use std::f64::consts::PI;
 use wasapi::*;
 

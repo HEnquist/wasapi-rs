@@ -191,6 +191,10 @@ impl From<Role> for ERole {
 /// There are four main modes that can be specified,
 /// corresponding to the four possible combinations of sharing mode and timing.
 /// The enum variants only expose the parameters that can be set in each mode.
+///
+/// See the documentation of [AudioClient::initialize_client()]
+/// for a description of the sharing and timing modes,
+/// and how to choose between them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StreamMode {
     /// Shared mode using polling for timing.
@@ -221,14 +225,18 @@ pub enum StreamMode {
     EventsExclusive { period_hns: i64 },
 }
 
-/// Sharemode for device
+/// Sharemode for device.
+/// See the documentation of [AudioClient::initialize_client()]
+/// for a description of the two sharing modes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShareMode {
     Shared,
     Exclusive,
 }
 
-/// Timing mode for device
+/// Timing mode for device.
+/// See the documentation of [AudioClient::initialize_client()]
+/// for a description of the two timing modes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TimingMode {
     Polling,
@@ -570,15 +578,20 @@ impl Device {
         })
     }
 
-    /// Get the [DataRange]s that the driver declares for this device.
+    /// Get the [DataRange](crate::DataRange)s that the driver declares for this device.
     ///
     /// The ranges are an upper bound on what the device supports,
     /// see [DataRange](crate::DataRange) for the details and the limitations.
     /// They can be used to narrow down the search of a [CapabilityProbe](crate::CapabilityProbe).
     ///
-    /// This only works for devices that are backed by a driver with a
-    /// kernel streaming filter. Devices that are implemented in software
-    /// have nothing to ask, and then this returns an error or an empty list.
+    /// This needs a device that is backed by a driver with a kernel streaming filter.
+    /// Being virtual is no obstacle, a virtual cable with a normal driver
+    /// declares its ranges like any sound card does.
+    /// A device without such a filter, a remote desktop endpoint for instance,
+    /// has nothing to ask, and then this returns an error or an empty list.
+    ///
+    /// This works even for a device that cannot be opened for streaming,
+    /// an unplugged headset for example, since it asks the driver and not the endpoint.
     pub fn get_data_ranges(&self) -> WasapiRes<Vec<crate::DataRange>> {
         crate::dataranges::read_data_ranges(&self.device, self.direction)
     }
@@ -966,12 +979,15 @@ impl AudioClient {
     /// - If one or two channels, try with the format as WAVEFORMATEX.
     ///   This is skipped for formats that a WAVEFORMATEX cannot describe without ambiguity,
     ///   such as 24 bit samples, see [WaveFormat::to_waveformatex].
-    /// - Try with different channel masks:
+    /// - Try with different channel masks, see [make_channelmasks]:
     ///   - If channels <= 8: Recommended mask(s) from ksmedia.h.
     ///   - If channels <= 18: Simple mask.
-    ///   - Zero mask.
+    ///   - Zero mask, which assigns no speaker positions.
+    ///     Few devices accept it, but for some it is the only one that works.
     ///
     /// If an accepted format is found, this is returned.
+    /// The returned format carries the mask that was accepted, which may differ
+    /// from the one that was asked for.
     /// An error means no accepted format was found.
     pub fn is_supported_exclusive_with_quirks(
         &self,

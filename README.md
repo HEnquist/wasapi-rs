@@ -25,7 +25,10 @@ The following is a selection of the functionality currently available in the lib
 - Reading the capabilities that a driver declares for a device
 - …and additional features beyond this list
 
-
+The sharing modes (shared and exclusive) and timing modes (event-driven and polled) are described in
+the documentation of
+[`AudioClient::initialize_client`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.initialize_client),
+including how to choose between them.
 
 ## Included examples
 
@@ -43,5 +46,5 @@ The following is a selection of the functionality currently available in the lib
 | `record_application`       | Records audio from a single application, and saves the raw samples to a file.                          |
 | `aec`                      | Captures audio with Acoustic Echo Cancellation (AEC) enabled and saves the raw data to a file.         |
 | `device_notifications`     | Listens for devices being added, removed or changed, and for changes of the default device.            |
-| `capabilities`             | Scans the default output device for the formats it supports in exclusive mode.                         |
-| `dataranges`               | Prints the capabilities each device driver declares, and verifies them with a scan.                    |
+| `capabilities`             | Lists the formats a single output device supports in exclusive mode.                                   |
+| `dataranges`               | Checks the capabilities every driver declares against what its device really accepts.                  |
