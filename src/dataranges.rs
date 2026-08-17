@@ -40,7 +40,7 @@ const INSUFFICIENT_BUFFER: HRESULT = HRESULT::from_win32(ERROR_INSUFFICIENT_BUFF
 /// One capability range, as declared by a device driver.
 ///
 /// A range is a cross product and over-reports.
-/// A device declaring two to eight channels at 44.1 to 192 kHz
+/// A device declaring up to eight channels at 44.1 to 192 kHz
 /// is not promising that every combination in that box works,
 /// so a range is an upper bound that still has to be confirmed with
 /// [is_supported](crate::AudioClient::is_supported).
@@ -251,24 +251,34 @@ fn reachable_connectors(start: &IPart, upstream: bool) -> Vec<IConnector> {
 
 /// Open a kernel streaming filter by its device interface path.
 /// The device ids from the topology have a `{2}.` prefix that has to go.
+///
+/// Only get requests are sent to the filter, so read access is enough,
+/// and asking for less is what lets a filter that only allows reading be opened at all.
+/// A driver that refuses that gets a second try with write access as well.
 fn open_filter(device_id: &str) -> WasapiRes<HANDLE> {
     let path = match device_id.find("}.") {
         Some(pos) if device_id.starts_with('{') => &device_id[pos + 2..],
         _ => device_id,
     };
     let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
-    let handle = unsafe {
+    let open = |access: u32| unsafe {
         CreateFileW(
             PCWSTR(wide.as_ptr()),
-            GENERIC_READ.0 | GENERIC_WRITE.0,
+            access,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             None,
             OPEN_EXISTING,
             FILE_FLAGS_AND_ATTRIBUTES(0),
             None,
-        )?
+        )
     };
-    Ok(handle)
+    match open(GENERIC_READ.0) {
+        Ok(handle) => Ok(handle),
+        Err(err) => {
+            debug!("Could not open the filter for reading, {err}, retrying with write access");
+            Ok(open(GENERIC_READ.0 | GENERIC_WRITE.0)?)
+        }
+    }
 }
 
 /// Build a pin property request.
