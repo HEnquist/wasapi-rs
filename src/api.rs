@@ -877,6 +877,9 @@ impl AudioClient {
     /// Then call this function again with the new WafeFormat structure.
     /// If the driver then reports that the format is supported, use the original WaveFormat structure when calling [AudioClient::initialize_client].
     ///
+    /// Note that [WaveFormat::to_waveformatex] returns an error for formats that a WAVEFORMATEX cannot describe without ambiguity.
+    /// A 24 bit format must never be queried as WAVEFORMATEX, since a driver may then accept it and treat it as 24 bit padded in 32 bit containers.
+    ///
     /// See also the helper function [is_supported_exclusive_with_quirks](AudioClient::is_supported_exclusive_with_quirks).
     pub fn is_supported(
         &self,
@@ -948,6 +951,8 @@ impl AudioClient {
     /// The alternatives it tries are:
     /// - The format as given.
     /// - If one or two channels, try with the format as WAVEFORMATEX.
+    ///   This is skipped for formats that a WAVEFORMATEX cannot describe without ambiguity,
+    ///   such as 24 bit samples, see [WaveFormat::to_waveformatex].
     /// - Try with different channel masks:
     ///   - If channels <= 8: Recommended mask(s) from ksmedia.h.
     ///   - If channels <= 18: Simple mask.
@@ -966,14 +971,22 @@ impl AudioClient {
             return Ok(wave_fmt);
         }
         if wave_fmt.get_nchannels() <= 2 {
-            debug!("Repeating query with format as WAVEFORMATEX");
-            let wave_formatex = wave_fmt.to_waveformatex().unwrap();
-            if self
-                .is_supported(&wave_formatex, &ShareMode::Exclusive)
-                .is_ok()
-            {
-                debug!("The requested format is supported as WAVEFORMATEX");
-                return Ok(wave_formatex);
+            // The WAVEFORMATEX representation is only tried for formats where it is unambiguous,
+            // see the note on WaveFormat::to_waveformatex.
+            match wave_fmt.to_waveformatex() {
+                Ok(wave_formatex) => {
+                    debug!("Repeating query with format as WAVEFORMATEX");
+                    if self
+                        .is_supported(&wave_formatex, &ShareMode::Exclusive)
+                        .is_ok()
+                    {
+                        debug!("The requested format is supported as WAVEFORMATEX");
+                        return Ok(wave_formatex);
+                    }
+                }
+                Err(err) => {
+                    debug!("Skipping query with format as WAVEFORMATEX, {err}");
+                }
             }
         }
         let masks = make_channelmasks(wave_fmt.get_nchannels() as usize);

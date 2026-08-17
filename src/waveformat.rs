@@ -213,12 +213,24 @@ impl WaveFormat {
     }
 
     /// Return a copy in the simpler [WAVEFORMATEX](https://docs.microsoft.com/en-us/previous-versions/dd757713(v=vs.85)) format.
+    ///
+    /// A WAVEFORMATEX has no `wValidBitsPerSample`, so it can only describe formats
+    /// where the sample layout follows from `wBitsPerSample` alone.
+    /// This holds for 8, 16, 32 and 64 bits when all bits are valid.
+    /// A 24 bit sample can be stored either packed in three bytes,
+    /// or padded in a four byte container, and the two cannot be told apart
+    /// in a reliable way without `wValidBitsPerSample`.
+    /// This method returns an error for any format that would be ambiguous.
     pub fn to_waveformatex(&self) -> WasapiRes<Self> {
         let blockalign = self.wave_fmt.Format.nBlockAlign;
         let samplerate = self.wave_fmt.Format.nSamplesPerSec;
         let channels = self.wave_fmt.Format.nChannels;
         let byterate = self.wave_fmt.Format.nAvgBytesPerSec;
         let storebits = self.wave_fmt.Format.wBitsPerSample;
+        let validbits = unsafe { self.wave_fmt.Samples.wValidBitsPerSample };
+        if !matches!(storebits, 8 | 16 | 32 | 64) || validbits != storebits {
+            return Err(WasapiError::UnsupportedFormat);
+        }
         let sample_type = match self.wave_fmt.SubFormat {
             KSDATAFORMAT_SUBTYPE_IEEE_FLOAT => WAVE_FORMAT_IEEE_FLOAT,
             KSDATAFORMAT_SUBTYPE_PCM => WAVE_FORMAT_PCM,
@@ -357,5 +369,39 @@ pub fn make_simple_channelmask(channels: usize) -> u32 {
             (1 << channels) - 1
         }
         _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn convert_unambiguous_formats() {
+        for (storebits, sample_type, formattag) in [
+            (8, SampleType::Int, WAVE_FORMAT_PCM),
+            (16, SampleType::Int, WAVE_FORMAT_PCM),
+            (32, SampleType::Int, WAVE_FORMAT_PCM),
+            (32, SampleType::Float, WAVE_FORMAT_IEEE_FLOAT),
+            (64, SampleType::Float, WAVE_FORMAT_IEEE_FLOAT),
+        ] {
+            let fmt = WaveFormat::new(storebits, storebits, &sample_type, 48000, 2, None);
+            let fmtex = fmt.to_waveformatex().unwrap();
+            assert_eq!(fmtex.wave_fmt.Format.wFormatTag as u32, formattag);
+            assert_eq!({ fmtex.wave_fmt.Format.cbSize }, 0);
+            assert_eq!(fmtex.get_bitspersample(), storebits as u16);
+            assert_eq!(fmtex.get_blockalign(), fmt.get_blockalign());
+            assert_eq!(fmtex.get_avgbytespersec(), fmt.get_avgbytespersec());
+        }
+    }
+
+    #[test]
+    fn refuse_converting_ambiguous_formats() {
+        // The two 24 bit layouts, packed in three bytes and padded in four,
+        // cannot be told apart without wValidBitsPerSample.
+        let packed = WaveFormat::new(24, 24, &SampleType::Int, 48000, 2, None);
+        assert!(packed.to_waveformatex().is_err());
+        let padded = WaveFormat::new(32, 24, &SampleType::Int, 48000, 2, None);
+        assert!(padded.to_waveformatex().is_err());
     }
 }
