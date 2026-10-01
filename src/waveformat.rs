@@ -124,20 +124,30 @@ impl WaveFormat {
     /// Parse a [WAVEFORMATEX](https://docs.microsoft.com/en-us/previous-versions/dd757713(v=vs.85)) structure and
     /// return a [WaveFormat] instance. If the underlying structure is a WAVEFORMATEXTENSIBLE, as specified by
     /// wFormatTag, then use as-is. If not, assume it is only a WAVEFORMATEX structure.
-    pub fn parse(waveformatex: &WAVEFORMATEX) -> WasapiRes<Self> {
-        if waveformatex.wFormatTag == WAVE_FORMAT_EXTENSIBLE as u16 {
+    ///
+    /// Use [WaveFormat::parse_from_blob_bytes] instead when the format is available as a byte slice.
+    ///
+    /// # Safety
+    /// `waveformatex` must be non-null, properly aligned, and valid for reads of
+    /// `size_of::<WAVEFORMATEX>() + cbSize` bytes, where `cbSize` is the value in the header.
+    /// A pointer returned by WASAPI, for example from `GetMixFormat`, meets this.
+    /// A pointer to a lone `WAVEFORMATEX` does not, when the format tag says extensible.
+    pub unsafe fn parse(waveformatex: *const WAVEFORMATEX) -> WasapiRes<Self> {
+        // SAFETY: The caller guarantees that the pointer is valid for reads of at least a WAVEFORMATEX.
+        let header = unsafe { std::ptr::read(waveformatex) };
+        if header.wFormatTag == WAVE_FORMAT_EXTENSIBLE as u16 {
             const ATLEAST_SIZE: usize =
                 size_of::<WAVEFORMATEXTENSIBLE>() - size_of::<WAVEFORMATEX>();
-            if waveformatex.cbSize < ATLEAST_SIZE as u16 {
+            if header.cbSize < ATLEAST_SIZE as u16 {
                 return Err(WasapiError::UnsupportedFormat);
             }
-            // SAFETY: Both wFormatTag and size check passed, so the pointed-to memory is a full WAVEFORMATEXTENSIBLE.
-            let waveformatextensible: WAVEFORMATEXTENSIBLE = unsafe {
-                std::ptr::read(std::ptr::from_ref(waveformatex).cast::<WAVEFORMATEXTENSIBLE>())
-            };
+            // SAFETY: The size check passed, and the caller guarantees that the pointer is valid
+            // for reads of the size given by cbSize, so it covers a full WAVEFORMATEXTENSIBLE.
+            let waveformatextensible: WAVEFORMATEXTENSIBLE =
+                unsafe { std::ptr::read(waveformatex.cast::<WAVEFORMATEXTENSIBLE>()) };
             return Ok(waveformatextensible.into());
         }
-        Self::from_waveformatex(*waveformatex)
+        Self::from_waveformatex(header)
     }
 
     /// Build a [WAVEFORMATEXTENSIBLE](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible) struct for the given parameters.
