@@ -1,3 +1,8 @@
+// Capture and render sound simultaneously.
+//
+// Loops audio back from the default input device to the default output device,
+// with separate threads for capture and render that are connected by a channel.
+
 use std::collections::VecDeque;
 use std::error;
 use std::sync::mpsc;

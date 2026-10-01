@@ -1,3 +1,7 @@
+// List all audio devices and the processes that are using them.
+//
+// Prints the peak level of each device, and of every active session on it.
+
 use wasapi::*;
 
 fn main() {

@@ -1,3 +1,8 @@
+// Play a sine wave in shared mode on the default output device,
+// using polling instead of event driven timing mode.
+//
+// See the playsine example for the event driven version.
+
 use std::f64::consts::PI;
 use std::{thread, time};
 use wasapi::*;
@@ -46,7 +51,7 @@ fn main() {
 
     initialize_mta().unwrap();
 
-    let mut gen = SineGenerator::new(1000.0, 44100.0, 0.1);
+    let mut sine = SineGenerator::new(1000.0, 44100.0, 0.1);
 
     let channels = 2;
 
@@ -126,7 +131,7 @@ fn main() {
     let mut write_frames = |nbr_frames: usize| {
         let mut data = vec![0u8; nbr_frames * blockalign as usize];
         for frame in data.chunks_exact_mut(blockalign as usize) {
-            let sample = gen.next().unwrap();
+            let sample = sine.next().unwrap();
             let sample_bytes = sample.to_le_bytes();
             for value in frame.chunks_exact_mut(blockalign as usize / channels) {
                 for (bufbyte, sinebyte) in value.iter_mut().zip(sample_bytes.iter()) {

@@ -1,3 +1,9 @@
+// Record audio from the default input device, and save the raw samples
+// to the file 'recorded.raw'.
+//
+// The capture runs in a separate thread that sends the samples to the
+// main thread over a channel.
+
 use std::collections::VecDeque;
 use std::error;
 use std::fs::File;

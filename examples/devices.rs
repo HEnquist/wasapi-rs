@@ -1,3 +1,6 @@
+// List all available audio devices with their state,
+// and show the default device for each role.
+
 use wasapi::*;
 
 fn main() {

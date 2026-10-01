@@ -1,3 +1,9 @@
+// Record audio with Acoustic Echo Cancellation (AEC) enabled,
+// and save the raw samples to the file 'aec-recorded.raw'.
+//
+// The AEC effect is applied by setting the stream category to
+// communications, and capturing from the default communications device.
+
 use std::collections::VecDeque;
 use std::error;
 use std::fs::File;
