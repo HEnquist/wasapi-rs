@@ -1,6 +1,6 @@
 [package]
 name = "wasapi"
-version = "0.24.0"
+version = "0.25.0"
 edition = "2024"
 # The library itself builds with 1.85. Note that some examples need a newer
 # compiler, see the comments in [dev-dependencies].
