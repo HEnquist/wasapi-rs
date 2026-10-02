@@ -11,6 +11,7 @@
 // capture run throws the samples away. What gets asserted is the frame count,
 // which is enough to prove the stream ran at the format's rate.
 
+use simplelog::{Config, LevelFilter, SimpleLogger};
 use std::cell::Cell;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
@@ -53,19 +54,19 @@ thread_local! {
 pub struct Cable {
     /// The two channel render endpoint.
     pub render: Device,
-    /// "CABLE In 16 Ch", when the driver created it.
-    pub render_multichannel: Option<Device>,
     /// "CABLE Output".
     pub capture: Device,
 }
 
 /// What a device test runs against. Holds the device lock for its lifetime.
 pub struct Fixture {
-    // Dropped after the devices below, which is what makes the lock cover the
-    // whole test including the teardown of its clients.
-    _lock: MutexGuard<'static, ()>,
     pub enumerator: DeviceEnumerator,
     pub cable: Cable,
+    // Last on purpose. Fields drop in declaration order, so this releases the lock
+    // only after the devices above are gone, which is what frees the endpoint. Any
+    // earlier and the next test could take the lock while this one still holds a
+    // device open.
+    _lock: MutexGuard<'static, ()>,
 }
 
 /// The cable, or `None` when the test should skip.
@@ -81,13 +82,14 @@ pub fn fixture() -> Option<Fixture> {
         .get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    init_log();
     init_com();
     let enumerator = DeviceEnumerator::new().expect("failed to create a DeviceEnumerator");
     match find_cable(&enumerator) {
         Some(cable) => Some(Fixture {
-            _lock: lock,
             enumerator,
             cable,
+            _lock: lock,
         }),
         None => {
             skip("no VB-Cable render and capture endpoint found");
@@ -101,8 +103,8 @@ pub fn fixture() -> Option<Fixture> {
 /// Never calls [deinitialize]. Under `--test-threads=1` every test shares one
 /// thread, so an unbalanced `CoUninitialize` would tear COM down under the next
 /// test, and uninitialising while interface pointers are still alive is undefined
-/// behaviour. The init and deinit pair is tested on its own spawned thread in
-/// tests/public_api.rs instead.
+/// behaviour. Nothing in the suite calls `deinitialize`, so the process keeps COM
+/// initialised until it exits, which is what the runtime does anyway.
 pub fn init_com() {
     COM_READY.with(|ready| {
         if !ready.get() {
@@ -110,6 +112,33 @@ pub fn init_com() {
                 .ok()
                 .expect("failed to initialize COM as MTA");
             ready.set(true);
+        }
+    });
+}
+
+/// Turn on the library's own logging at the level in `WASAPI_TEST_LOG`, once.
+///
+/// Off unless the variable is set. The device CI job passes it through from a
+/// workflow input, so a run that failed can be repeated with debug or trace logging
+/// without editing anything.
+pub fn init_log() {
+    static LOGGER: OnceLock<()> = OnceLock::new();
+    LOGGER.get_or_init(|| {
+        let level = match std::env::var("WASAPI_TEST_LOG")
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "error" => LevelFilter::Error,
+            "warn" => LevelFilter::Warn,
+            "info" => LevelFilter::Info,
+            "debug" => LevelFilter::Debug,
+            "trace" => LevelFilter::Trace,
+            _ => LevelFilter::Off,
+        };
+        if level != LevelFilter::Off {
+            // Ignore a second init: another test may have got there first.
+            let _ = SimpleLogger::init(level, Config::default());
         }
     });
 }
@@ -144,10 +173,11 @@ pub fn cable_endpoints(enumerator: &DeviceEnumerator, direction: &Direction) -> 
 }
 
 fn find_cable(enumerator: &DeviceEnumerator) -> Option<Cable> {
-    // The device format is no help in telling the two render endpoints apart: it
-    // reports whatever the control panel last stored, which is two channels for
-    // the 16 channel endpoint as well. The description is "CABLE In 16ch" from the
-    // vendor installer and "CABLE In 16 Ch" on the runner, so strip the spaces.
+    // The cable has two render endpoints and the tests want the plain one, so the 16
+    // channel endpoint has to be told apart and discarded. The device format is no
+    // help: it reports whatever the control panel last stored, which is two channels
+    // for both. The description is "CABLE In 16ch" from the vendor installer and
+    // "CABLE In 16 Ch" on the runner, so strip the spaces.
     let is_multichannel = |device: &Device| {
         device
             .get_description()
@@ -157,9 +187,9 @@ fn find_cable(enumerator: &DeviceEnumerator) -> Option<Cable> {
         cable_endpoints(enumerator, &Direction::Render)
             .into_iter()
             .partition(is_multichannel);
+    drop(multichannel);
     Some(Cable {
         render: stereo.into_iter().next()?,
-        render_multichannel: multichannel.into_iter().next(),
         capture: cable_endpoints(enumerator, &Direction::Capture)
             .into_iter()
             .next()?,

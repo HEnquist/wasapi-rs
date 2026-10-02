@@ -34,7 +34,7 @@ features = ["Foundation",
             "Win32_System_IO",]
 
 [features]
-# Enables the device backed test suite in tests/device.rs. It needs a virtual
+# Enables the device backed test suite in tests/device/. It needs a virtual
 # audio cable to be installed, see .github/workflows/device-tests.yml.
 # Not needed to use the crate.
 device-tests = []

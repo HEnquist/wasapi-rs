@@ -26,6 +26,17 @@ fn format_of(spec: &(&str, usize, usize, SampleType), rate: usize, channels: usi
     WaveFormat::new(spec.1, spec.2, &spec.3, rate, channels, None)
 }
 
+/// A format's bit depths and sample type, enough to tell any two of [FORMATS] apart.
+fn describe_bits(format: &WaveFormat) -> (u16, u16, SampleType) {
+    (
+        format.get_validbitspersample(),
+        format.get_bitspersample(),
+        format
+            .get_subformat()
+            .expect("a format with no sample type"),
+    )
+}
+
 /// Whether `is_supported` approved the format as it was given.
 ///
 /// `Ok(None)` is "supported as is". In shared mode `Ok(Some(_))` means the device
@@ -304,12 +315,11 @@ fn probe_matches_is_supported() {
     let Some(fx) = support::fixture() else { return };
     let mut probe = CapabilityProbe::new(&fx.cable.render).expect("CapabilityProbe::new failed");
     let found = probe.supported_formats(48000, 2);
-    let bits: Vec<(u16, u16)> = found
-        .iter()
-        .map(|f| (f.get_validbitspersample(), f.get_bitspersample()))
-        .collect();
+    // Keyed on the sample type as well as the bit depths, since S32 and F32 are both
+    // 32 in 32 and would otherwise be indistinguishable here.
+    let reported: Vec<(u16, u16, SampleType)> = found.iter().map(describe_bits).collect();
     println!(
-        "the probe found {} stereo formats at 48 kHz: {bits:?}",
+        "the probe found {} stereo formats at 48 kHz: {reported:?}",
         found.len()
     );
     assert!(!found.is_empty(), "the probe found no format at all");
@@ -327,7 +337,7 @@ fn probe_matches_is_supported() {
     // And nothing it left out may be accepted.
     for spec in &FORMATS {
         let format = format_of(spec, 48000, 2);
-        if bits.contains(&(format.get_validbitspersample(), format.get_bitspersample())) {
+        if reported.contains(&describe_bits(&format)) {
             continue;
         }
         assert!(
@@ -460,41 +470,34 @@ fn dataranges_are_declared_for_the_cable() {
     }
 }
 
-/// The 16 channel endpoint declares more channels than the stereo one.
+/// A 16 channel format is accepted, and comes back with a mask the crate offered.
 ///
-/// Covers a channel count above two and a non trivial channel mask without playing
-/// anything: the capture side of the cable is stereo, so sending 16 channels through
-/// it would only allow an assertion about a downmix, which is not worth the code.
+/// This is the channel mask retry above 8 channels, where `make_channelmasks` has no
+/// named layout left and returns only the simple mask and zero. Nothing else in the
+/// suite goes past two channels.
+///
+/// It deliberately does not compare the two render endpoints. The cable has a 16
+/// channel endpoint alongside the plain one, but both declare `max_channels: 16` and
+/// both accept up to 16 channels, so there is nothing to tell apart: an earlier version
+/// of this test claimed the 16 channel endpoint declared more, which is not true.
 #[test]
-fn multichannel_endpoint_declares_more_channels() {
+fn a_sixteen_channel_format_negotiates_a_mask() {
     let Some(fx) = support::fixture() else { return };
-    let Some(multichannel) = &fx.cable.render_multichannel else {
-        support::skip("this install has no 16 channel render endpoint");
-        return;
-    };
-
-    let most = |ranges: &[DataRange]| ranges.iter().map(|r| r.max_channels).max().unwrap_or(0);
-    let wide = most(&multichannel.get_data_ranges().unwrap());
-    let narrow = most(&fx.cable.render.get_data_ranges().unwrap());
-    println!(
-        "the 16 channel endpoint declares up to {wide} channels, the stereo one up to {narrow}"
-    );
-    assert!(wide >= 16, "the 16 channel endpoint only declares {wide}");
-
-    // And it really takes a 16 channel format, with a mask from the candidate list.
+    let client = fx.cable.render.get_iaudioclient().unwrap();
     let wanted = WaveFormat::new(16, 16, &SampleType::Int, 48000, 16, None);
-    match multichannel
-        .get_iaudioclient()
-        .unwrap()
-        .is_supported_exclusive_with_quirks(&wanted)
-    {
+    match client.is_supported_exclusive_with_quirks(&wanted) {
         Ok(found) => {
             assert_eq!(found.get_nchannels(), 16);
+            assert_eq!(found.get_samplespersec(), 48000);
+            let masks = make_channelmasks(16);
             assert!(
-                make_channelmasks(16).contains(&found.get_dwchannelmask()),
-                "the accepted mask {:#x} is not one of {:x?}",
-                found.get_dwchannelmask(),
-                make_channelmasks(16)
+                masks.contains(&found.get_dwchannelmask()),
+                "the accepted mask {:#x} is not one of the {masks:x?} the crate offers",
+                found.get_dwchannelmask()
+            );
+            println!(
+                "16 channels accepted with mask {:#x}",
+                found.get_dwchannelmask()
             );
         }
         Err(e) => support::skip(&format!("no 16 channel S16 format in exclusive mode: {e}")),
