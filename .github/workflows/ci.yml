@@ -1,0 +1,105 @@
+name: CI
+
+# Everything here runs without an audio device. The device backed suite is in
+# device-tests.yml, kept separate so a flaky device job can never block the lint
+# and unit test signal.
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Never cancel a run on master, only superseded pull request runs.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      # The runner has no audio device at all. This turns on the assertions in
+      # tests/public_api.rs that can only be made on such a machine.
+      WASAPI_EXPECT_NO_DEVICES: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Shared with device-tests.yml, which builds the same dependencies.
+          shared-key: windows-stable
+
+      # '--all-features' is what pulls in the device-tests feature, so the device
+      # suite is compiled and linted here even though it is not run.
+      - name: Cargo check (all targets)
+        run: cargo check --workspace --all-targets --all-features
+
+      # Every step runs even after a failure, so one run reports the formatting,
+      # the lints and the tests together instead of only the first problem.
+      - name: Cargo fmt (check)
+        if: ${{ always() }}
+        run: cargo fmt --all -- --check
+
+      - name: Cargo clippy
+        if: ${{ always() }}
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      # No feature flag, so the device suite is left out of the run.
+      - name: Cargo test
+        if: ${{ always() }}
+        run: cargo test --workspace --all-targets
+
+      # '--all-targets' above excludes doctests, so they need their own run.
+      - name: Cargo test (doctests)
+        if: ${{ always() }}
+        run: cargo test --workspace --doc
+
+      - name: Cargo doc
+        if: ${{ always() }}
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps
+
+      - name: Cargo publish (dry run)
+        if: ${{ always() }}
+        run: cargo publish --dry-run
+
+  msrv:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # Keep this version in sync with 'rust-version' in Cargo.toml.
+      # Only the library is checked here, since some dev-dependencies
+      # require a newer compiler than the library itself.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.85
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-msrv
+
+      - name: Cargo check (library only)
+        run: cargo check --lib

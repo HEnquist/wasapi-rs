@@ -764,10 +764,14 @@ impl AudioClient {
     /// * `get_audiorenderclient` just returns `No such interface supported`.
     /// * `get_audiosessioncontrol` just returns `No such interface supported`.
     /// * `get_audioclock` just returns `No such interface supported`.
-    /// * `get_sharemode` always returns `None` when it should return `Shared` after initialisation.
+    ///
+    /// Note that [AudioClient::is_aec_supported] also needs an initialised client,
+    /// in this mode as well as in the normal one.
     ///
     /// # Example
-    /// ```
+    /// Marked `no_run` because it needs a running audio service, which a build
+    /// machine may not have. The behaviour is covered by the device backed tests.
+    /// ```no_run
     /// use wasapi::{WaveFormat, SampleType, AudioClient, Direction, StreamMode, initialize_mta};
     /// let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
     /// let buffer_duration_hns = 200_000; // 20ms in hundreds of nanoseconds
