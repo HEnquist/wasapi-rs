@@ -30,6 +30,28 @@ the documentation of
 [`AudioClient::initialize_client`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.initialize_client),
 including how to choose between them.
 
+## Tests
+
+The normal test suite needs no audio hardware, and runs with:
+
+```sh
+cargo test
+```
+
+There is also a suite that runs against a real device, in `tests/device/`.
+It plays and records short streams in both sharing modes and both timing modes,
+and checks that the library asks for and delivers data at the rate the format declares.
+It is behind the `device-tests` feature, so a plain `cargo test` neither builds nor runs it:
+
+```sh
+cargo test --features device-tests --test device -- --test-threads=1
+```
+
+A single test thread is required, since a device opened in exclusive mode cannot be shared.
+The tests look for a [VB-Cable](https://vb-audio.com/Cable/) virtual device,
+and print a note and pass if it is not installed.
+Set `WASAPI_REQUIRE_DEVICE` to turn those skips into failures, which is what CI does.
+
 ## Minimum supported Rust version
 
 The library requires Rust 1.85, and uses edition 2024.

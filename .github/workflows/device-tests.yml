@@ -1,0 +1,102 @@
+name: Device tests
+
+# Runs the device backed suite in tests/device/ against VB-Cable, installed on the
+# runner at run time. Kept out of ci.yml so that a device that misbehaves can never
+# block the lint and unit test signal.
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore: &paths
+      - "**.md"
+      - LICENSE.txt
+  pull_request:
+    paths-ignore: *paths
+  # Nightly, which is where the flakiness history comes from.
+  schedule:
+    - cron: "27 4 * * *"
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: Only run tests whose name contains this
+        required: false
+        default: ""
+      log:
+        description: Library log level (off, error, warn, info, debug, trace)
+        required: false
+        default: "off"
+
+concurrency:
+  group: device-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  device:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Shared with ci.yml, which builds the same dependencies.
+          shared-key: windows-stable
+
+      # Build before touching the device, so a compile error fails fast and is not
+      # reported as a missing cable.
+      - name: Build the device tests
+        run: cargo test --features device-tests --test device --no-run
+
+      # The audio service is set to Manual and is not running on a fresh runner.
+      - name: Start the audio service
+        run: |
+          Set-Service audiosrv -StartupType Automatic
+          Start-Service audiosrv
+          Get-Service audiosrv, AudioEndpointBuilder | Format-Table -AutoSize
+
+      # Capture is behind the microphone privacy setting. Without this a capture
+      # does not fail, it silently delivers silence, which would let the capture
+      # tests pass while proving nothing.
+      - name: Allow microphone access
+        run: |
+          $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy'
+          New-Item -Path $key -Force | Out-Null
+          Set-ItemProperty -Path $key -Name LetAppsAccessMicrophone -Type DWord -Value 1
+
+      - name: Install VB-Cable
+        run: .github\scripts\install_vbcable.ps1
+
+      - name: List audio endpoints
+        run: Get-PnpDevice -Class AudioEndpoint | Format-Table -AutoSize Status, FriendlyName
+
+      # --test-threads=1 is required, not an optimisation: an exclusive mode client
+      # owns the endpoint, and the cable has only one of each.
+      # --nocapture so the endpoint_inventory output reaches the log.
+      - name: Run the device tests
+        env:
+          WASAPI_REQUIRE_DEVICE: 1
+          WASAPI_TEST_LOG: ${{ github.event.inputs.log || 'off' }}
+        run: >
+          cargo test --features device-tests --test device --
+          --test-threads=1 --nocapture ${{ github.event.inputs.filter }}
+
+      - name: Diagnostics
+        if: ${{ failure() }}
+        run: |
+          Get-Service audiosrv, AudioEndpointBuilder | Format-List
+          Get-PnpDevice -Class AudioEndpoint, MEDIA | Format-List Status, Class, FriendlyName, InstanceId
+          pnputil /enum-drivers
