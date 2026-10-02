@@ -16,9 +16,10 @@
 # readme.txt of the archive.
 #
 # The licence allows copying the package as is, but not integrating it into another
-# installation procedure without the author's agreement. This script installs the
-# driver itself rather than running VBCABLE_Setup_x64.exe, so if VB-Audio would
-# rather that were done through their installer, ask before relying on this.
+# installation procedure without the author's agreement. That clause reads as aimed at
+# bundling the cable into a product installer, which this is not: nothing is shipped to
+# users, the driver is installed on a throwaway CI runner and thrown away with it.
+# CamillaDSP does the same.
 #
 # The archive is downloaded at run time rather than committed, to keep a binary out
 # of the repository and the crate package.
