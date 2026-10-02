@@ -11,10 +11,17 @@
 # otherwise stopped by a prompt asking whether to trust the publisher, which nobody
 # is there to answer.
 #
-# VB-CABLE is donationware from VB-Audio: free for personal and evaluation use,
-# with a licence required for professional or commercial use, and no redistribution
-# without an agreement. See https://vb-audio.com/Cable/. The archive is therefore
-# downloaded at run time and deliberately not committed to this repository.
+# VB-CABLE comes from VB-Audio, www.vb-cable.com, and is donationware. All
+# participations are welcome. See https://vb-audio.com/Cable/ and the licence in the
+# readme.txt of the archive.
+#
+# The licence allows copying the package as is, but not integrating it into another
+# installation procedure without the author's agreement. This script installs the
+# driver itself rather than running VBCABLE_Setup_x64.exe, so if VB-Audio would
+# rather that were done through their installer, ask before relying on this.
+#
+# The archive is downloaded at run time rather than committed, to keep a binary out
+# of the repository and the crate package.
 #
 # Usage: install_vbcable.ps1 [-Instances <n>]
 
