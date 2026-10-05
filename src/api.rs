@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use std::mem::{ManuallyDrop, size_of};
 use std::ops::Deref;
 use std::pin::Pin;
+use std::range::RangeInclusive;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use windows::Win32::Foundation::{CloseHandle, E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
@@ -21,9 +22,10 @@ use windows::Win32::Media::Audio::{
     ENDPOINT_HARDWARE_SUPPORT_METER, ENDPOINT_HARDWARE_SUPPORT_MUTE,
     ENDPOINT_HARDWARE_SUPPORT_VOLUME, ERole, IAcousticEchoCancellationControl,
     IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
-    IActivateAudioInterfaceCompletionHandler_Impl, IAudioClient2, IAudioEffectsManager,
-    IAudioSessionControl2, IAudioSessionEnumerator, IAudioSessionManager, IAudioSessionManager2,
-    IMMEndpoint, PKEY_AudioEngine_DeviceFormat, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    IActivateAudioInterfaceCompletionHandler_Impl, IAudioClient2, IAudioClient3,
+    IAudioEffectsManager, IAudioSessionControl2, IAudioSessionEnumerator, IAudioSessionManager,
+    IAudioSessionManager2, IMMEndpoint, PKEY_AudioEngine_DeviceFormat,
+    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
@@ -1409,6 +1411,117 @@ impl AudioClient {
 
         Ok(false)
     }
+
+    /// The buffer size limits of the hardware audio engine in 100-nanosecond units.
+    pub fn get_buffer_size_limits(
+        &self,
+        wavefmt: &WaveFormat,
+        timing_mode: TimingMode,
+    ) -> WasapiRes<RangeInclusive<i64>> {
+        let audio_client_2 = self.client.cast::<IAudioClient2>()?;
+
+        let mut min = 0;
+        let mut max = 0;
+        unsafe {
+            audio_client_2.GetBufferSizeLimits(
+                wavefmt.as_waveformatex_ref(),
+                timing_mode == TimingMode::Events,
+                &raw mut min,
+                &raw mut max,
+            )?;
+        }
+
+        Ok((min..=max).into()) // The `.into()` will become redundant in Rust 2027 edition
+    }
+
+    /// Whether or not this endpoint supports hardware offloaded audio stream.
+    pub fn is_offload_capable(&self, category: StreamCategory) -> WasapiRes<bool> {
+        let audio_client_2 = self.client.cast::<IAudioClient2>()?;
+
+        let res = unsafe { audio_client_2.IsOffloadCapable(category.into())? };
+        Ok(res.as_bool())
+    }
+
+    /// The shared mode engine's current format and period in frames.
+    pub fn get_current_shared_mode_engine_period(&self) -> WasapiRes<(WaveFormat, u32)> {
+        let audio_client_3 = self.client.cast::<IAudioClient3>()?;
+
+        let mut format_ptr = ptr::null_mut();
+        let mut period = 0;
+        unsafe {
+            audio_client_3
+                .GetCurrentSharedModeEnginePeriod(&raw mut format_ptr, &raw mut period)?;
+        }
+        let format = unsafe { WaveFormat::parse(format_ptr)? };
+        unsafe {
+            CoTaskMemFree(Some(format_ptr.cast()));
+        }
+
+        Ok((format, period))
+    }
+
+    /// The range of periods (in frames) which the shared mode engine supports for the given format.
+    pub fn get_shared_mode_engine_period(
+        &self,
+        wavefmt: &WaveFormat,
+    ) -> WasapiRes<SharedModeEnginePeriod> {
+        let audio_client_3 = self.client.cast::<IAudioClient3>()?;
+
+        let mut values = SharedModeEnginePeriod {
+            default: 0,
+            fundamental: 0,
+            range: (0..=0).into(), // The `.into()` will become redundant in Rust 2027 edition
+        };
+
+        unsafe {
+            audio_client_3.GetSharedModeEnginePeriod(
+                wavefmt.as_waveformatex_ref(),
+                &raw mut values.default,
+                &raw mut values.fundamental,
+                &raw mut values.range.start,
+                &raw mut values.range.last,
+            )?;
+        }
+
+        Ok(values)
+    }
+
+    pub fn initialize_shared_audio_stream(
+        &mut self,
+        timing_mode: TimingMode,
+        period_in_frames: u32,
+        wavefmt: &WaveFormat,
+    ) -> WasapiRes<()> {
+        let audio_client_3 = self.client.cast::<IAudioClient3>()?;
+
+        let flags = match timing_mode {
+            TimingMode::Events => AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+            TimingMode::Polling => 0,
+        };
+
+        unsafe {
+            audio_client_3.InitializeSharedAudioStream(
+                flags,
+                period_in_frames,
+                wavefmt.as_waveformatex_ref(),
+                None,
+            )?;
+        }
+
+        self.sharemode = Some(ShareMode::Shared);
+        self.timingmode = Some(timing_mode);
+        self.bytes_per_frame = Some(wavefmt.get_blockalign() as usize);
+
+        Ok(())
+    }
+}
+
+/// The values reported by [AudioClient::get_shared_mode_engine_period].
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct SharedModeEnginePeriod {
+    pub default: u32,
+    pub fundamental: u32,
+    pub range: RangeInclusive<u32>,
 }
 
 /// A builder for constructing parameters that describe the properties of the client's audio stream.
