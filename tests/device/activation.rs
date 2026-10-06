@@ -48,6 +48,8 @@ fn interface_path(id: &str, direction: &Direction) -> String {
         Direction::Render => DEVINTERFACE_AUDIO_RENDER,
         Direction::Capture => DEVINTERFACE_AUDIO_CAPTURE,
     };
+    // The Debug impl of GUID is the canonical hyphenated form, not a derived one,
+    // and the doubled braces are the literal pair the path needs around it.
     format!("\\\\?\\SWD#MMDEVAPI#{id}#{{{class:?}}}")
 }
 
