@@ -1488,9 +1488,9 @@ impl AudioClient {
 
     pub fn initialize_shared_audio_stream(
         &mut self,
+        wavefmt: &WaveFormat,
         timing_mode: TimingMode,
         period_in_frames: u32,
-        wavefmt: &WaveFormat,
     ) -> WasapiRes<()> {
         let audio_client_3 = self.client.cast::<IAudioClient3>()?;
 
