@@ -441,3 +441,31 @@ pub fn capture_for(
     client.stop_stream()?;
     Ok(run)
 }
+
+/// How far the measured frame rate may be from the format's sample rate.
+const RATE_TOLERANCE: f64 = 0.20;
+
+/// Assert that a run moved frames at the format's sample rate.
+pub fn assert_rate(run: &Run, format: &WaveFormat, what: &str) {
+    assert!(
+        !run.event_timeout,
+        "{what}: timed out waiting for the event handle after {} frames",
+        run.frames
+    );
+    let nominal = f64::from(format.get_samplespersec());
+    let measured = run.rate();
+    println!(
+        "{what}: {} frames in {:.0} ms, {measured:.0} Hz against {nominal:.0} Hz, \
+         buffer {} frames",
+        run.frames,
+        run.elapsed.as_secs_f64() * 1000.0,
+        run.buffer_size
+    );
+    assert!(run.frames > 0, "{what}: no frames at all");
+    let error = (measured - nominal).abs() / nominal;
+    assert!(
+        error < RATE_TOLERANCE,
+        "{what}: {measured:.0} Hz is {:.0} % off the format's {nominal:.0} Hz",
+        error * 100.0
+    );
+}

@@ -23,12 +23,39 @@ The following is a selection of the functionality currently available in the lib
 - Notifications when devices are added or removed, or when the default device changes
 - Probing of the sample rates, channel counts and formats a device supports in exclusive mode
 - Reading the capabilities that a driver declares for a device
+- Wrapping an `IAudioClient` that was activated elsewhere, for example through WinRT device
+  enumeration
+- Raw access to the wrapped COM interfaces through `Device::as_immdevice`,
+  `AudioClient::as_iaudioclient` and `Handle::as_handle`, for reaching what the library
+  does not cover
 - …and additional features beyond this list
 
 The sharing modes (shared and exclusive) and timing modes (event-driven and polled) are described in
 the documentation of
 [`AudioClient::initialize_client`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.initialize_client),
 including how to choose between them.
+
+## Interoperability with other Windows APIs
+
+Windows offers many audio APIs, with varying degrees of overlap between them.
+WASAPI, the WinRT classes, DirectSound, the older `waveOut` family and XAudio2 all reach the same
+devices in the end.
+Since Windows Vista the older ones are layered on top of WASAPI instead of reaching the driver
+themselves.
+WinRT is newer and sits on the same stack, with a narrower view of the device.
+This library is built on the MultiMedia API, where a device is an `IMMDevice` endpoint found
+through a `DeviceCollection`.
+It provides no second set of device types for WinRT, on purpose.
+A device found through WinRT has a different id format and carries no `IMMDevice`,
+so the capability probe and the declared data ranges could not work for it.
+
+WinRT is still usable, from the other end.
+The [windows](https://crates.io/crates/windows) crate exposes all of WinRT,
+so enumerate with the `MediaDevice` and `DeviceInformation` classes,
+pass the device path to `ActivateAudioInterfaceAsync`,
+and wrap the interface that comes back with
+[`AudioClient::from_iaudioclient`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.from_iaudioclient).
+The device tests in `tests/device/activation.rs` walk the whole path, completion handler included.
 
 ## Tests
 
