@@ -701,6 +701,23 @@ impl Device {
     pub fn get_direction(&self) -> Direction {
         self.direction
     }
+
+    /// Returns the wrapped [IMMDevice], for reaching the endpoint services that this
+    /// crate does not wrap.
+    /// `Activate` reaches any service of the endpoint, `IAudioEndpointVolume` and
+    /// `IDeviceTopology` for instance, and `OpenPropertyStore` reads any property.
+    /// It is a reference counted COM pointer, so cloning it is cheap.
+    ///
+    /// Every method of the interface is itself `unsafe`, which is where the COM rules
+    /// land.
+    /// An `IMMDevice` is neither agile nor marshalable, so it has to be used on the
+    /// apartment it was created on, and the interfaces activated from it inherit that
+    /// restriction.
+    /// A [Device] caches nothing that the interface can change, so unlike
+    /// [AudioClient::as_iaudioclient] this one needs no care beyond that.
+    pub fn as_immdevice(&self) -> &IMMDevice {
+        &self.device
+    }
 }
 
 #[implement(IActivateAudioInterfaceCompletionHandler)]
@@ -927,6 +944,27 @@ impl AudioClient {
             timingmode: None,
             bytes_per_frame: None,
         }
+    }
+
+    /// Returns the wrapped [IAudioClient], for reaching the parts of the interface
+    /// that this crate does not wrap.
+    /// Every method of the interface is itself `unsafe`.
+    /// It is a reference counted COM pointer, so cloning it is cheap.
+    ///
+    /// An [AudioClient] caches the direction, the sharing mode, the timing mode and
+    /// the frame size that [AudioClient::initialize_client] was called with,
+    /// and the rest of the crate trusts that cache.
+    /// Calling the interface directly goes behind it,
+    /// and nothing detects or reports the divergence.
+    ///
+    /// __Never__ call `Initialize` on this interface.
+    /// Always set the stream up with [AudioClient::initialize_client],
+    /// and use this interface only for what the crate does not cover.
+    /// Initialising it directly leaves the frame size unset,
+    /// which makes [AudioCaptureClient::read_from_device] panic and
+    /// [AudioRenderClient::write_to_device] play noise without reporting an error.
+    pub fn as_iaudioclient(&self) -> &IAudioClient {
+        &self.client
     }
 
     /// Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
@@ -2136,6 +2174,24 @@ impl Handle {
             return Err(WasapiError::EventTimeout);
         }
         Ok(())
+    }
+
+    /// Returns the raw event [HANDLE].
+    ///
+    /// This is for waiting on more than this one event, with `WaitForMultipleObjects`
+    /// for instance, so that a stream can be woken by a shutdown event of its own as
+    /// well as by the device.
+    ///
+    /// The handle is borrowed rather than given away.
+    /// The [Handle] keeps ownership and closes the event when it is dropped, so the
+    /// returned value is only guaranteed to be valid while the [Handle] has not yet
+    /// been destroyed, and it __must not__ be closed by the caller.
+    /// This is the same arrangement as
+    /// [AsRawHandle::as_raw_handle](std::os::windows::io::AsRawHandle::as_raw_handle),
+    /// and it is safe for the same reason:
+    /// every function that does anything with a raw handle is itself `unsafe`.
+    pub fn as_handle(&self) -> HANDLE {
+        self.handle
     }
 }
 

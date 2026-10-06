@@ -22,4 +22,5 @@ mod activation;
 mod capability;
 mod enumeration;
 mod errors;
+mod raw;
 mod streams;
