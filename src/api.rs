@@ -4,7 +4,6 @@ use std::collections::VecDeque;
 use std::mem::{ManuallyDrop, size_of};
 use std::ops::Deref;
 use std::pin::Pin;
-use std::range::RangeInclusive;
 use std::sync::{Arc, Condvar, Mutex};
 use std::{fmt, ptr, slice};
 use windows::Win32::Foundation::{CloseHandle, E_INVALIDARG, E_NOINTERFACE, FALSE, PROPERTYKEY};
@@ -1419,7 +1418,7 @@ impl AudioClient {
         &self,
         wavefmt: &WaveFormat,
         timing_mode: TimingMode,
-    ) -> WasapiRes<RangeInclusive<i64>> {
+    ) -> WasapiRes<(i64, i64)> {
         let audio_client_2 = self.client.cast::<IAudioClient2>()?;
 
         let mut min = 0;
@@ -1433,7 +1432,7 @@ impl AudioClient {
             )?;
         }
 
-        Ok((min..=max).into()) // The `.into()` will become redundant in Rust 2027 edition
+        Ok((min, max))
     }
 
     /// Whether or not this endpoint supports hardware offloaded audio stream.
@@ -1471,7 +1470,8 @@ impl AudioClient {
         let mut values = SharedModeEnginePeriod {
             default: 0,
             fundamental: 0,
-            range: (0..=0).into(), // The `.into()` will become redundant in Rust 2027 edition
+            min: 0,
+            max: 0,
         };
 
         unsafe {
