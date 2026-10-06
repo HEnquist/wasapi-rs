@@ -1452,14 +1452,13 @@ impl AudioClient {
         let mut period = 0;
         unsafe {
             audio_client_3
-                .GetCurrentSharedModeEnginePeriod(&raw mut format_ptr, &raw mut period)?;
+                .GetCurrentSharedModeEnginePeriod(&mut format_ptr, &mut period)?;
         }
-        let format = unsafe { WaveFormat::parse(format_ptr)? };
+        let parse_result = unsafe { WaveFormat::parse(format_ptr) };
         unsafe {
             CoTaskMemFree(Some(format_ptr.cast()));
         }
-
-        Ok((format, period))
+        Ok((parse_result?, period))
     }
 
     /// The range of periods (in frames) which the shared mode engine supports for the given format.
