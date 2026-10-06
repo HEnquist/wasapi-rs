@@ -868,6 +868,67 @@ impl AudioClient {
         }
     }
 
+    /// Creates an [AudioClient] from an [IAudioClient] that has already been activated.
+    ///
+    /// This is for the cases where the device is found by some other means than the
+    /// [DeviceCollection] of this crate.
+    /// The WinRT `MediaDevice` and `DeviceInformation` classes give a device path
+    /// that can be passed to
+    /// [ActivateAudioInterfaceAsync](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync),
+    /// and the resulting interface can then be wrapped here.
+    /// The streaming code of this crate works the same as for a client from
+    /// [Device::get_iaudioclient].
+    ///
+    /// The `direction` is the direction of the endpoint the client was activated from,
+    /// not the direction of the stream.
+    /// A loopback capture stream is set up by passing [Direction::Render] here,
+    /// and then [Direction::Capture] to [AudioClient::initialize_client],
+    /// exactly as for a render device from the [DeviceCollection].
+    /// Getting this wrong makes [AudioClient::initialize_client] either
+    /// return an error or silently set up the wrong kind of stream.
+    ///
+    /// The caller is responsible for COM being initialised on the thread,
+    /// see [initialize_mta](crate::initialize_mta) and [initialize_sta](crate::initialize_sta),
+    /// and for the interface having been activated on a compatible apartment.
+    ///
+    /// # Non-functional methods
+    /// There is no [Device] behind a client made this way,
+    /// so everything that needs one is unavailable.
+    /// This includes the [CapabilityProbe](crate::CapabilityProbe),
+    /// the [DataRange](crate::DataRange)s, the device state, and the endpoint properties.
+    /// Use the WinRT APIs, or whatever provided the interface, for those.
+    ///
+    /// # Example
+    /// Marked `no_run` because it needs a running audio service, which a build
+    /// machine may not have.
+    /// ```no_run
+    /// use wasapi::{AudioClient, Direction, IAudioClient, StreamMode, initialize_mta};
+    ///
+    /// # fn activate_somehow() -> IAudioClient { unimplemented!() }
+    /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
+    /// // Activate the interface in some other way, for example through
+    /// // ActivateAudioInterfaceAsync with a device path from WinRT.
+    /// let interface: IAudioClient = activate_somehow();
+    ///
+    /// let mut audio_client = AudioClient::from_iaudioclient(interface, Direction::Render);
+    /// let format = audio_client.get_mixformat().unwrap();
+    /// let (default_period, _min_period) = audio_client.get_device_period().unwrap();
+    /// let mode = StreamMode::EventsShared {
+    ///     autoconvert: true,
+    ///     buffer_duration_hns: default_period,
+    /// };
+    /// audio_client.initialize_client(&format, &Direction::Render, &mode).unwrap();
+    /// ```
+    pub fn from_iaudioclient(client: IAudioClient, direction: Direction) -> Self {
+        AudioClient {
+            client,
+            direction,
+            sharemode: None,
+            timingmode: None,
+            bytes_per_frame: None,
+        }
+    }
+
     /// Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
         let temp_fmt_ptr = unsafe { self.client.GetMixFormat()? };

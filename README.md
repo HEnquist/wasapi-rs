@@ -23,6 +23,8 @@ The following is a selection of the functionality currently available in the lib
 - Notifications when devices are added or removed, or when the default device changes
 - Probing of the sample rates, channel counts and formats a device supports in exclusive mode
 - Reading the capabilities that a driver declares for a device
+- Wrapping an `IAudioClient` that was activated elsewhere, for example through WinRT device
+  enumeration
 - …and additional features beyond this list
 
 The sharing modes (shared and exclusive) and timing modes (event-driven and polled) are described in

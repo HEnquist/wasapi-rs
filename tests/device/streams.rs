@@ -18,9 +18,6 @@ use crate::support::{self, RUN_TIME};
 use std::time::{Duration, Instant};
 use wasapi::*;
 
-/// How far the measured frame rate may be from the format's sample rate.
-const RATE_TOLERANCE: f64 = 0.20;
-
 /// Every combination of sharing and timing mode.
 const MODES: [(ShareMode, TimingMode); 4] = [
     (ShareMode::Shared, TimingMode::Events),
@@ -28,31 +25,6 @@ const MODES: [(ShareMode, TimingMode); 4] = [
     (ShareMode::Exclusive, TimingMode::Events),
     (ShareMode::Exclusive, TimingMode::Polling),
 ];
-
-/// Assert that a run moved frames at the format's sample rate.
-fn assert_rate(run: &support::Run, format: &WaveFormat, what: &str) {
-    assert!(
-        !run.event_timeout,
-        "{what}: timed out waiting for the event handle after {} frames",
-        run.frames
-    );
-    let nominal = f64::from(format.get_samplespersec());
-    let measured = run.rate();
-    println!(
-        "{what}: {} frames in {:.0} ms, {measured:.0} Hz against {nominal:.0} Hz, \
-         buffer {} frames",
-        run.frames,
-        run.elapsed.as_secs_f64() * 1000.0,
-        run.buffer_size
-    );
-    assert!(run.frames > 0, "{what}: no frames at all");
-    let error = (measured - nominal).abs() / nominal;
-    assert!(
-        error < RATE_TOLERANCE,
-        "{what}: {measured:.0} Hz is {:.0} % off the format's {nominal:.0} Hz",
-        error * 100.0
-    );
-}
 
 /// Playback asks for data at the rate the format declares.
 ///
@@ -68,7 +40,7 @@ fn render_mechanics() {
         };
         let run = support::render_for(&opened.client, &opened.format, RUN_TIME)
             .expect("the render loop failed");
-        assert_rate(&run, &opened.format, &format!("render {share} {timing:?}"));
+        support::assert_rate(&run, &opened.format, &format!("render {share} {timing:?}"));
         assert_eq!(opened.client.get_sharemode(), Some(share));
         assert_eq!(opened.client.get_timing_mode(), Some(timing));
     }
@@ -161,7 +133,7 @@ fn capture_mechanics() {
         let run = support::capture_for(&opened.client, &opened.format, RUN_TIME)
             .expect("the capture loop failed");
 
-        assert_rate(&run, &opened.format, &what);
+        support::assert_rate(&run, &opened.format, &what);
         assert_eq!(opened.client.get_sharemode(), Some(share));
         assert_eq!(opened.client.get_timing_mode(), Some(timing));
         assert!(
