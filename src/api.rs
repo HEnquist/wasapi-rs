@@ -1428,8 +1428,8 @@ impl AudioClient {
             audio_client_2.GetBufferSizeLimits(
                 wavefmt.as_waveformatex_ref(),
                 timing_mode == TimingMode::Events,
-                &raw mut min,
-                &raw mut max,
+                &mut min,
+                &mut max,
             )?;
         }
 
@@ -1478,10 +1478,10 @@ impl AudioClient {
         unsafe {
             audio_client_3.GetSharedModeEnginePeriod(
                 wavefmt.as_waveformatex_ref(),
-                &raw mut values.default,
-                &raw mut values.fundamental,
-                &raw mut values.range.start,
-                &raw mut values.range.last,
+                &mut values.default,
+                &mut values.fundamental,
+                &mut values.min,
+                &mut values.max,
             )?;
         }
 
