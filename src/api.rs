@@ -1413,6 +1413,8 @@ impl AudioClient {
     }
 
     /// The buffer size limits of the hardware audio engine in 100-nanosecond units.
+    /// 
+    /// This function does not require the [AudioClient] to be initialized.
     pub fn get_buffer_size_limits(
         &self,
         wavefmt: &WaveFormat,
@@ -1486,6 +1488,7 @@ impl AudioClient {
         Ok(values)
     }
 
+    /// 
     pub fn initialize_shared_audio_stream(
         &mut self,
         wavefmt: &WaveFormat,
@@ -1519,9 +1522,15 @@ impl AudioClient {
 /// The values reported by [AudioClient::get_shared_mode_engine_period].
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SharedModeEnginePeriod {
+    /// The default period, in frames.
     pub default: u32,
+    /// The fundamental period, in frames.<br>
+    /// The engine periodicity must always be an integral multiple of this value.
     pub fundamental: u32,
-    pub range: RangeInclusive<u32>,
+    /// The minimum period, in frames.
+    pub min: u32,
+    /// The maximum period, in frames.
+    pub max: u32,
 }
 
 /// A builder for constructing parameters that describe the properties of the client's audio stream.
