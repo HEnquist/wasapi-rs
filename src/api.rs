@@ -1411,9 +1411,10 @@ impl AudioClient {
         Ok(false)
     }
 
-    /// The buffer size limits of the hardware audio engine in 100-nanosecond units.
-    /// 
+    /// The buffer size limits of the hardware audio engine in 100-nanosecond units.<br>
     /// This function does not require the [AudioClient] to be initialized.
+    /// 
+    /// WASAPI docs: [IAudioClient2::GetBufferSizeLimits](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient2-getbuffersizelimits)
     pub fn get_buffer_size_limits(
         &self,
         wavefmt: &WaveFormat,
@@ -1436,6 +1437,8 @@ impl AudioClient {
     }
 
     /// Whether or not this endpoint supports hardware offloaded audio stream.
+    /// 
+    /// WASAPI docs: [IAudioClient2::IsOffloadCapable](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient2-isoffloadcapable)
     pub fn is_offload_capable(&self, category: StreamCategory) -> WasapiRes<bool> {
         let audio_client_2 = self.client.cast::<IAudioClient2>()?;
 
@@ -1444,6 +1447,8 @@ impl AudioClient {
     }
 
     /// The shared mode engine's current format and period in frames.
+    /// 
+    /// WASAPI docs: [IAudioClient3::GetCurrentSharedModeEnginePeriod](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient3-getcurrentsharedmodeengineperiod)
     pub fn get_current_shared_mode_engine_period(&self) -> WasapiRes<(WaveFormat, u32)> {
         let audio_client_3 = self.client.cast::<IAudioClient3>()?;
 
@@ -1461,6 +1466,8 @@ impl AudioClient {
     }
 
     /// The range of periods (in frames) which the shared mode engine supports for the given format.
+    /// 
+    /// WASAPI docs: [IAudioClient3::GetSharedModeEnginePeriod](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient3-getsharedmodeengineperiod)
     pub fn get_shared_mode_engine_period(
         &self,
         wavefmt: &WaveFormat,
@@ -1487,7 +1494,7 @@ impl AudioClient {
         Ok(values)
     }
 
-    /// 
+    /// WASAPI docs: [IAudioClient3::InitializeSharedAudioStream](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient3-initializesharedaudiostream)
     pub fn initialize_shared_audio_stream(
         &mut self,
         wavefmt: &WaveFormat,
