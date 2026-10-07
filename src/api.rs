@@ -1411,7 +1411,10 @@ impl AudioClient {
         Ok(false)
     }
 
-    /// The buffer size limits of the hardware audio engine in 100-nanosecond units.<br>
+    /// The buffer size limits of the hardware audio engine, in 100-nanosecond units. Only available on endpoints
+    /// that support hardware offloaded streams. Other endpoints will fail with `AUDCLNT_E_OFFLOAD_MODE_ONLY`.
+    /// Use [AudioClient::is_offload_capable] to check beforehand.
+    ///
     /// This function does not require the [AudioClient] to be initialized.
     ///
     /// WASAPI docs: [IAudioClient2::GetBufferSizeLimits](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient2-getbuffersizelimits)
@@ -1493,6 +1496,12 @@ impl AudioClient {
         Ok(values)
     }
 
+    /// Initialize an [AudioClient] for a shared mode stream with the given periodicity.
+    ///
+    /// Take `period_in_frames` from [AudioClient::get_shared_mode_engine_period].
+    /// Unlike [AudioClient::initialize_client], loopback capture and automatic format conversion
+    /// are not available here.
+    ///
     /// WASAPI docs: [IAudioClient3::InitializeSharedAudioStream](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient3-initializesharedaudiostream)
     pub fn initialize_shared_audio_stream(
         &mut self,
