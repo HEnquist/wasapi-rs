@@ -21,9 +21,10 @@ use windows::Win32::Media::Audio::{
     ENDPOINT_HARDWARE_SUPPORT_METER, ENDPOINT_HARDWARE_SUPPORT_MUTE,
     ENDPOINT_HARDWARE_SUPPORT_VOLUME, ERole, IAcousticEchoCancellationControl,
     IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
-    IActivateAudioInterfaceCompletionHandler_Impl, IAudioClient2, IAudioEffectsManager,
-    IAudioSessionControl2, IAudioSessionEnumerator, IAudioSessionManager, IAudioSessionManager2,
-    IMMEndpoint, PKEY_AudioEngine_DeviceFormat, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    IActivateAudioInterfaceCompletionHandler_Impl, IAudioClient2, IAudioClient3,
+    IAudioEffectsManager, IAudioSessionControl2, IAudioSessionEnumerator, IAudioSessionManager,
+    IAudioSessionManager2, IMMEndpoint, PKEY_AudioEngine_DeviceFormat,
+    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
@@ -1409,6 +1410,141 @@ impl AudioClient {
 
         Ok(false)
     }
+
+    /// The buffer size limits of the hardware audio engine, in 100-nanosecond units. Only available on endpoints
+    /// that support hardware offloaded streams. Other endpoints will fail with `AUDCLNT_E_OFFLOAD_MODE_ONLY`.
+    /// Use [AudioClient::is_offload_capable] to check beforehand.
+    ///
+    /// This function does not require the [AudioClient] to be initialized.
+    ///
+    /// WASAPI docs: [IAudioClient2::GetBufferSizeLimits](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient2-getbuffersizelimits)
+    pub fn get_buffer_size_limits(
+        &self,
+        wavefmt: &WaveFormat,
+        timing_mode: TimingMode,
+    ) -> WasapiRes<(i64, i64)> {
+        let audio_client_2 = self.client.cast::<IAudioClient2>()?;
+
+        let mut min = 0;
+        let mut max = 0;
+        unsafe {
+            audio_client_2.GetBufferSizeLimits(
+                wavefmt.as_waveformatex_ref(),
+                timing_mode == TimingMode::Events,
+                &mut min,
+                &mut max,
+            )?;
+        }
+
+        Ok((min, max))
+    }
+
+    /// Whether or not this endpoint supports hardware offloaded audio stream.
+    ///
+    /// WASAPI docs: [IAudioClient2::IsOffloadCapable](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient2-isoffloadcapable)
+    pub fn is_offload_capable(&self, category: StreamCategory) -> WasapiRes<bool> {
+        let audio_client_2 = self.client.cast::<IAudioClient2>()?;
+
+        let res = unsafe { audio_client_2.IsOffloadCapable(category.into())? };
+        Ok(res.as_bool())
+    }
+
+    /// The shared mode engine's current format and period in frames.
+    ///
+    /// WASAPI docs: [IAudioClient3::GetCurrentSharedModeEnginePeriod](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient3-getcurrentsharedmodeengineperiod)
+    pub fn get_current_shared_mode_engine_period(&self) -> WasapiRes<(WaveFormat, u32)> {
+        let audio_client_3 = self.client.cast::<IAudioClient3>()?;
+
+        let mut format_ptr = ptr::null_mut();
+        let mut period = 0;
+        unsafe {
+            audio_client_3.GetCurrentSharedModeEnginePeriod(&mut format_ptr, &mut period)?;
+        }
+        let parse_result = unsafe { WaveFormat::parse(format_ptr) };
+        unsafe {
+            CoTaskMemFree(Some(format_ptr.cast()));
+        }
+        Ok((parse_result?, period))
+    }
+
+    /// The range of periods (in frames) which the shared mode engine supports for the given format.
+    ///
+    /// WASAPI docs: [IAudioClient3::GetSharedModeEnginePeriod](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient3-getsharedmodeengineperiod)
+    pub fn get_shared_mode_engine_period(
+        &self,
+        wavefmt: &WaveFormat,
+    ) -> WasapiRes<SharedModeEnginePeriod> {
+        let audio_client_3 = self.client.cast::<IAudioClient3>()?;
+
+        let mut values = SharedModeEnginePeriod {
+            default: 0,
+            fundamental: 0,
+            min: 0,
+            max: 0,
+        };
+
+        unsafe {
+            audio_client_3.GetSharedModeEnginePeriod(
+                wavefmt.as_waveformatex_ref(),
+                &mut values.default,
+                &mut values.fundamental,
+                &mut values.min,
+                &mut values.max,
+            )?;
+        }
+
+        Ok(values)
+    }
+
+    /// Initialize an [AudioClient] for a shared mode stream with the given periodicity.
+    ///
+    /// Take `period_in_frames` from [AudioClient::get_shared_mode_engine_period].
+    /// Unlike [AudioClient::initialize_client], loopback capture and automatic format conversion
+    /// are not available here.
+    ///
+    /// WASAPI docs: [IAudioClient3::InitializeSharedAudioStream](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient3-initializesharedaudiostream)
+    pub fn initialize_shared_audio_stream(
+        &mut self,
+        wavefmt: &WaveFormat,
+        timing_mode: TimingMode,
+        period_in_frames: u32,
+    ) -> WasapiRes<()> {
+        let audio_client_3 = self.client.cast::<IAudioClient3>()?;
+
+        let flags = match timing_mode {
+            TimingMode::Events => AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+            TimingMode::Polling => 0,
+        };
+
+        unsafe {
+            audio_client_3.InitializeSharedAudioStream(
+                flags,
+                period_in_frames,
+                wavefmt.as_waveformatex_ref(),
+                None,
+            )?;
+        }
+
+        self.sharemode = Some(ShareMode::Shared);
+        self.timingmode = Some(timing_mode);
+        self.bytes_per_frame = Some(wavefmt.get_blockalign() as usize);
+
+        Ok(())
+    }
+}
+
+/// The values reported by [AudioClient::get_shared_mode_engine_period].
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct SharedModeEnginePeriod {
+    /// The default period, in frames.
+    pub default: u32,
+    /// The fundamental period, in frames.<br>
+    /// The engine periodicity must always be an integral multiple of this value.
+    pub fundamental: u32,
+    /// The minimum period, in frames.
+    pub min: u32,
+    /// The maximum period, in frames.
+    pub max: u32,
 }
 
 /// A builder for constructing parameters that describe the properties of the client's audio stream.
