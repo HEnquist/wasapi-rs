@@ -23,11 +23,7 @@ The following is a selection of the functionality currently available in the lib
 - Notifications when devices are added or removed, or when the default device changes
 - Probing of the sample rates, channel counts and formats a device supports in exclusive mode
 - Reading the capabilities that a driver declares for a device
-- Wrapping an `IAudioClient` that was activated elsewhere, for example through WinRT device
-  enumeration
-- Raw access to the wrapped COM interfaces through `Device::as_immdevice`,
-  `AudioClient::as_iaudioclient` and `Handle::as_handle`, for reaching what the library
-  does not cover
+- Access to the event handles and stream state needed for playback and capture loops
 - …and additional features beyond this list
 
 The sharing modes (shared and exclusive) and timing modes (event-driven and polled) are described in
@@ -49,13 +45,10 @@ It provides no second set of device types for WinRT, on purpose.
 A device found through WinRT has a different id format and carries no `IMMDevice`,
 so the capability probe and the declared data ranges could not work for it.
 
-WinRT is still usable, from the other end.
-The [windows](https://crates.io/crates/windows) crate exposes all of WinRT,
-so enumerate with the `MediaDevice` and `DeviceInformation` classes,
-pass the device path to `ActivateAudioInterfaceAsync`,
-and wrap the interface that comes back with
-[`AudioClient::from_iaudioclient`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.from_iaudioclient).
-The device tests in `tests/device/activation.rs` walk the whole path, completion handler included.
+Interop that depends on projected WinRT or COM interface types is no longer part of this crate's
+public contract.
+The library stays on the MMDevice and WASAPI side of the Windows audio stack,
+and other Windows API layers should be treated as separate integration surfaces.
 
 ## Tests
 
