@@ -56,9 +56,14 @@ thiserror = "2.0"
 
 [dev-dependencies]
 simplelog = "0.12"
-# The device tests assert on specific AUDCLNT_E_* result codes. Same version as
-# the dependency above, so this pulls in nothing new.
-windows = { version = "0.62", features = ["Win32_Media_Audio", "Win32_Foundation"] }
+# The device tests assert on specific AUDCLNT_E_* result codes, and the raw accessor
+# tests activate an endpoint service and wait on several handles at once. Same version
+# as the dependency above, so this pulls in nothing new.
+windows = { version = "0.62", features = ["Win32_Media_Audio",
+                                          "Win32_Media_Audio_Endpoints",
+                                          "Win32_Foundation",
+                                          "Win32_System_Com",
+                                          "Win32_System_Threading"] }
 rand = "0.10"
 # sysinfo 0.38 requires Rust 1.88, which is higher than the rust-version of the
 # library. Only the 'record_application' example uses it, so building the library

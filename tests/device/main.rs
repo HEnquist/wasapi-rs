@@ -18,7 +18,9 @@
 #[allow(dead_code)]
 mod support;
 
+mod activation;
 mod capability;
 mod enumeration;
 mod errors;
+mod raw;
 mod streams;
