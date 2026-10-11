@@ -1,6 +1,6 @@
 [package]
 name = "wasapi"
-version = "0.25.0"
+version = "0.26.0"
 edition = "2024"
 # The library itself builds with 1.85. Note that some examples need a newer
 # compiler, see the comments in [dev-dependencies].
@@ -15,7 +15,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.windows]
-version = "0.62"
+version = "0.62.2"
 features = ["Foundation",
             "Win32_Media_Audio",
             "Win32_Media_Audio_Endpoints",
@@ -51,7 +51,7 @@ required-features = ["device-tests"]
 [dependencies]
 log = "0.4"
 num-integer = "0.1"
-windows-core = "0.62"
+windows-core = "0.62.2"
 thiserror = "2.0"
 
 [dev-dependencies]
@@ -59,7 +59,7 @@ simplelog = "0.12"
 # The device tests assert on specific AUDCLNT_E_* result codes, and the raw accessor
 # tests activate an endpoint service and wait on several handles at once. Same version
 # as the dependency above, so this pulls in nothing new.
-windows = { version = "0.62", features = ["Win32_Media_Audio",
+windows = { version = "0.62.2", features = ["Win32_Media_Audio",
                                           "Win32_Media_Audio_Endpoints",
                                           "Win32_Foundation",
                                           "Win32_System_Com",

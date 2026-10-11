@@ -52,17 +52,11 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
             match rx_play.try_recv() {
                 Ok(chunk) => {
                     trace!("got chunk");
-                    for element in chunk.iter() {
-                        sample_queue.push_back(*element);
-                    }
+                    sample_queue.extend(&chunk);
                 }
                 Err(mpsc::TryRecvError::Empty) => {
                     warn!("no data, filling with zeros");
-                    for _ in 0..((blockalign as usize * buffer_frame_count as usize)
-                        - sample_queue.len())
-                    {
-                        sample_queue.push_back(0);
-                    }
+                    sample_queue.resize(blockalign as usize * buffer_frame_count as usize, 0);
                 }
                 Err(_) => {
                     error!("Channel is closed");
@@ -121,6 +115,11 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
         while sample_queue.len() > (blockalign as usize * chunksize) {
             debug!("pushing samples");
             let mut chunk = vec![0u8; blockalign as usize * chunksize];
+            // One byte at a time, to keep the example simple. This costs a call and an
+            // index update per byte, which starts to matter at a high sample rate and
+            // channel count. A deque holds its contents as one or two contiguous runs,
+            // so an application that needs the throughput should get them from
+            // `as_slices`, copy each one with `copy_from_slice` and then drain the front.
             for element in chunk.iter_mut() {
                 *element = sample_queue.pop_front().unwrap();
             }

@@ -59,6 +59,11 @@ fn capture_loop(
         while sample_queue.len() > (blockalign as usize * chunksize) {
             debug!("pushing samples");
             let mut chunk = vec![0u8; blockalign as usize * chunksize];
+            // One byte at a time, to keep the example simple. This costs a call and an
+            // index update per byte, which starts to matter at a high sample rate and
+            // channel count. A deque holds its contents as one or two contiguous runs,
+            // so an application that needs the throughput should get them from
+            // `as_slices`, copy each one with `copy_from_slice` and then drain the front.
             for element in chunk.iter_mut() {
                 *element = sample_queue.pop_front().unwrap();
             }

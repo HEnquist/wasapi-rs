@@ -85,11 +85,13 @@ fn event_handle_in_a_multiple_object_wait() {
     unsafe { CloseHandle(quit) }.unwrap();
 }
 
-/// A newer interface version the crate does not wrap can be reached from the client.
+/// A newer interface version can be reached from the client and called directly.
 ///
-/// Nothing here touches `IAudioClient3`, and its engine period getter is the kind of
-/// thing the accessor exists for. The client is deliberately left uninitialised: the
-/// call does not need it, and casting is all that is under test.
+/// What is under test is the accessor, not the interface. `IAudioClient3` happens to be
+/// wrapped by the crate as well, see `audioclient23`, so this calls the raw getter and
+/// leaves the comparison alone: an interface the crate does not wrap would look exactly
+/// the same from here. The client is deliberately left uninitialised, since the call
+/// does not need it and casting is all this asks about.
 #[test]
 fn engine_period_through_as_iaudioclient() {
     let Some(fx) = support::fixture() else { return };
