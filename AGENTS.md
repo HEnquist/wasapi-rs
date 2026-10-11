@@ -21,6 +21,22 @@ The application loopback capture path is the model here: several methods are kno
 not to work or to report nonsense, and the crate documents those limits instead of
 pretending they can be normalised away.
 
+## Dependency updates
+
+Keep the `windows`, `windows-core`, and related Windows projection crates reasonably
+current.
+Those crates move quickly, and letting them drift for too long makes the eventual
+upgrade much more expensive than a normal dependency bump.
+APIs move, generated bindings change shape, helper traits and conversions shift, and
+feature sets evolve, so one large delayed jump can turn into avoidable churn across
+the whole wrapper.
+
+Prefer small, regular upgrades over rare large ones.
+If staying current means raising the MSRV, do that deliberately rather than freezing
+the Windows crates until the migration becomes painful.
+When updating, keep the `windows` family on a coherent version line and validate the
+crate soon after, while the changes are still small enough to reason about locally.
+
 ## Testing strategy
 
 Keep tests simple and local to the crate behaviour they are proving.
