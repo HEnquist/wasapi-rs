@@ -1146,14 +1146,6 @@ impl AudioClient {
         Ok((def_time, min_time))
     }
 
-    #[deprecated(
-        since = "0.17.0",
-        note = "please use the new function name `get_device_period` instead"
-    )]
-    pub fn get_periods(&self) -> WasapiRes<(i64, i64)> {
-        self.get_device_period()
-    }
-
     /// Helper function for calculating a period size in 100-nanosecond units that is near a desired value,
     /// and always larger than the minimum value supported by the device.
     /// The returned value leads to a device buffer size that is aligned both to the frame size of the format,
@@ -1450,21 +1442,6 @@ impl AudioClient {
     pub fn get_audio_effects_manager(&self) -> WasapiRes<AudioEffectsManager> {
         let manager = unsafe { self.client.GetService::<IAudioEffectsManager>()? };
         Ok(AudioEffectsManager { manager })
-    }
-
-    /// Set the category of an audio stream.
-    ///
-    /// It is recommended to use [Self::set_properties] with [AudioClientProperties] instead, as this method only
-    /// sets the audio stream category, and hence is a subset of available properties.
-    #[deprecated(
-        since = "0.20.0",
-        note = "please use the new function name `set_properties` instead"
-    )]
-    pub fn set_audio_stream_category(&self, category: AUDIO_STREAM_CATEGORY) -> WasapiRes<()> {
-        let audio_client_2 = self.client.cast::<IAudioClient2>()?;
-        let properties = AudioClientProperties::new().set_category(category);
-        unsafe { audio_client_2.SetClientProperties(&properties.0)? };
-        Ok(())
     }
 
     /// Set properties of the client's audio stream.
@@ -2195,14 +2172,6 @@ impl AudioCaptureClient {
         }
         let nbr_frames = unsafe { self.client.GetNextPacketSize()? };
         Ok(Some(nbr_frames))
-    }
-
-    #[deprecated(
-        since = "0.17.0",
-        note = "please use the new function name `get_next_packet_size` instead"
-    )]
-    pub fn get_next_nbr_frames(&self) -> WasapiRes<Option<u32>> {
-        self.get_next_packet_size()
     }
 
     /// Read raw bytes from a device into a slice. Returns the number of frames
