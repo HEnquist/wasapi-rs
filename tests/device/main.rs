@@ -19,6 +19,7 @@
 mod support;
 
 mod activation;
+mod audioclient23;
 mod capability;
 mod enumeration;
 mod errors;
