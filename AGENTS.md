@@ -12,6 +12,15 @@ The main job of a change here is usually one of these:
 - preserve the crate's invariants around cached state and error mapping
 - document where the wrapper cannot make a stronger guarantee than WASAPI does
 
+Do not try to "fix" strange Windows or WASAPI behaviour in the wrapper unless the
+crate already has a clear, deliberate policy for doing so.
+If an API returns odd, incomplete, or plainly bogus values, the default approach is
+to expose that behaviour honestly, document it, and test the crate's handling of it
+rather than inventing a cleaner story.
+The application loopback capture path is the model here: several methods are known
+not to work or to report nonsense, and the crate documents those limits instead of
+pretending they can be normalised away.
+
 ## Testing strategy
 
 Keep tests simple and local to the crate behaviour they are proving.
@@ -59,6 +68,31 @@ When working in `tests/device/`, keep these rules:
 The existing fixture in `tests/device/support.rs` is the model.
 It serialises access to the virtual cable, initialises COM once per test thread,
 and deliberately avoids turning the suite into an audio application.
+
+## Crate docstrings
+
+The crate docs should explain the Rust wrapper, not rewrite the WASAPI reference.
+When a type or method mostly mirrors a Windows interface or constant, link to the
+relevant Microsoft documentation and keep the crate doc focused on what is specific
+here.
+
+Prefer documenting things like these:
+
+- what the wrapper adds or guarantees
+- cached state and invariants the rest of the crate relies on
+- apartment or COM lifetime restrictions that matter to Rust callers
+- places where the wrapper deliberately differs from, narrows, or cannot fully
+  model WASAPI
+- crate-specific failure modes, caveats, and examples
+
+If the underlying API is weird, say so plainly.
+Prefer "this Windows call returns bogus values in this mode" over adding prose that
+implies the wrapper made the behaviour reliable when it did not.
+
+Avoid long restatements of baseline WASAPI behaviour when the Microsoft docs already
+cover it well.
+Use links to `learn.microsoft.com` for the API reference, and spend the doc comment
+budget on the parts a Rust caller would not get from the Windows signature alone.
 
 ## Running tests
 
