@@ -2005,6 +2005,31 @@ impl AudioClock {
     }
 }
 
+/// Take enough bytes from the front of `src` to fill `dest`, and remove them from `src`.
+///
+/// A [VecDeque] is a ring buffer, so its contents are one or two contiguous runs rather
+/// than a single slice. Copying run by run costs at most two `memcpy` calls and one head
+/// index update, where draining the deque a byte at a time costs a function call and a
+/// pair of index updates per byte. For an 8 channel stream at 192 kHz that is six
+/// million calls per second on the callback thread instead of two copies, which is
+/// enough to show up as a bottleneck. The same pattern was measured at around half the
+/// run time of the CoreAudio callback in CamillaDSP, see
+/// <https://github.com/HEnquist/camilladsp/issues/534>.
+///
+/// Panics when `src` holds fewer than `dest.len()` bytes, so callers check the length
+/// first and report it as a [WasapiError::DataLengthTooShort].
+fn copy_from_deque(dest: &mut [u8], src: &mut VecDeque<u8>) {
+    let wanted = dest.len();
+    let (front, back) = src.as_slices();
+    let from_front = front.len().min(wanted);
+    dest[..from_front].copy_from_slice(&front[..from_front]);
+    // Whatever is left comes from the run at the start of the allocation. Both slices
+    // are empty when the deque did not wrap, and copying an empty slice is a no-op.
+    dest[from_front..].copy_from_slice(&back[..wanted - from_front]);
+    // A front anchored drain moves the head index and leaves the data where it is.
+    src.drain(..wanted);
+}
+
 /// Struct wrapping an [IAudioRenderClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudiorenderclient).
 pub struct AudioRenderClient {
     client: IAudioRenderClient,
@@ -2066,9 +2091,7 @@ impl AudioRenderClient {
         }
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
-        for element in bufferslice.iter_mut() {
-            *element = data.pop_front().unwrap();
-        }
+        copy_from_deque(bufferslice, data);
         let flags = match buffer_flags {
             Some(bflags) => bflags.to_u32(),
             None => 0,
@@ -2243,9 +2266,10 @@ impl AudioCaptureClient {
         }
         let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
         let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
-        for element in bufferslice.iter() {
-            data.push_back(*element);
-        }
+        // Extending from a slice of a `Copy` type reserves once and then memcpies,
+        // rather than pushing a byte at a time. See [copy_from_deque] for why that
+        // matters on an audio callback thread.
+        data.extend(bufferslice);
         if nbr_frames_returned > 0 {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned).unwrap() };
         }
@@ -2365,5 +2389,120 @@ impl AcousticEchoCancellationControl {
                 .SetEchoCancellationRenderEndpoint(endpoint_id)?
         };
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A deque holding `contents`, laid out so that it wraps around the end of its
+    /// allocation and `as_slices` returns two non empty runs.
+    ///
+    /// Built by walking the head index into the middle of the allocation with pushes
+    /// and pops, and then filling the deque, so the last bytes run off the end and
+    /// continue at the start. The assertion is on the fixture rather than on the code
+    /// under test: a deque that came out contiguous would make every test below pass
+    /// without ever reaching the second run.
+    fn wrapped(contents: &[u8]) -> VecDeque<u8> {
+        let mut deque: VecDeque<u8> = VecDeque::with_capacity(contents.len());
+        for _ in 0..contents.len() / 2 {
+            deque.push_back(0);
+            deque.pop_front();
+        }
+        deque.extend(contents);
+        assert!(
+            !deque.as_slices().1.is_empty(),
+            "the fixture deque came out contiguous, so it would not exercise the \
+             wrapped path"
+        );
+        deque
+    }
+
+    /// Bytes are taken in order from a wrapped deque, across both runs.
+    #[test]
+    fn copy_across_both_runs() {
+        let contents: Vec<u8> = (0..64).collect();
+        let mut deque = wrapped(&contents);
+        // The head sits at 32, so 40 bytes spans the end of the allocation.
+        let mut dest = [0u8; 40];
+        copy_from_deque(&mut dest, &mut deque);
+        assert_eq!(
+            &dest[..],
+            &contents[..40],
+            "the wrong bytes were copied out"
+        );
+        assert_eq!(
+            Vec::from(deque),
+            contents[40..],
+            "the wrong bytes were left behind"
+        );
+    }
+
+    /// A read that fits inside the first run leaves the second one alone.
+    #[test]
+    fn copy_within_the_first_run() {
+        let contents: Vec<u8> = (0..64).collect();
+        let mut deque = wrapped(&contents);
+        let mut dest = [0u8; 16];
+        copy_from_deque(&mut dest, &mut deque);
+        assert_eq!(
+            &dest[..],
+            &contents[..16],
+            "the wrong bytes were copied out"
+        );
+        assert_eq!(
+            Vec::from(deque),
+            contents[16..],
+            "the wrong bytes were left behind"
+        );
+    }
+
+    /// Taking everything empties the deque rather than leaving a stray byte.
+    #[test]
+    fn copy_the_whole_deque() {
+        let contents: Vec<u8> = (0..64).collect();
+        let mut deque = wrapped(&contents);
+        let mut dest = [0u8; 64];
+        copy_from_deque(&mut dest, &mut deque);
+        assert_eq!(&dest[..], &contents[..], "the wrong bytes were copied out");
+        assert!(deque.is_empty(), "{} bytes were left behind", deque.len());
+    }
+
+    /// A zero length copy is a no-op. The callers return early before reaching this,
+    /// but an empty destination must not drain anything if that ever changes.
+    #[test]
+    fn copy_nothing() {
+        let contents: Vec<u8> = (0..64).collect();
+        let mut deque = wrapped(&contents);
+        copy_from_deque(&mut [], &mut deque);
+        assert_eq!(
+            Vec::from(deque),
+            contents,
+            "an empty copy changed the deque"
+        );
+    }
+
+    /// A contiguous deque is the common case, and has an empty second run.
+    #[test]
+    fn copy_from_a_contiguous_deque() {
+        let contents: Vec<u8> = (0..64).collect();
+        let mut deque = VecDeque::from(contents.clone());
+        assert!(
+            deque.as_slices().1.is_empty(),
+            "the fixture already wrapped"
+        );
+        let mut dest = [0u8; 40];
+        copy_from_deque(&mut dest, &mut deque);
+        assert_eq!(
+            &dest[..],
+            &contents[..40],
+            "the wrong bytes were copied out"
+        );
+        assert_eq!(
+            Vec::from(deque),
+            contents[40..],
+            "the wrong bytes were left behind"
+        );
     }
 }
