@@ -1291,8 +1291,10 @@ impl AudioClient {
         if h_event.0.is_null() {
             return Err(windows_core::Error::from_thread().into());
         }
-        unsafe { self.client.SetEventHandle(h_event).ok()? };
-        Ok(Handle { handle: h_event })
+        // Wrapped before SetEventHandle, so that the event is closed if that fails.
+        let handle = Handle { handle: h_event };
+        unsafe { self.client.SetEventHandle(handle.handle).ok()? };
+        Ok(handle)
     }
 
     /// Get buffer size in frames,
@@ -1790,9 +1792,9 @@ impl AudioSessionControl {
         let state = unsafe { self.control.GetState()? };
         #[allow(non_upper_case_globals)]
         let sessionstate = match state {
-            _ if state == AudioSessionStateActive => SessionState::Active,
-            _ if state == AudioSessionStateInactive => SessionState::Inactive,
-            _ if state == AudioSessionStateExpired => SessionState::Expired,
+            AudioSessionStateActive => SessionState::Active,
+            AudioSessionStateInactive => SessionState::Inactive,
+            AudioSessionStateExpired => SessionState::Expired,
             x => return Err(WasapiError::IllegalSessionState(x)),
         };
         Ok(sessionstate)
