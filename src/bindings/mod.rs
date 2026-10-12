@@ -22,7 +22,9 @@ use windows_core::GUID;
 /// The type of the acoustic echo cancellation effect, see [AudioEffect](crate::AudioEffect).
 pub const AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION: GUID =
     GUID::from_u128(0x6f64adbe_8211_11e2_8c70_2c27d7f001fa);
+/// The integer PCM subformat, see [SampleType::Int](crate::SampleType::Int).
 pub const KSDATAFORMAT_SUBTYPE_PCM: GUID = GUID::from_u128(0x00000001_0000_0010_8000_00aa00389b71);
+/// The IEEE float subformat, see [SampleType::Float](crate::SampleType::Float).
 pub const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID =
     GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
 pub const KSDATAFORMAT_TYPE_AUDIO: GUID = GUID::from_u128(0x73647561_0000_0010_8000_00aa00389b71);

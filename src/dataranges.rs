@@ -54,7 +54,8 @@ pub struct DataRange {
     pub min_samplerate: u32,
     /// The highest sample rate.
     pub max_samplerate: u32,
-    /// The subformat, normally PCM or IEEE float.
+    /// The subformat, normally [KSDATAFORMAT_SUBTYPE_PCM](crate::KSDATAFORMAT_SUBTYPE_PCM)
+    /// or [KSDATAFORMAT_SUBTYPE_IEEE_FLOAT](crate::KSDATAFORMAT_SUBTYPE_IEEE_FLOAT).
     /// An all zero GUID is a wildcard, see [DataRange::sample_type].
     pub subformat: GUID,
 }

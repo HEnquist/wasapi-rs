@@ -214,3 +214,28 @@ fn null_raw_pointers_are_refused() {
         "AudioClient::from_raw(null) did not give E_POINTER"
     );
 }
+
+/// The exported subformat constants are the ones the crate maps to sample types.
+///
+/// A caller compares a raw subformat against these, so they have to agree with
+/// what [DataRange::sample_type] does with the same GUID.
+#[test]
+fn subformat_constants_match_sample_types() {
+    let range = |subformat| DataRange {
+        max_channels: 2,
+        min_bits_per_sample: 16,
+        max_bits_per_sample: 32,
+        min_samplerate: 44100,
+        max_samplerate: 48000,
+        subformat,
+    };
+    assert_eq!(
+        range(KSDATAFORMAT_SUBTYPE_PCM).sample_type(),
+        Some(SampleType::Int)
+    );
+    assert_eq!(
+        range(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT).sample_type(),
+        Some(SampleType::Float)
+    );
+    assert_eq!(range(GUID::zeroed()).sample_type(), None);
+}

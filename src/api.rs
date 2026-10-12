@@ -2297,11 +2297,17 @@ impl Handle {
     /// The [Handle] keeps ownership and closes the event when it is dropped, so the
     /// returned value is only guaranteed to be valid while the [Handle] has not yet
     /// been destroyed, and it __must not__ be closed by the caller.
-    /// This is the same arrangement as
-    /// [AsRawHandle::as_raw_handle](std::os::windows::io::AsRawHandle::as_raw_handle),
-    /// and it is safe for the same reason:
+    /// This is the same as the [AsRawHandle](std::os::windows::io::AsRawHandle)
+    /// implementation, and it is safe for the same reason:
     /// every function that does anything with a raw handle is itself `unsafe`.
     pub fn as_handle(&self) -> std::os::windows::io::RawHandle {
+        self.handle.0
+    }
+}
+
+impl std::os::windows::io::AsRawHandle for Handle {
+    /// Returns the raw event handle, see [Handle::as_handle].
+    fn as_raw_handle(&self) -> std::os::windows::io::RawHandle {
         self.handle.0
     }
 }
@@ -2316,6 +2322,7 @@ pub use crate::bindings::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
 /// An audio effect on a stream, mirroring an
 /// [AUDIO_EFFECT](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/ns-audioclient-audio_effect).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct AudioEffect {
     /// The type of the effect, one of the `AUDIO_EFFECT_TYPE_XXX` GUIDs from ksmedia.h,
     /// for example [AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION](crate::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION).
