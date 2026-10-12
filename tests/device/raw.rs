@@ -3,17 +3,41 @@
 // These exist so that a caller can reach what the crate does not wrap, with whatever
 // Windows bindings it uses itself. The tests are about the crate's side of that: a
 // pointer handed out can be wrapped again, the wrapper holds a reference of its own,
-// the interface is looked up rather than assumed, and the event handle works in a
-// wait on several handles at once. No binding crate is needed for any of it.
+// the interface is looked up rather than assumed, a service the crate does not wrap
+// can be activated through the device, and the event handle works in a wait on
+// several handles at once. The caller's side uses the bindings in tests/device/bindings.rs.
 
+use crate::bindings::{
+    CLSCTX_ALL, CloseHandle, CreateEventW, HANDLE, IAudioEndpointVolume, IMMDevice, SetEvent,
+    WaitForMultipleObjects,
+};
 use crate::support;
-use std::ffi::c_void;
 use wasapi::*;
+use windows_core::{Interface, PCWSTR};
 
-windows_core::link!("kernel32.dll" "system" fn CreateEventW(lpeventattributes : *const c_void, bmanualreset : i32, binitialstate : i32, lpname : *const u16) -> *mut c_void);
-windows_core::link!("kernel32.dll" "system" fn SetEvent(hevent : *mut c_void) -> i32);
-windows_core::link!("kernel32.dll" "system" fn CloseHandle(hobject : *mut c_void) -> i32);
-windows_core::link!("kernel32.dll" "system" fn WaitForMultipleObjects(ncount : u32, lphandles : *const *mut c_void, bwaitall : i32, dwmilliseconds : u32) -> u32);
+/// An endpoint service the crate does not wrap can be activated through the device.
+///
+/// `IAudioEndpointVolume` is the case the accessor was added for: nothing in the
+/// crate reaches it, while `HardwareSupport::volume` reports that the endpoint has
+/// it. The volume is only read here, never set, since the tests run against whatever
+/// machine happens to host them.
+#[test]
+fn endpoint_volume_through_as_raw() {
+    let Some(fx) = support::fixture() else { return };
+
+    let raw = fx.cable.render.as_raw();
+    let device = unsafe { IMMDevice::from_raw_borrowed(&raw) }.expect("as_raw gave a null pointer");
+    let volume: IAudioEndpointVolume = unsafe { device.Activate(CLSCTX_ALL as u32, None) }
+        .expect("could not activate IAudioEndpointVolume");
+
+    let level = unsafe { volume.GetMasterVolumeLevelScalar() }.unwrap();
+    let muted = unsafe { volume.GetMute() }.unwrap().as_bool();
+    println!("master volume {level:.3}, muted {muted}");
+    assert!(
+        (0.0..=1.0).contains(&level),
+        "scalar volume {level} is outside 0.0 to 1.0"
+    );
+}
 
 /// A device wrapped from its own raw pointer is the same endpoint, in the same direction.
 #[test]
@@ -85,12 +109,12 @@ fn event_handle_in_a_multiple_object_wait() {
     let event = opened.client.set_get_eventhandle().unwrap();
 
     // Stands in for a shutdown event. Manual reset, starts unsignalled.
-    let quit = unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) };
-    assert!(!quit.is_null(), "could not create the second event");
+    let quit = unsafe { CreateEventW(None, true, false, PCWSTR::null()) };
+    assert!(!quit.0.is_null(), "could not create the second event");
 
-    let handles = [event.as_handle(), quit];
+    let handles = [HANDLE(event.as_handle()), quit];
     opened.client.start_stream().unwrap();
-    let result = unsafe { WaitForMultipleObjects(2, handles.as_ptr(), 0, 2000) };
+    let result = unsafe { WaitForMultipleObjects(&handles, false, 2000) };
     opened.client.stop_stream().unwrap();
 
     // WAIT_OBJECT_0 is the first handle, so the device woke the wait.
@@ -101,13 +125,19 @@ fn event_handle_in_a_multiple_object_wait() {
 
     // And the other way round: signalling the second handle on a stopped stream, where
     // the device never fires, has to come back with index 1 rather than time out.
-    assert_ne!(unsafe { SetEvent(quit) }, 0, "could not signal the event");
-    let result = unsafe { WaitForMultipleObjects(2, handles.as_ptr(), 0, 2000) };
+    assert!(
+        unsafe { SetEvent(quit) }.as_bool(),
+        "could not signal the event"
+    );
+    let result = unsafe { WaitForMultipleObjects(&handles, false, 2000) };
     assert_eq!(
         result, 1,
         "the wait returned {result:#x}, expected the signalled handle at index 1"
     );
 
     // The crate's Handle closes its own event on drop, this one is the test's to close.
-    unsafe { CloseHandle(quit) };
+    assert!(
+        unsafe { CloseHandle(quit) }.as_bool(),
+        "could not close the event"
+    );
 }

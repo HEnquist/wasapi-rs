@@ -9,13 +9,12 @@ fn repo_root() -> PathBuf {
 }
 
 fn main() {
-    let filters = repo_root().join("tools").join("bindings").join("filters.txt");
-    let out = repo_root().join("src").join("bindings").join("generated.rs");
+    let tools = repo_root().join("tools").join("bindings");
 
     windows_bindgen::builder()
         .input_default()
-        .output(&out)
-        .filter_file(&filters)
+        .output(repo_root().join("src").join("bindings").join("generated.rs"))
+        .filter_file(tools.join("filters.txt"))
         .flat()
         // Only the callback interfaces that the crate implements get `_Impl` traits.
         // The names must be fully qualified, a bare name silently matches nothing.
@@ -25,5 +24,14 @@ fn main() {
             "Windows.Win32.IMMNotificationClient",
             "Windows.Win32.IActivateAudioInterfaceCompletionHandler",
         ])
+        .write();
+
+    // The device tests use their own bindings, the way a caller of the raw accessors would.
+    windows_bindgen::builder()
+        .input_default()
+        .output(repo_root().join("tests").join("device").join("bindings.rs"))
+        .filter_file(tools.join("filters_device_tests.txt"))
+        .flat()
+        .implements(["Windows.Win32.IActivateAudioInterfaceCompletionHandler"])
         .write();
 }
