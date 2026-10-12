@@ -200,7 +200,7 @@ fn find_cable(enumerator: &DeviceEnumerator) -> Option<Cable> {
 ///
 /// Lets a test name the `AUDCLNT_E_*` constant it expects instead of matching on a
 /// message. False for the crate's own error variants, which carry no result code.
-pub fn is_hresult(error: &WasapiError, expected: windows_core::HRESULT) -> bool {
+pub fn is_hresult(error: &WasapiError, expected: HRESULT) -> bool {
     matches!(error, WasapiError::Windows(e) if e.code() == expected)
 }
 
