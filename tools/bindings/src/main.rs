@@ -17,7 +17,12 @@ fn main() {
 
     windows_bindgen::builder()
         .input_default()
-        .output(repo_root().join("src").join("bindings").join("generated.rs"))
+        .output(
+            repo_root()
+                .join("src")
+                .join("bindings")
+                .join("generated.rs"),
+        )
         .filter_file(tools.join("filters.txt"))
         .flat()
         // Only the callback interfaces that the crate implements get `_Impl` traits.
