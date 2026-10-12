@@ -90,27 +90,36 @@ fn capture_loop(
 // Capturing with `include_tree` needs this one, since a child process only covers its own subtree.
 // The lookup asks PowerShell, which ships with Windows, to keep the example free of dependencies.
 // It picks the process whose parent is not another process with the same name.
+// If the application runs as several independent instances, it takes the first one.
 // The name goes in through an environment variable, so that it is never parsed as part of the script.
 fn find_main_process(name: &str) -> Res<u32> {
+    // Win32_Process names include the extension.
+    let name = if name.to_lowercase().ends_with(".exe") {
+        name.to_string()
+    } else {
+        format!("{name}.exe")
+    };
     let script = "$p = Get-CimInstance Win32_Process | Where-Object Name -eq $env:PROCESS_NAME; \
                   ($p | Where-Object { $p.ProcessId -notcontains $_.ParentProcessId }).ProcessId";
     let output = Command::new("powershell")
         .args(["-NoProfile", "-Command", script])
-        .env("PROCESS_NAME", name)
+        .env("PROCESS_NAME", &name)
         .output()?;
-    if !output.status.success() {
-        return Err(format!(
-            "the process lookup failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )
-        .into());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() || !stderr.trim().is_empty() {
+        return Err(format!("the process lookup failed: {}", stderr.trim()).into());
     }
     let stdout = String::from_utf8(output.stdout)?;
-    let pid = stdout
+    let pids = stdout
         .split_whitespace()
-        .next()
-        .ok_or(format!("no process named {name} is running"))?
-        .parse()?;
+        .map(str::parse)
+        .collect::<Result<Vec<u32>, _>>()?;
+    let pid = *pids
+        .first()
+        .ok_or(format!("no process named {name} is running"))?;
+    if pids.len() > 1 {
+        warn!("{name} runs as several separate instances {pids:?}, capturing {pid}");
+    }
     Ok(pid)
 }
 
