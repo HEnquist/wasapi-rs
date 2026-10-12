@@ -1,4 +1,5 @@
 /target
+/tools/bindings/target
 Cargo.lock
 .idea/
 *.raw

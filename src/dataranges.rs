@@ -10,32 +10,26 @@ use std::collections::HashSet;
 use std::mem::size_of;
 use std::ptr::from_ref;
 
-use windows::Win32::Foundation::{
-    CloseHandle, ERROR_INSUFFICIENT_BUFFER, ERROR_MORE_DATA, GENERIC_READ, GENERIC_WRITE, HANDLE,
+use windows_core::{GUID, HRESULT, Interface, PCWSTR, WIN32_ERROR};
+
+use crate::bindings::{
+    CLSCTX_ALL, CloseHandle, Connector, CreateFileW, DeviceIoControl, ERROR_INSUFFICIENT_BUFFER,
+    ERROR_MORE_DATA, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, HANDLE,
+    IConnector, IDeviceTopology, IMMDevice, INVALID_HANDLE_VALUE, IOCTL_KS_PROPERTY, IPart,
+    KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, KSDATAFORMAT_TYPE_AUDIO,
+    KSDATARANGE_0, KSIDENTIFIER_0_0, KSMULTIPLE_ITEM, KSP_PIN, KSPIN_DATAFLOW_IN,
+    KSPIN_DATAFLOW_OUT, KSPROPERTY_PIN, KSPROPERTY_PIN_CTYPES, KSPROPERTY_PIN_DATAFLOW,
+    KSPROPERTY_PIN_DATARANGES, KSPROPERTY_TYPE_GET, KSPROPSETID_Pin, OPEN_EXISTING,
 };
-use windows::Win32::Media::Audio::{Connector, IConnector, IDeviceTopology, IMMDevice, IPart};
-use windows::Win32::Media::KernelStreaming::{
-    IOCTL_KS_PROPERTY, KSDATAFORMAT_0, KSDATAFORMAT_SUBTYPE_PCM, KSDATAFORMAT_TYPE_AUDIO,
-    KSIDENTIFIER_0_0, KSMULTIPLE_ITEM, KSP_PIN, KSPIN_DATAFLOW_IN, KSPIN_DATAFLOW_OUT,
-    KSPROPERTY_PIN, KSPROPERTY_PIN_CTYPES, KSPROPERTY_PIN_DATAFLOW, KSPROPERTY_PIN_DATARANGES,
-    KSPROPERTY_TYPE_GET, KSPROPSETID_Pin,
-};
-use windows::Win32::Media::Multimedia::KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-};
-use windows::Win32::System::Com::CLSCTX_ALL;
-use windows::Win32::System::IO::DeviceIoControl;
-use windows::core::{GUID, HRESULT, Interface, PCWSTR};
 
 use crate::{Direction, SampleType, WasapiRes, WaveFormat};
 
 /// A KSDATAFORMAT is 64 bytes, the audio fields of a KSDATARANGE_AUDIO follow after it.
-const AUDIO_RANGE_SIZE: usize = size_of::<KSDATAFORMAT_0>() + 5 * size_of::<u32>();
+const AUDIO_RANGE_SIZE: usize = size_of::<KSDATARANGE_0>() + 5 * size_of::<u32>();
 
 /// The errors that mean the reply did not fit in the buffer.
-const MORE_DATA: HRESULT = HRESULT::from_win32(ERROR_MORE_DATA.0);
-const INSUFFICIENT_BUFFER: HRESULT = HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER.0);
+const MORE_DATA: HRESULT = WIN32_ERROR(ERROR_MORE_DATA as u32).to_hresult();
+const INSUFFICIENT_BUFFER: HRESULT = WIN32_ERROR(ERROR_INSUFFICIENT_BUFFER as u32).to_hresult();
 
 /// One capability range, as declared by a device driver.
 ///
@@ -118,7 +112,7 @@ pub(crate) fn read_data_ranges(
     device: &IMMDevice,
     direction: Direction,
 ) -> WasapiRes<Vec<DataRange>> {
-    let topology: IDeviceTopology = unsafe { device.Activate(CLSCTX_ALL, None)? };
+    let topology: IDeviceTopology = unsafe { device.Activate(CLSCTX_ALL as u32, None)? };
     let endpoint_side = unsafe { topology.GetConnector(0)? };
     let device_side: IPart = unsafe { endpoint_side.GetConnectedTo()? }.cast()?;
     let topology_filter = filter_id(&device_side);
@@ -186,7 +180,7 @@ pub(crate) fn read_data_ranges(
         debug!("The filter {id} has {pins} pins");
         for pin in 0..pins {
             let flow = query_u32(*filter, &pin_property(KSPROPERTY_PIN_DATAFLOW, pin));
-            if flow.unwrap_or(0) != wanted_flow.0 as u32 {
+            if flow.unwrap_or(0) != wanted_flow as u32 {
                 continue;
             }
             match query_bytes(*filter, &pin_property(KSPROPERTY_PIN_DATARANGES, pin)) {
@@ -261,22 +255,29 @@ fn open_filter(device_id: &str) -> WasapiRes<HANDLE> {
         _ => device_id,
     };
     let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
-    let open = |access: u32| unsafe {
-        CreateFileW(
-            PCWSTR(wide.as_ptr()),
-            access,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            None,
-            OPEN_EXISTING,
-            FILE_FLAGS_AND_ATTRIBUTES(0),
-            None,
-        )
+    let open = |access: u32| {
+        let handle = unsafe {
+            CreateFileW(
+                PCWSTR(wide.as_ptr()),
+                access,
+                (FILE_SHARE_READ | FILE_SHARE_WRITE) as u32,
+                None,
+                OPEN_EXISTING as u32,
+                0,
+                None,
+            )
+        };
+        if handle == INVALID_HANDLE_VALUE {
+            Err(windows_core::Error::from_thread())
+        } else {
+            Ok(handle)
+        }
     };
-    match open(GENERIC_READ.0) {
+    match open(GENERIC_READ) {
         Ok(handle) => Ok(handle),
         Err(err) => {
             debug!("Could not open the filter for reading, {err}, retrying with write access");
-            Ok(open(GENERIC_READ.0 | GENERIC_WRITE.0)?)
+            Ok(open(GENERIC_READ | GENERIC_WRITE as u32)?)
         }
     }
 }
@@ -286,8 +287,8 @@ fn pin_property(id: KSPROPERTY_PIN, pin_id: u32) -> KSP_PIN {
     let mut property = KSP_PIN::default();
     property.Property.Anonymous.Anonymous = KSIDENTIFIER_0_0 {
         Set: KSPROPSETID_Pin,
-        Id: id.0 as u32,
-        Flags: KSPROPERTY_TYPE_GET,
+        Id: id as u32,
+        Flags: KSPROPERTY_TYPE_GET as u32,
     };
     property.PinId = pin_id;
     property
@@ -304,7 +305,7 @@ fn ks_property(filter: HANDLE, property: &KSP_PIN, buffer: Option<&mut [u8]>) ->
     let result = unsafe {
         DeviceIoControl(
             filter,
-            IOCTL_KS_PROPERTY,
+            IOCTL_KS_PROPERTY as u32,
             Some(from_ref(property).cast()),
             size_of::<KSP_PIN>() as u32,
             data,
@@ -313,7 +314,7 @@ fn ks_property(filter: HANDLE, property: &KSP_PIN, buffer: Option<&mut [u8]>) ->
             None,
         )
     };
-    match result {
+    match result.ok() {
         Ok(()) => Ok(returned),
         // A buffer that is too small is not a failure here,
         // the driver then reports the size it needs.
@@ -353,11 +354,11 @@ fn parse_data_ranges(buffer: &[u8]) -> Vec<DataRange> {
     let header: KSMULTIPLE_ITEM = unsafe { std::ptr::read_unaligned(buffer.as_ptr().cast()) };
     let mut offset = size_of::<KSMULTIPLE_ITEM>();
     for _ in 0..header.Count {
-        if offset + size_of::<KSDATAFORMAT_0>() > buffer.len() {
+        if offset + size_of::<KSDATARANGE_0>() > buffer.len() {
             debug!("The list of data ranges is truncated at offset {offset}");
             break;
         }
-        let format: KSDATAFORMAT_0 =
+        let format: KSDATARANGE_0 =
             unsafe { std::ptr::read_unaligned(buffer[offset..].as_ptr().cast()) };
         let size = format.FormatSize as usize;
         if format.MajorFormat == KSDATAFORMAT_TYPE_AUDIO
@@ -365,7 +366,7 @@ fn parse_data_ranges(buffer: &[u8]) -> Vec<DataRange> {
             && offset + AUDIO_RANGE_SIZE <= buffer.len()
         {
             let field = |nbr: usize| {
-                let start = offset + size_of::<KSDATAFORMAT_0>() + 4 * nbr;
+                let start = offset + size_of::<KSDATARANGE_0>() + 4 * nbr;
                 u32::from_le_bytes(buffer[start..start + 4].try_into().unwrap())
             };
             ranges.push(DataRange {

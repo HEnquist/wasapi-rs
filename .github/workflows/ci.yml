@@ -94,7 +94,7 @@ jobs:
       # Only the library is checked here, since some dev-dependencies
       # require a newer compiler than the library itself.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.85
+        uses: dtolnay/rust-toolchain@1.95
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

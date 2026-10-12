@@ -22,4 +22,5 @@ mod audioclient23;
 mod capability;
 mod enumeration;
 mod errors;
+mod raw;
 mod streams;

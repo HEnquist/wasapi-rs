@@ -162,6 +162,44 @@ pub unsafe fn WaitForSingleObject(hhandle: HANDLE, dwmilliseconds: u32) -> u32 {
 pub const AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY: _AUDCLNT_BUFFERFLAGS = 1;
 pub const AUDCLNT_BUFFERFLAGS_SILENT: _AUDCLNT_BUFFERFLAGS = 2;
 pub const AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR: _AUDCLNT_BUFFERFLAGS = 4;
+pub const AUDCLNT_E_ALREADY_INITIALIZED: i32 = -2004287486;
+pub const AUDCLNT_E_BUFDURATION_PERIOD_NOT_EQUAL: i32 = -2004287469;
+pub const AUDCLNT_E_BUFFER_ERROR: i32 = -2004287464;
+pub const AUDCLNT_E_BUFFER_OPERATION_PENDING: i32 = -2004287477;
+pub const AUDCLNT_E_BUFFER_SIZE_ERROR: i32 = -2004287466;
+pub const AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED: i32 = -2004287463;
+pub const AUDCLNT_E_BUFFER_TOO_LARGE: i32 = -2004287482;
+pub const AUDCLNT_E_CPUUSAGE_EXCEEDED: i32 = -2004287465;
+pub const AUDCLNT_E_DEVICE_INVALIDATED: i32 = -2004287484;
+pub const AUDCLNT_E_DEVICE_IN_USE: i32 = -2004287478;
+pub const AUDCLNT_E_EFFECT_NOT_AVAILABLE: i32 = -2004287423;
+pub const AUDCLNT_E_EFFECT_STATE_READ_ONLY: i32 = -2004287422;
+pub const AUDCLNT_E_ENDPOINT_CREATE_FAILED: i32 = -2004287473;
+pub const AUDCLNT_E_ENDPOINT_OFFLOAD_NOT_CAPABLE: i32 = -2004287454;
+pub const AUDCLNT_E_ENGINE_FORMAT_LOCKED: i32 = -2004287447;
+pub const AUDCLNT_E_ENGINE_PERIODICITY_LOCKED: i32 = -2004287448;
+pub const AUDCLNT_E_EVENTHANDLE_NOT_EXPECTED: i32 = -2004287471;
+pub const AUDCLNT_E_EVENTHANDLE_NOT_SET: i32 = -2004287468;
+pub const AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED: i32 = -2004287474;
+pub const AUDCLNT_E_EXCLUSIVE_MODE_ONLY: i32 = -2004287470;
+pub const AUDCLNT_E_HEADTRACKING_ENABLED: i32 = -2004287440;
+pub const AUDCLNT_E_HEADTRACKING_UNSUPPORTED: i32 = -2004287424;
+pub const AUDCLNT_E_INCORRECT_BUFFER_SIZE: i32 = -2004287467;
+pub const AUDCLNT_E_INVALID_DEVICE_PERIOD: i32 = -2004287456;
+pub const AUDCLNT_E_INVALID_SIZE: i32 = -2004287479;
+pub const AUDCLNT_E_INVALID_STREAM_FLAG: i32 = -2004287455;
+pub const AUDCLNT_E_NONOFFLOAD_MODE_ONLY: i32 = -2004287451;
+pub const AUDCLNT_E_NOT_INITIALIZED: i32 = -2004287487;
+pub const AUDCLNT_E_NOT_STOPPED: i32 = -2004287483;
+pub const AUDCLNT_E_OFFLOAD_MODE_ONLY: i32 = -2004287452;
+pub const AUDCLNT_E_OUT_OF_OFFLOAD_RESOURCES: i32 = -2004287453;
+pub const AUDCLNT_E_OUT_OF_ORDER: i32 = -2004287481;
+pub const AUDCLNT_E_RAW_MODE_UNSUPPORTED: i32 = -2004287449;
+pub const AUDCLNT_E_RESOURCES_INVALIDATED: i32 = -2004287450;
+pub const AUDCLNT_E_SERVICE_NOT_RUNNING: i32 = -2004287472;
+pub const AUDCLNT_E_THREAD_NOT_REGISTERED: i32 = -2004287476;
+pub const AUDCLNT_E_UNSUPPORTED_FORMAT: i32 = -2004287480;
+pub const AUDCLNT_E_WRONG_ENDPOINT_TYPE: i32 = -2004287485;
 pub type AUDCLNT_SHAREMODE = i32;
 pub const AUDCLNT_SHAREMODE_EXCLUSIVE: AUDCLNT_SHAREMODE = 1;
 pub const AUDCLNT_SHAREMODE_SHARED: AUDCLNT_SHAREMODE = 0;
@@ -173,8 +211,10 @@ pub type AUDCLNT_STREAMOPTIONS = u32;
 pub const AUDCLNT_STREAMOPTIONS_AMBISONICS: AUDCLNT_STREAMOPTIONS = 4;
 pub const AUDCLNT_STREAMOPTIONS_MATCH_FORMAT: AUDCLNT_STREAMOPTIONS = 2;
 pub const AUDCLNT_STREAMOPTIONS_NONE: AUDCLNT_STREAMOPTIONS = 0;
-pub const AUDCLNT_STREAMOPTIONS_POST_VOLUME_LOOPBACK: AUDCLNT_STREAMOPTIONS = 8;
 pub const AUDCLNT_STREAMOPTIONS_RAW: AUDCLNT_STREAMOPTIONS = 1;
+pub const AUDCLNT_S_BUFFER_EMPTY: i32 = 143196161;
+pub const AUDCLNT_S_POSITION_STALLED: i32 = 143196163;
+pub const AUDCLNT_S_THREAD_ALREADY_REGISTERED: i32 = 143196162;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct AUDIOCLIENT_ACTIVATION_PARAMS {
@@ -212,9 +252,7 @@ pub struct AUDIO_EFFECT {
     pub state: AUDIO_EFFECT_STATE,
 }
 pub type AUDIO_EFFECT_STATE = i32;
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION(pub u8);
+pub const AUDIO_EFFECT_STATE_ON: AUDIO_EFFECT_STATE = 1;
 pub type AUDIO_STREAM_CATEGORY = i32;
 pub const AudioCategory_Alerts: AUDIO_STREAM_CATEGORY = 4;
 pub const AudioCategory_Communications: AUDIO_STREAM_CATEGORY = 3;
@@ -464,6 +502,10 @@ pub struct DECIMAL_1_0 {
     pub Lo32: u32,
     pub Mid32: u32,
 }
+pub const DEVICE_STATE_ACTIVE: i32 = 1;
+pub const DEVICE_STATE_DISABLED: i32 = 2;
+pub const DEVICE_STATE_NOTPRESENT: i32 = 4;
+pub const DEVICE_STATE_UNPLUGGED: i32 = 8;
 pub type DataFlow = i32;
 pub const DisconnectReasonDeviceRemoval: AudioSessionDisconnectReason = 0;
 pub const DisconnectReasonExclusiveModeOverride: AudioSessionDisconnectReason = 5;
@@ -472,16 +514,15 @@ pub const DisconnectReasonServerShutdown: AudioSessionDisconnectReason = 1;
 pub const DisconnectReasonSessionDisconnected: AudioSessionDisconnectReason = 4;
 pub const DisconnectReasonSessionLogoff: AudioSessionDisconnectReason = 3;
 pub type EDataFlow = i32;
-pub const EDataFlow_enum_count: EDataFlow = 3;
 pub const ENDPOINT_HARDWARE_SUPPORT_METER: i32 = 4;
 pub const ENDPOINT_HARDWARE_SUPPORT_MUTE: i32 = 2;
 pub const ENDPOINT_HARDWARE_SUPPORT_VOLUME: i32 = 1;
 pub const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
 pub const ERROR_MORE_DATA: i32 = 234;
 pub type ERole = i32;
-pub const ERole_enum_count: ERole = 3;
 pub const E_INVALIDARG: windows_core::HRESULT = windows_core::HRESULT(0x80070057_u32 as _);
 pub const E_NOINTERFACE: windows_core::HRESULT = windows_core::HRESULT(0x80004002_u32 as _);
+pub const E_POINTER: windows_core::HRESULT = windows_core::HRESULT(0x80004003_u32 as _);
 pub const FALSE: i32 = 0;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -589,6 +630,44 @@ pub struct IActivateAudioInterfaceCompletionHandler_Vtbl {
         *mut core::ffi::c_void,
     ) -> windows_core::HRESULT,
 }
+pub trait IActivateAudioInterfaceCompletionHandler_Impl: windows_core::IUnknownImpl {
+    fn ActivateCompleted(
+        &self,
+        activateoperation: windows_core::Ref<IActivateAudioInterfaceAsyncOperation>,
+    ) -> windows_core::Result<()>;
+}
+impl IActivateAudioInterfaceCompletionHandler_Vtbl {
+    pub const fn new<
+        Identity: IActivateAudioInterfaceCompletionHandler_Impl,
+        const OFFSET: isize,
+    >() -> Self {
+        unsafe extern "system" fn ActivateCompleted<
+            Identity: IActivateAudioInterfaceCompletionHandler_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            activateoperation: *mut core::ffi::c_void,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IActivateAudioInterfaceCompletionHandler_Impl::ActivateCompleted(
+                    this,
+                    core::mem::transmute_copy(&activateoperation),
+                )
+                .into()
+            }
+        }
+        Self {
+            base__: windows_core::IUnknown_Vtbl::new::<Identity, OFFSET>(),
+            ActivateCompleted: ActivateCompleted::<Identity, OFFSET>,
+        }
+    }
+    pub fn matches(iid: &windows_core::GUID) -> bool {
+        iid == &<IActivateAudioInterfaceCompletionHandler as windows_core::Interface>::IID
+    }
+}
+impl windows_core::RuntimeName for IActivateAudioInterfaceCompletionHandler {}
 windows_core::imp::define_interface!(
     IAudioCaptureClient,
     IAudioCaptureClient_Vtbl,
@@ -1690,6 +1769,191 @@ pub struct IAudioSessionEvents_Vtbl {
         AudioSessionDisconnectReason,
     ) -> windows_core::HRESULT,
 }
+pub trait IAudioSessionEvents_Impl: windows_core::IUnknownImpl {
+    fn OnDisplayNameChanged(
+        &self,
+        newdisplayname: &windows_core::PCWSTR,
+        eventcontext: *const windows_core::GUID,
+    ) -> windows_core::Result<()>;
+    fn OnIconPathChanged(
+        &self,
+        newiconpath: &windows_core::PCWSTR,
+        eventcontext: *const windows_core::GUID,
+    ) -> windows_core::Result<()>;
+    fn OnSimpleVolumeChanged(
+        &self,
+        newvolume: f32,
+        newmute: windows_core::BOOL,
+        eventcontext: *const windows_core::GUID,
+    ) -> windows_core::Result<()>;
+    fn OnChannelVolumeChanged(
+        &self,
+        channelcount: u32,
+        newchannelvolumearray: *const f32,
+        changedchannel: u32,
+        eventcontext: *const windows_core::GUID,
+    ) -> windows_core::Result<()>;
+    fn OnGroupingParamChanged(
+        &self,
+        newgroupingparam: *const windows_core::GUID,
+        eventcontext: *const windows_core::GUID,
+    ) -> windows_core::Result<()>;
+    fn OnStateChanged(&self, newstate: AudioSessionState) -> windows_core::Result<()>;
+    fn OnSessionDisconnected(
+        &self,
+        disconnectreason: AudioSessionDisconnectReason,
+    ) -> windows_core::Result<()>;
+}
+impl IAudioSessionEvents_Vtbl {
+    pub const fn new<Identity: IAudioSessionEvents_Impl, const OFFSET: isize>() -> Self {
+        unsafe extern "system" fn OnDisplayNameChanged<
+            Identity: IAudioSessionEvents_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            newdisplayname: windows_core::PCWSTR,
+            eventcontext: *const windows_core::GUID,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IAudioSessionEvents_Impl::OnDisplayNameChanged(
+                    this,
+                    core::mem::transmute(&newdisplayname),
+                    core::mem::transmute_copy(&eventcontext),
+                )
+                .into()
+            }
+        }
+        unsafe extern "system" fn OnIconPathChanged<
+            Identity: IAudioSessionEvents_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            newiconpath: windows_core::PCWSTR,
+            eventcontext: *const windows_core::GUID,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IAudioSessionEvents_Impl::OnIconPathChanged(
+                    this,
+                    core::mem::transmute(&newiconpath),
+                    core::mem::transmute_copy(&eventcontext),
+                )
+                .into()
+            }
+        }
+        unsafe extern "system" fn OnSimpleVolumeChanged<
+            Identity: IAudioSessionEvents_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            newvolume: f32,
+            newmute: windows_core::BOOL,
+            eventcontext: *const windows_core::GUID,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IAudioSessionEvents_Impl::OnSimpleVolumeChanged(
+                    this,
+                    core::mem::transmute_copy(&newvolume),
+                    core::mem::transmute_copy(&newmute),
+                    core::mem::transmute_copy(&eventcontext),
+                )
+                .into()
+            }
+        }
+        unsafe extern "system" fn OnChannelVolumeChanged<
+            Identity: IAudioSessionEvents_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            channelcount: u32,
+            newchannelvolumearray: *const f32,
+            changedchannel: u32,
+            eventcontext: *const windows_core::GUID,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IAudioSessionEvents_Impl::OnChannelVolumeChanged(
+                    this,
+                    core::mem::transmute_copy(&channelcount),
+                    core::mem::transmute_copy(&newchannelvolumearray),
+                    core::mem::transmute_copy(&changedchannel),
+                    core::mem::transmute_copy(&eventcontext),
+                )
+                .into()
+            }
+        }
+        unsafe extern "system" fn OnGroupingParamChanged<
+            Identity: IAudioSessionEvents_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            newgroupingparam: *const windows_core::GUID,
+            eventcontext: *const windows_core::GUID,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IAudioSessionEvents_Impl::OnGroupingParamChanged(
+                    this,
+                    core::mem::transmute_copy(&newgroupingparam),
+                    core::mem::transmute_copy(&eventcontext),
+                )
+                .into()
+            }
+        }
+        unsafe extern "system" fn OnStateChanged<
+            Identity: IAudioSessionEvents_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            newstate: AudioSessionState,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IAudioSessionEvents_Impl::OnStateChanged(this, core::mem::transmute_copy(&newstate))
+                    .into()
+            }
+        }
+        unsafe extern "system" fn OnSessionDisconnected<
+            Identity: IAudioSessionEvents_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            disconnectreason: AudioSessionDisconnectReason,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IAudioSessionEvents_Impl::OnSessionDisconnected(
+                    this,
+                    core::mem::transmute_copy(&disconnectreason),
+                )
+                .into()
+            }
+        }
+        Self {
+            base__: windows_core::IUnknown_Vtbl::new::<Identity, OFFSET>(),
+            OnDisplayNameChanged: OnDisplayNameChanged::<Identity, OFFSET>,
+            OnIconPathChanged: OnIconPathChanged::<Identity, OFFSET>,
+            OnSimpleVolumeChanged: OnSimpleVolumeChanged::<Identity, OFFSET>,
+            OnChannelVolumeChanged: OnChannelVolumeChanged::<Identity, OFFSET>,
+            OnGroupingParamChanged: OnGroupingParamChanged::<Identity, OFFSET>,
+            OnStateChanged: OnStateChanged::<Identity, OFFSET>,
+            OnSessionDisconnected: OnSessionDisconnected::<Identity, OFFSET>,
+        }
+    }
+    pub fn matches(iid: &windows_core::GUID) -> bool {
+        iid == &<IAudioSessionEvents as windows_core::Interface>::IID
+    }
+}
+impl windows_core::RuntimeName for IAudioSessionEvents {}
 windows_core::imp::define_interface!(
     IAudioSessionManager,
     IAudioSessionManager_Vtbl,
@@ -2531,6 +2795,136 @@ pub struct IMMNotificationClient_Vtbl {
         PROPERTYKEY,
     ) -> windows_core::HRESULT,
 }
+pub trait IMMNotificationClient_Impl: windows_core::IUnknownImpl {
+    fn OnDeviceStateChanged(
+        &self,
+        pwstrdeviceid: &windows_core::PCWSTR,
+        dwnewstate: u32,
+    ) -> windows_core::Result<()>;
+    fn OnDeviceAdded(&self, pwstrdeviceid: &windows_core::PCWSTR) -> windows_core::Result<()>;
+    fn OnDeviceRemoved(&self, pwstrdeviceid: &windows_core::PCWSTR) -> windows_core::Result<()>;
+    fn OnDefaultDeviceChanged(
+        &self,
+        flow: EDataFlow,
+        role: ERole,
+        pwstrdefaultdeviceid: &windows_core::PCWSTR,
+    ) -> windows_core::Result<()>;
+    fn OnPropertyValueChanged(
+        &self,
+        pwstrdeviceid: &windows_core::PCWSTR,
+        key: &PROPERTYKEY,
+    ) -> windows_core::Result<()>;
+}
+impl IMMNotificationClient_Vtbl {
+    pub const fn new<Identity: IMMNotificationClient_Impl, const OFFSET: isize>() -> Self {
+        unsafe extern "system" fn OnDeviceStateChanged<
+            Identity: IMMNotificationClient_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            pwstrdeviceid: windows_core::PCWSTR,
+            dwnewstate: u32,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IMMNotificationClient_Impl::OnDeviceStateChanged(
+                    this,
+                    core::mem::transmute(&pwstrdeviceid),
+                    core::mem::transmute_copy(&dwnewstate),
+                )
+                .into()
+            }
+        }
+        unsafe extern "system" fn OnDeviceAdded<
+            Identity: IMMNotificationClient_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            pwstrdeviceid: windows_core::PCWSTR,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IMMNotificationClient_Impl::OnDeviceAdded(
+                    this,
+                    core::mem::transmute(&pwstrdeviceid),
+                )
+                .into()
+            }
+        }
+        unsafe extern "system" fn OnDeviceRemoved<
+            Identity: IMMNotificationClient_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            pwstrdeviceid: windows_core::PCWSTR,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IMMNotificationClient_Impl::OnDeviceRemoved(
+                    this,
+                    core::mem::transmute(&pwstrdeviceid),
+                )
+                .into()
+            }
+        }
+        unsafe extern "system" fn OnDefaultDeviceChanged<
+            Identity: IMMNotificationClient_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            flow: EDataFlow,
+            role: ERole,
+            pwstrdefaultdeviceid: windows_core::PCWSTR,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IMMNotificationClient_Impl::OnDefaultDeviceChanged(
+                    this,
+                    core::mem::transmute_copy(&flow),
+                    core::mem::transmute_copy(&role),
+                    core::mem::transmute(&pwstrdefaultdeviceid),
+                )
+                .into()
+            }
+        }
+        unsafe extern "system" fn OnPropertyValueChanged<
+            Identity: IMMNotificationClient_Impl,
+            const OFFSET: isize,
+        >(
+            this: *mut core::ffi::c_void,
+            pwstrdeviceid: windows_core::PCWSTR,
+            key: PROPERTYKEY,
+        ) -> windows_core::HRESULT {
+            unsafe {
+                let this: &Identity =
+                    &*((this as *const *const ()).offset(OFFSET) as *const Identity);
+                IMMNotificationClient_Impl::OnPropertyValueChanged(
+                    this,
+                    core::mem::transmute(&pwstrdeviceid),
+                    core::mem::transmute(&key),
+                )
+                .into()
+            }
+        }
+        Self {
+            base__: windows_core::IUnknown_Vtbl::new::<Identity, OFFSET>(),
+            OnDeviceStateChanged: OnDeviceStateChanged::<Identity, OFFSET>,
+            OnDeviceAdded: OnDeviceAdded::<Identity, OFFSET>,
+            OnDeviceRemoved: OnDeviceRemoved::<Identity, OFFSET>,
+            OnDefaultDeviceChanged: OnDefaultDeviceChanged::<Identity, OFFSET>,
+            OnPropertyValueChanged: OnPropertyValueChanged::<Identity, OFFSET>,
+        }
+    }
+    pub fn matches(iid: &windows_core::GUID) -> bool {
+        iid == &<IMMNotificationClient as windows_core::Interface>::IID
+    }
+}
+impl windows_core::RuntimeName for IMMNotificationClient {}
+pub const INVALID_HANDLE_VALUE: HANDLE = HANDLE(-1 as _);
 pub const IOCTL_KS_PROPERTY: i32 = 3080195;
 windows_core::imp::define_interface!(IPart, IPart_Vtbl, 0xae2de0e4_5bca_4f2d_aa46_5d13f8fdb3a9);
 windows_core::imp::interface_hierarchy!(IPart, windows_core::IUnknown);
@@ -2742,11 +3136,39 @@ windows_core::imp::define_interface!(
     0x6daa848c_5eb0_45cc_aea5_998a2cda1ffb
 );
 windows_core::imp::interface_hierarchy!(IPartsList, windows_core::IUnknown);
+impl IPartsList {
+    pub unsafe fn GetCount(&self) -> windows_core::Result<u32> {
+        unsafe {
+            let mut result__ = core::mem::zeroed();
+            (windows_core::Interface::vtable(self).GetCount)(
+                windows_core::Interface::as_raw(self),
+                &mut result__,
+            )
+            .map(|| result__)
+        }
+    }
+    pub unsafe fn GetPart(&self, nindex: u32) -> windows_core::Result<IPart> {
+        unsafe {
+            let mut result__ = core::mem::zeroed();
+            (windows_core::Interface::vtable(self).GetPart)(
+                windows_core::Interface::as_raw(self),
+                nindex,
+                &mut result__,
+            )
+            .and_then(|| windows_core::imp::Type::from_abi(result__))
+        }
+    }
+}
 #[repr(C)]
 pub struct IPartsList_Vtbl {
     pub base__: windows_core::IUnknown_Vtbl,
-    GetCount: usize,
-    GetPart: usize,
+    pub GetCount:
+        unsafe extern "system" fn(*mut core::ffi::c_void, *mut u32) -> windows_core::HRESULT,
+    pub GetPart: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        u32,
+        *mut *mut core::ffi::c_void,
+    ) -> windows_core::HRESULT,
 }
 windows_core::imp::define_interface!(
     IPropertyStore,
@@ -2754,14 +3176,77 @@ windows_core::imp::define_interface!(
     0x886d8eeb_8cf2_4446_8d02_cdba1dbdcf99
 );
 windows_core::imp::interface_hierarchy!(IPropertyStore, windows_core::IUnknown);
+impl IPropertyStore {
+    pub unsafe fn GetCount(&self) -> windows_core::Result<u32> {
+        unsafe {
+            let mut result__ = core::mem::zeroed();
+            (windows_core::Interface::vtable(self).GetCount)(
+                windows_core::Interface::as_raw(self),
+                &mut result__,
+            )
+            .map(|| result__)
+        }
+    }
+    pub unsafe fn GetAt(&self, iprop: u32, pkey: *mut PROPERTYKEY) -> windows_core::HRESULT {
+        unsafe {
+            (windows_core::Interface::vtable(self).GetAt)(
+                windows_core::Interface::as_raw(self),
+                iprop,
+                pkey as _,
+            )
+        }
+    }
+    pub unsafe fn GetValue(&self, key: *const PROPERTYKEY) -> windows_core::Result<PROPVARIANT> {
+        unsafe {
+            let mut result__ = core::mem::zeroed();
+            (windows_core::Interface::vtable(self).GetValue)(
+                windows_core::Interface::as_raw(self),
+                key,
+                &mut result__,
+            )
+            .map(|| core::mem::transmute(result__))
+        }
+    }
+    pub unsafe fn SetValue(
+        &self,
+        key: *const PROPERTYKEY,
+        propvar: *const PROPVARIANT,
+    ) -> windows_core::HRESULT {
+        unsafe {
+            (windows_core::Interface::vtable(self).SetValue)(
+                windows_core::Interface::as_raw(self),
+                key,
+                propvar,
+            )
+        }
+    }
+    pub unsafe fn Commit(&self) -> windows_core::HRESULT {
+        unsafe {
+            (windows_core::Interface::vtable(self).Commit)(windows_core::Interface::as_raw(self))
+        }
+    }
+}
 #[repr(C)]
 pub struct IPropertyStore_Vtbl {
     pub base__: windows_core::IUnknown_Vtbl,
-    GetCount: usize,
-    GetAt: usize,
-    GetValue: usize,
-    SetValue: usize,
-    Commit: usize,
+    pub GetCount:
+        unsafe extern "system" fn(*mut core::ffi::c_void, *mut u32) -> windows_core::HRESULT,
+    pub GetAt: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        u32,
+        *mut PROPERTYKEY,
+    ) -> windows_core::HRESULT,
+    pub GetValue: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        *const PROPERTYKEY,
+        *mut PROPVARIANT,
+    ) -> windows_core::HRESULT,
+    pub SetValue: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        *const PROPERTYKEY,
+        *const PROPVARIANT,
+    ) -> windows_core::HRESULT,
+    pub Commit: unsafe extern "system" fn(*mut core::ffi::c_void) -> windows_core::HRESULT,
 }
 windows_core::imp::define_interface!(
     ISequentialStream,
@@ -2849,15 +3334,57 @@ windows_core::imp::interface_hierarchy!(ISubunit, windows_core::IUnknown);
 pub struct ISubunit_Vtbl {
     pub base__: windows_core::IUnknown_Vtbl,
 }
+pub type KSDATAFORMAT = KSDATARANGE;
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union KSDATARANGE {
+    pub Anonymous: KSDATARANGE_0,
+    pub Alignment: i64,
+}
+impl Default for KSDATARANGE {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct KSDATAFORMAT_SUBTYPE_IEEE_FLOAT(pub u8);
+pub struct KSDATARANGE_0 {
+    pub FormatSize: u32,
+    pub Flags: u32,
+    pub SampleSize: u32,
+    pub Reserved: u32,
+    pub MajorFormat: windows_core::GUID,
+    pub SubFormat: windows_core::GUID,
+    pub Specifier: windows_core::GUID,
+}
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct KSIDENTIFIER {
+    pub Anonymous: KSIDENTIFIER_0,
+}
+impl Default for KSIDENTIFIER {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union KSIDENTIFIER_0 {
+    pub Anonymous: KSIDENTIFIER_0_0,
+    pub Alignment: i64,
+}
+impl Default for KSIDENTIFIER_0 {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct KSDATAFORMAT_SUBTYPE_PCM(pub u8);
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct KSDATAFORMAT_TYPE_AUDIO(pub u8);
+pub struct KSIDENTIFIER_0_0 {
+    pub Set: windows_core::GUID,
+    pub Id: u32,
+    pub Flags: u32,
+}
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct KSMULTIPLE_ITEM {
@@ -2867,6 +3394,7 @@ pub struct KSMULTIPLE_ITEM {
 pub type KSPIN_DATAFLOW = i32;
 pub const KSPIN_DATAFLOW_IN: KSPIN_DATAFLOW = 1;
 pub const KSPIN_DATAFLOW_OUT: KSPIN_DATAFLOW = 2;
+pub type KSPROPERTY = KSIDENTIFIER;
 pub type KSPROPERTY_PIN = i32;
 pub const KSPROPERTY_PIN_CATEGORY: KSPROPERTY_PIN = 11;
 pub const KSPROPERTY_PIN_CINSTANCES: KSPROPERTY_PIN = 0;
@@ -2887,8 +3415,28 @@ pub const KSPROPERTY_PIN_PROPOSEDATAFORMAT: KSPROPERTY_PIN = 14;
 pub const KSPROPERTY_PIN_PROPOSEDATAFORMAT2: KSPROPERTY_PIN = 15;
 pub const KSPROPERTY_TYPE_GET: i32 = 1;
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct KSPROPSETID_Pin(pub u8);
+#[derive(Clone, Copy)]
+pub struct KSP_PIN {
+    pub Property: KSPROPERTY,
+    pub PinId: u32,
+    pub Anonymous: KSP_PIN_0,
+}
+impl Default for KSP_PIN {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union KSP_PIN_0 {
+    pub Reserved: u32,
+    pub Flags: u32,
+}
+impl Default for KSP_PIN_0 {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
 pub type LPSAFEARRAY = *mut SAFEARRAY;
 pub type LPVERSIONEDSTREAM = *mut VERSIONEDSTREAM;
 pub const MMDeviceEnumerator: windows_core::GUID =

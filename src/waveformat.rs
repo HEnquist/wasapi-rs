@@ -1,21 +1,45 @@
+use crate::bindings::{
+    self, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE,
+    WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_PCM, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
+    WAVEFORMATEXTENSIBLE_0,
+};
 use std::fmt;
-use windows::{
-    Win32::Media::Audio::{
-        WAVE_FORMAT_PCM, WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
-    },
-    Win32::Media::KernelStreaming::{KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE},
-    Win32::Media::Multimedia::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, WAVE_FORMAT_IEEE_FLOAT},
-};
 
-/// The [18 defined channel positions](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)
-/// of a channel mask, see [make_channelmasks] for how to use them.
-pub use windows::Win32::Media::KernelStreaming::{
-    SPEAKER_BACK_CENTER, SPEAKER_BACK_LEFT, SPEAKER_BACK_RIGHT, SPEAKER_FRONT_CENTER,
-    SPEAKER_FRONT_LEFT, SPEAKER_FRONT_LEFT_OF_CENTER, SPEAKER_FRONT_RIGHT,
-    SPEAKER_FRONT_RIGHT_OF_CENTER, SPEAKER_LOW_FREQUENCY, SPEAKER_SIDE_LEFT, SPEAKER_SIDE_RIGHT,
-    SPEAKER_TOP_BACK_CENTER, SPEAKER_TOP_BACK_LEFT, SPEAKER_TOP_BACK_RIGHT, SPEAKER_TOP_CENTER,
-    SPEAKER_TOP_FRONT_CENTER, SPEAKER_TOP_FRONT_LEFT, SPEAKER_TOP_FRONT_RIGHT,
-};
+/// Re-export the channel positions as `u32`, which is the type of a channel mask.
+/// The metadata gives them as `i32`.
+macro_rules! speaker_positions {
+    ($($name:ident),* $(,)?) => {
+        $(
+            #[doc = concat!(
+                "One of the [18 defined channel positions]",
+                "(https://learn.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)",
+                " of a channel mask, see [make_channelmasks] for how to use them."
+            )]
+            pub const $name: u32 = bindings::$name as u32;
+        )*
+    };
+}
+
+speaker_positions!(
+    SPEAKER_BACK_CENTER,
+    SPEAKER_BACK_LEFT,
+    SPEAKER_BACK_RIGHT,
+    SPEAKER_FRONT_CENTER,
+    SPEAKER_FRONT_LEFT,
+    SPEAKER_FRONT_LEFT_OF_CENTER,
+    SPEAKER_FRONT_RIGHT,
+    SPEAKER_FRONT_RIGHT_OF_CENTER,
+    SPEAKER_LOW_FREQUENCY,
+    SPEAKER_SIDE_LEFT,
+    SPEAKER_SIDE_RIGHT,
+    SPEAKER_TOP_BACK_CENTER,
+    SPEAKER_TOP_BACK_LEFT,
+    SPEAKER_TOP_BACK_RIGHT,
+    SPEAKER_TOP_CENTER,
+    SPEAKER_TOP_FRONT_CENTER,
+    SPEAKER_TOP_FRONT_LEFT,
+    SPEAKER_TOP_FRONT_RIGHT,
+);
 
 use crate::{SampleType, WasapiError, WasapiRes};
 
@@ -212,7 +236,7 @@ impl WaveFormat {
         let samplerate = wavefmt.nSamplesPerSec as usize;
         let formattag = wavefmt.wFormatTag;
         let channels = wavefmt.nChannels as usize;
-        let sample_type = match formattag as u32 {
+        let sample_type = match formattag as i32 {
             WAVE_FORMAT_PCM => SampleType::Int,
             WAVE_FORMAT_IEEE_FLOAT => SampleType::Float,
             _ => return Err(WasapiError::UnsupportedFormat),
@@ -462,7 +486,7 @@ mod tests {
         ] {
             let fmt = WaveFormat::new(storebits, storebits, &sample_type, 48000, 2, None);
             let fmtex = fmt.to_waveformatex().unwrap();
-            assert_eq!(fmtex.wave_fmt.Format.wFormatTag as u32, formattag);
+            assert_eq!(fmtex.wave_fmt.Format.wFormatTag as i32, formattag);
             assert_eq!({ fmtex.wave_fmt.Format.cbSize }, 0);
             assert_eq!(fmtex.get_bitspersample(), storebits as u16);
             assert_eq!(fmtex.get_blockalign(), fmt.get_blockalign());

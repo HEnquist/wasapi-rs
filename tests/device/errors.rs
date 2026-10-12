@@ -8,8 +8,6 @@
 use crate::support::{self, RUN_TIME};
 use std::collections::VecDeque;
 use wasapi::*;
-use windows::Win32::Foundation::E_NOINTERFACE;
-use windows::Win32::Media::Audio::{AUDCLNT_E_ALREADY_INITIALIZED, AUDCLNT_E_NOT_STOPPED};
 
 /// Open a shared mode client on a device, at its mix format.
 fn shared(device: &Device) -> support::Opened {

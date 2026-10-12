@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod api;
+mod bindings;
 mod capabilities;
 mod dataranges;
 mod errors;

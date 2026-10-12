@@ -1,17 +1,14 @@
 use std::slice;
 use std::string::FromUtf16Error;
-use windows::{
-    Win32::Foundation::PROPERTYKEY,
-    Win32::Media::Audio::{
-        AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
-        AudioSessionStateExpired, AudioSessionStateInactive, DEVICE_STATE,
-        DisconnectReasonDeviceRemoval, DisconnectReasonExclusiveModeOverride,
-        DisconnectReasonFormatChanged, DisconnectReasonServerShutdown,
-        DisconnectReasonSessionDisconnected, DisconnectReasonSessionLogoff, EDataFlow, ERole,
-        IAudioSessionEvents, IAudioSessionEvents_Impl, IMMNotificationClient,
-        IMMNotificationClient_Impl,
-    },
-    core::{GUID, PCWSTR, Result, implement},
+use windows_core::{GUID, PCWSTR, Result, implement};
+
+use crate::bindings::{
+    AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
+    AudioSessionStateExpired, AudioSessionStateInactive, DisconnectReasonDeviceRemoval,
+    DisconnectReasonExclusiveModeOverride, DisconnectReasonFormatChanged,
+    DisconnectReasonServerShutdown, DisconnectReasonSessionDisconnected,
+    DisconnectReasonSessionLogoff, EDataFlow, ERole, IAudioSessionEvents, IAudioSessionEvents_Impl,
+    IMMNotificationClient, IMMNotificationClient_Impl, PROPERTYKEY,
 };
 
 use crate::{DeviceState, Direction, Role, SessionState};
@@ -415,11 +412,11 @@ impl NotificationClient {
 }
 
 impl IMMNotificationClient_Impl for NotificationClient_Impl {
-    fn OnDeviceStateChanged(&self, pwstrdeviceid: &PCWSTR, dwnewstate: DEVICE_STATE) -> Result<()> {
+    fn OnDeviceStateChanged(&self, pwstrdeviceid: &PCWSTR, dwnewstate: u32) -> Result<()> {
         let Some(id) = read_device_id(pwstrdeviceid, "OnDeviceStateChanged") else {
             return Ok(());
         };
-        let state = match DeviceState::try_from(dwnewstate) {
+        let state = match DeviceState::from_device_state(dwnewstate) {
             Ok(state) => state,
             Err(err) => {
                 warn!("OnDeviceStateChanged: {err}");
@@ -470,14 +467,14 @@ impl IMMNotificationClient_Impl for NotificationClient_Impl {
                 return Ok(());
             }
         };
-        let direction = match Direction::try_from(flow) {
+        let direction = match Direction::from_edataflow(flow) {
             Ok(direction) => direction,
             Err(err) => {
                 warn!("OnDefaultDeviceChanged: {err}");
                 return Ok(());
             }
         };
-        let device_role = match Role::try_from(role) {
+        let device_role = match Role::from_erole(role) {
             Ok(role) => role,
             Err(err) => {
                 warn!("OnDefaultDeviceChanged: {err}");
@@ -506,11 +503,11 @@ impl IMMNotificationClient_Impl for NotificationClient_Impl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
-    use windows::Win32::Media::Audio::{
+    use crate::bindings::{
         DEVICE_STATE_ACTIVE, DEVICE_STATE_UNPLUGGED, eAll, eCapture, eConsole, eRender,
     };
-    use windows::core::HSTRING;
+    use std::sync::{Arc, Mutex};
+    use windows_core::HSTRING;
 
     const TEST_ID: &str = "{0.0.0.00000000}.{6e6f7420-6120-7265-616c-206465766963}";
 
@@ -557,7 +554,7 @@ mod tests {
             client.OnDeviceAdded(id).unwrap();
             client.OnDeviceRemoved(id).unwrap();
             client
-                .OnDeviceStateChanged(id, DEVICE_STATE_UNPLUGGED)
+                .OnDeviceStateChanged(id, DEVICE_STATE_UNPLUGGED as u32)
                 .unwrap();
             client
                 .OnDefaultDeviceChanged(eCapture, eConsole, id)
@@ -623,7 +620,7 @@ mod tests {
 
         unsafe {
             client.OnDefaultDeviceChanged(eAll, eConsole, id).unwrap();
-            client.OnDeviceStateChanged(id, DEVICE_STATE(0)).unwrap();
+            client.OnDeviceStateChanged(id, 0).unwrap();
         }
 
         assert!(log.lock().unwrap().is_empty());
@@ -641,7 +638,7 @@ mod tests {
             client.OnDeviceAdded(id).unwrap();
             client.OnDeviceRemoved(id).unwrap();
             client
-                .OnDeviceStateChanged(id, DEVICE_STATE_ACTIVE)
+                .OnDeviceStateChanged(id, DEVICE_STATE_ACTIVE as u32)
                 .unwrap();
             client
                 .OnDefaultDeviceChanged(eRender, eConsole, id)

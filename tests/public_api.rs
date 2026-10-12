@@ -192,3 +192,25 @@ fn client_properties_accumulate_options() {
         "setting the same option twice changed the result"
     );
 }
+
+/// A null raw pointer is refused with `E_POINTER` rather than dereferenced.
+///
+/// The check is the crate's own and happens before anything reaches Windows,
+/// so it needs no device and no COM.
+#[test]
+fn null_raw_pointers_are_refused() {
+    let is_e_pointer =
+        |error: &WasapiError| matches!(error, WasapiError::Windows(e) if e.code() == E_POINTER);
+
+    let device = unsafe { Device::from_raw(std::ptr::null_mut()) };
+    assert!(
+        matches!(&device, Err(e) if is_e_pointer(e)),
+        "Device::from_raw(null) did not give E_POINTER"
+    );
+
+    let client = unsafe { AudioClient::from_raw(std::ptr::null_mut(), Direction::Render) };
+    assert!(
+        matches!(&client, Err(e) if is_e_pointer(e)),
+        "AudioClient::from_raw(null) did not give E_POINTER"
+    );
+}

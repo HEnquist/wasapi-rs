@@ -8,9 +8,6 @@
 
 use crate::support;
 use wasapi::*;
-use windows::Win32::Media::Audio::{
-    AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_DEVICE_IN_USE, AUDCLNT_E_UNSUPPORTED_FORMAT,
-};
 
 /// The formats to ask about, as `(name, storebits, validbits, sample type)`.
 const FORMATS: [(&str, usize, usize, SampleType); 5] = [
