@@ -157,13 +157,13 @@ pub(crate) fn read_data_ranges(
     }
     // Some drivers have no separate wave filter, and then the streaming pins
     // are on the same filter as the endpoint connects to.
-    if wave_filters.is_empty() {
-        if let Some(filter) = topology_filter {
-            debug!("Found no wave filter, trying the filter of the endpoint itself");
-            match open_filter(&filter) {
-                Ok(handle) => wave_filters.push((filter, handle)),
-                Err(err) => debug!("Could not open the filter {filter}, {err}"),
-            }
+    if wave_filters.is_empty()
+        && let Some(filter) = topology_filter
+    {
+        debug!("Found no wave filter, trying the filter of the endpoint itself");
+        match open_filter(&filter) {
+            Ok(handle) => wave_filters.push((filter, handle)),
+            Err(err) => debug!("Could not open the filter {filter}, {err}"),
         }
     }
 
