@@ -90,14 +90,21 @@ fn capture_loop(
 // Capturing with `include_tree` needs this one, since a child process only covers its own subtree.
 // The lookup asks PowerShell, which ships with Windows, to keep the example free of dependencies.
 // It picks the process whose parent is not another process with the same name.
+// The name goes in through an environment variable, so that it is never parsed as part of the script.
 fn find_main_process(name: &str) -> Res<u32> {
-    let script = format!(
-        "$p = Get-CimInstance Win32_Process | Where-Object Name -eq '{name}'; \
-         ($p | Where-Object {{ $p.ProcessId -notcontains $_.ParentProcessId }}).ProcessId"
-    );
+    let script = "$p = Get-CimInstance Win32_Process | Where-Object Name -eq $env:PROCESS_NAME; \
+                  ($p | Where-Object { $p.ProcessId -notcontains $_.ParentProcessId }).ProcessId";
     let output = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &script])
+        .args(["-NoProfile", "-Command", script])
+        .env("PROCESS_NAME", name)
         .output()?;
+    if !output.status.success() {
+        return Err(format!(
+            "the process lookup failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )
+        .into());
+    }
     let stdout = String::from_utf8(output.stdout)?;
     let pid = stdout
         .split_whitespace()
