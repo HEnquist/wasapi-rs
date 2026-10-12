@@ -91,8 +91,6 @@ jobs:
         uses: actions/checkout@v5
 
       # Keep this version in sync with 'rust-version' in Cargo.toml.
-      # Only the library is checked here, since some dev-dependencies
-      # require a newer compiler than the library itself.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.95
 
@@ -101,5 +99,5 @@ jobs:
         with:
           shared-key: windows-msrv
 
-      - name: Cargo check (library only)
-        run: cargo check --lib
+      - name: Cargo check
+        run: cargo check --all-targets --features device-tests

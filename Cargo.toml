@@ -30,7 +30,7 @@ required-features = ["device-tests"]
 [dependencies]
 log = "0.4"
 num-integer = "0.1"
-# The Windows API bindings are generated into src/bindings.rs, see tools/bindings.
+# The Windows API bindings are generated into src/bindings/generated.rs, see tools/bindings.
 windows-core = "0.100.0"
 thiserror = "2.0"
 
