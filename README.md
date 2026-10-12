@@ -54,6 +54,7 @@ so enumerate with the `MediaDevice` and `DeviceInformation` classes,
 pass the device path to `ActivateAudioInterfaceAsync`,
 and wrap the interface that comes back with
 [`AudioClient::from_raw`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.from_raw).
+The device tests in `tests/device/activation.rs` walk the whole path, completion handler included.
 
 The raw accessors take and return plain COM interface pointers rather than the types of a binding
 crate.

@@ -903,6 +903,32 @@ impl AudioClient {
     /// # Safety
     ///
     /// `ptr` must be null, or point to a live COM interface.
+    ///
+    /// # Example
+    /// Marked `no_run` because it needs a running audio service, which a build
+    /// machine may not have.
+    /// The device tests in `tests/device/activation.rs` show the activation itself,
+    /// completion handler included.
+    /// ```no_run
+    /// use wasapi::{AudioClient, Direction, StreamMode, initialize_mta};
+    ///
+    /// # fn activate_somehow() -> *mut std::ffi::c_void { unimplemented!() }
+    /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
+    /// // Activate the interface in some other way, for example through
+    /// // ActivateAudioInterfaceAsync with a device path from WinRT,
+    /// // and get the raw pointer from the bindings that did it.
+    /// let ptr = activate_somehow();
+    ///
+    /// let mut audio_client = unsafe { AudioClient::from_raw(ptr, Direction::Render) }.unwrap();
+    /// // The wrapper holds its own reference, release the caller's one here.
+    /// let format = audio_client.get_mixformat().unwrap();
+    /// let (default_period, _min_period) = audio_client.get_device_period().unwrap();
+    /// let mode = StreamMode::EventsShared {
+    ///     autoconvert: true,
+    ///     buffer_duration_hns: default_period,
+    /// };
+    /// audio_client.initialize_client(&format, &Direction::Render, &mode).unwrap();
+    /// ```
     pub unsafe fn from_raw(ptr: *mut c_void, direction: Direction) -> WasapiRes<Self> {
         let client: IAudioClient = unsafe { cast_raw(ptr)? };
         Ok(AudioClient {
