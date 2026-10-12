@@ -1545,7 +1545,7 @@ impl AudioClient {
                 .GetCurrentSharedModeEnginePeriod(&mut format_ptr, &mut period)
                 .ok()?;
         }
-        let parse_result = unsafe { WaveFormat::parse(format_ptr) };
+        let parse_result = unsafe { WaveFormat::parse(format_ptr.cast()) };
         unsafe {
             CoTaskMemFree(format_ptr.cast());
         }

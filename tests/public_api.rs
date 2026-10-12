@@ -239,3 +239,30 @@ fn subformat_constants_match_sample_types() {
     );
     assert_eq!(range(GUID::zeroed()).sample_type(), None);
 }
+
+/// A format read back through its own raw pointer is the same format.
+///
+/// Covers both layouts behind the pointer: the extensible one from [WaveFormat::new],
+/// and the plain `WAVEFORMATEX` one from [WaveFormat::to_waveformatex].
+#[test]
+fn wave_format_round_trips_through_raw() {
+    let extensible = WaveFormat::new(24, 20, &SampleType::Int, 96000, 6, Some(0x3f));
+    let plain = WaveFormat::new(16, 16, &SampleType::Int, 44100, 2, None)
+        .to_waveformatex()
+        .unwrap();
+    for format in [extensible, plain] {
+        let again = unsafe { WaveFormat::parse(format.as_raw()) }.unwrap();
+        assert_eq!(again.get_bitspersample(), format.get_bitspersample());
+        assert_eq!(
+            again.get_validbitspersample(),
+            format.get_validbitspersample()
+        );
+        assert_eq!(again.get_samplespersec(), format.get_samplespersec());
+        assert_eq!(again.get_nchannels(), format.get_nchannels());
+        assert_eq!(again.get_dwchannelmask(), format.get_dwchannelmask());
+        assert_eq!(
+            again.get_subformat().unwrap(),
+            format.get_subformat().unwrap()
+        );
+    }
+}

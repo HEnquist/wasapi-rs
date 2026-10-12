@@ -115,7 +115,7 @@ fn engine_period_through_as_raw() {
     let mut max = 0;
     unsafe {
         client3.GetSharedModeEnginePeriod(
-            std::ptr::from_ref(format.as_waveformatex_ref()).cast(),
+            format.as_raw().cast(),
             &mut default,
             &mut fundamental,
             &mut min,
