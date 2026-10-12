@@ -12,6 +12,7 @@ use crate::bindings::{
     IAudioEndpointVolume, IMMDevice, SetEvent, WaitForMultipleObjects,
 };
 use crate::support;
+use std::os::windows::io::AsRawHandle;
 use wasapi::*;
 use windows_core::{Interface, PCWSTR};
 
@@ -157,7 +158,7 @@ fn event_handle_in_a_multiple_object_wait() {
     let quit = unsafe { CreateEventW(None, true, false, PCWSTR::null()) };
     assert!(!quit.0.is_null(), "could not create the second event");
 
-    let handles = [HANDLE(event.as_handle()), quit];
+    let handles = [HANDLE(event.as_raw_handle()), quit];
     opened.client.start_stream().unwrap();
     let result = unsafe { WaitForMultipleObjects(&handles, false, 2000) };
     opened.client.stop_stream().unwrap();

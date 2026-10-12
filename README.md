@@ -26,7 +26,7 @@ The following is a selection of the functionality currently available in the lib
 - Wrapping an `IAudioClient` that was activated elsewhere, for example through WinRT device
   enumeration
 - Raw access to the wrapped COM interfaces through `Device::as_raw`, `AudioClient::as_raw`
-  and `Handle::as_handle`, and to formats through `WaveFormat::as_raw`, for reaching what the
+  and `Handle::as_raw_handle`, and to formats through `WaveFormat::as_raw`, for reaching what the
   library does not cover
 - …and additional features beyond this list
 

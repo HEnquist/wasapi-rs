@@ -5,7 +5,8 @@ use crate::bindings::{
     AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, AUDCLNT_STREAMOPTIONS,
     AUDCLNT_STREAMOPTIONS_AMBISONICS, AUDCLNT_STREAMOPTIONS_MATCH_FORMAT,
     AUDCLNT_STREAMOPTIONS_NONE, AUDCLNT_STREAMOPTIONS_RAW, AUDIO_EFFECT, AUDIO_EFFECT_STATE_ON,
-    AUDIO_STREAM_CATEGORY, AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
+    AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION, AUDIO_STREAM_CATEGORY,
+    AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
     AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
     ActivateAudioInterfaceAsync, AudioCategory_Alerts, AudioCategory_Communications,
     AudioCategory_FarFieldSpeech, AudioCategory_ForegroundOnlyMedia, AudioCategory_GameChat,
@@ -2320,7 +2321,9 @@ impl Handle {
         }
         Ok(())
     }
+}
 
+impl std::os::windows::io::AsRawHandle for Handle {
     /// Returns the raw event handle.
     ///
     /// This is for waiting on more than this one event, with `WaitForMultipleObjects`
@@ -2331,16 +2334,6 @@ impl Handle {
     /// The [Handle] keeps ownership and closes the event when it is dropped, so the
     /// returned value is only guaranteed to be valid while the [Handle] has not yet
     /// been destroyed, and it __must not__ be closed by the caller.
-    /// This is the same as the [AsRawHandle](std::os::windows::io::AsRawHandle)
-    /// implementation, and it is safe for the same reason:
-    /// every function that does anything with a raw handle is itself `unsafe`.
-    pub fn as_handle(&self) -> std::os::windows::io::RawHandle {
-        self.handle.0
-    }
-}
-
-impl std::os::windows::io::AsRawHandle for Handle {
-    /// Returns the raw event handle, see [Handle::as_handle].
     fn as_raw_handle(&self) -> std::os::windows::io::RawHandle {
         self.handle.0
     }
@@ -2350,8 +2343,6 @@ impl std::os::windows::io::AsRawHandle for Handle {
 pub struct AudioEffectsManager {
     manager: IAudioEffectsManager,
 }
-
-pub use crate::bindings::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
 
 /// An audio effect on a stream, mirroring an
 /// [AUDIO_EFFECT](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/ns-audioclient-audio_effect).

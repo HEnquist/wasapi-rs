@@ -18,6 +18,8 @@ pub use waveformat::*;
 pub use windows_core::{Error as WindowsError, GUID, HRESULT};
 // The subformats a DataRange or an UnsupportedSubformat error can be compared with.
 pub use bindings::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM};
+// The effect type an AudioEffect id can be compared with.
+pub use bindings::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
 
 #[macro_use]
 extern crate log;
