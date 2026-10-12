@@ -35,9 +35,9 @@ windows-core = "0.100.0"
 thiserror = "2.0"
 
 [dev-dependencies]
-simplelog = "0.12"
+# Only SimpleLogger is used, so the termcolor feature for TermLogger is left out.
+simplelog = { version = "0.12", default-features = false, features = ["local-offset"] }
 rand = "0.10"
-sysinfo = "0.38"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"

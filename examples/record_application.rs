@@ -1,22 +1,19 @@
 // Record audio from a single application, and save the raw samples
 // to the file 'recorded.raw'.
 //
-// This example captures from Firefox, edit the process name in main()
-// to capture from another application.
+// This example captures from Firefox by default.
+// Give the executable name of another application as an argument to capture from that one:
 //
-// Note: this example needs Rust 1.88, which is newer than the rust-version
-// of the library. This is because it uses the 'sysinfo' crate to look up
-// the process id of the application.
+//     cargo run --example record_application -- vlc.exe
 
 use std::collections::VecDeque;
 use std::error::{self};
-use std::ffi::OsStr;
 use std::fs::File;
 use std::io::prelude::*;
+use std::process::Command;
 use std::sync::mpsc;
 
 use std::thread;
-use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 use wasapi::*;
 
 #[macro_use]
@@ -89,6 +86,27 @@ fn capture_loop(
     Ok(())
 }
 
+// Find the main process of an application, the one its other processes were started from.
+// Capturing with `include_tree` needs this one, since a child process only covers its own subtree.
+// The lookup asks PowerShell, which ships with Windows, to keep the example free of dependencies.
+// It picks the process whose parent is not another process with the same name.
+fn find_main_process(name: &str) -> Res<u32> {
+    let script = format!(
+        "$p = Get-CimInstance Win32_Process | Where-Object Name -eq '{name}'; \
+         ($p | Where-Object {{ $p.ProcessId -notcontains $_.ParentProcessId }}).ProcessId"
+    );
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .output()?;
+    let stdout = String::from_utf8(output.stdout)?;
+    let pid = stdout
+        .split_whitespace()
+        .next()
+        .ok_or(format!("no process named {name} is running"))?
+        .parse()?;
+    Ok(pid)
+}
+
 // Main loop
 fn main() -> Res<()> {
     let _ = SimpleLogger::init(
@@ -100,15 +118,10 @@ fn main() -> Res<()> {
             .build(),
     );
 
-    let refreshes = RefreshKind::nothing().with_processes(ProcessRefreshKind::everything());
-    let system = System::new_with_specifics(refreshes);
-    let process_ids = system.processes_by_name(OsStr::new("firefox.exe"));
-    let mut process_id = 0;
-    for process in process_ids {
-        // Note: When capturing audio windows allows you to capture an app's entire process tree,
-        // however you must ensure you use the parent as the target process ID
-        process_id = process.parent().unwrap_or(process.pid()).as_u32();
-    }
+    let name = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "firefox.exe".to_string());
+    let process_id = find_main_process(&name)?;
 
     info!("Capture Process ID: {}", process_id);
 
