@@ -193,6 +193,50 @@ fn deque_variants_move_whole_frames() {
     );
 }
 
+/// A read into a too short slice is refused, and leaves the packet for the next read.
+///
+/// The crate releases zero frames on this path, which is what keeps the packet.
+/// Releasing the whole packet instead would drop it without anyone seeing the data.
+#[test]
+fn short_read_keeps_the_packet() {
+    let Some(fx) = support::fixture() else { return };
+    let opened = shared(&fx.cable.capture);
+    let blockalign = opened.format.get_blockalign() as usize;
+    let capture = opened.client.get_audiocaptureclient().unwrap();
+
+    opened.client.start_stream().unwrap();
+    let mut announced = 0;
+    for _ in 0..200 {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        announced = capture.get_next_packet_size().unwrap().unwrap() as usize;
+        if announced > 0 {
+            break;
+        }
+    }
+    // Stopped, so that no further packets arrive while the reads run.
+    opened.client.stop_stream().unwrap();
+    assert!(announced > 0, "no packet arrived");
+
+    let mut buffer = vec![0u8; (announced - 1) * blockalign];
+    let error = capture
+        .read_from_device(&mut buffer)
+        .expect_err("a short read succeeded");
+    assert!(
+        matches!(
+            error,
+            WasapiError::DataLengthTooShort { received, expected }
+                if received == announced - 1 && expected == announced
+        ),
+        "a short read of a {announced} frame packet gave {error}"
+    );
+
+    let mut buffer = vec![0u8; announced * blockalign];
+    let (read, _info) = capture
+        .read_from_device(&mut buffer)
+        .expect("a read after a short one failed");
+    assert_eq!(read as usize, announced, "the packet was not kept");
+}
+
 /// Resetting a running stream is refused, and a reset empties the buffer.
 #[test]
 fn reset_requires_a_stopped_stream() {

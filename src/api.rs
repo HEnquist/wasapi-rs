@@ -2204,7 +2204,9 @@ impl AudioCaptureClient {
     /// Read raw bytes from a device into a slice. Returns the number of frames
     /// that was read, and the `BufferInfo` describing the buffer that the data was read from.
     /// The slice must be large enough to hold all data.
-    /// If it is longer that needed, the unused elements will not be modified.
+    /// If it is not, this returns [WasapiError::DataLengthTooShort] and leaves the packet
+    /// unread, so the next call returns the same packet.
+    /// If it is longer than needed, the unused elements will not be modified.
     pub fn read_from_device(&self, data: &mut [u8]) -> WasapiRes<(u32, BufferInfo)> {
         let data_len_in_frames = data.len() / self.bytes_per_frame;
         if data_len_in_frames == 0 {
@@ -2232,7 +2234,10 @@ impl AudioCaptureClient {
             return Ok((0, buffer_info));
         }
         if data_len_in_frames < nbr_frames_returned as usize {
-            unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
+            // Releasing zero frames leaves the packet unread, so that a retry with a
+            // larger buffer gets it again. A failure here is left for the next call to
+            // report, since the caller needs to know that the buffer was too short.
+            let _ = unsafe { self.client.ReleaseBuffer(0) };
             return Err(WasapiError::DataLengthTooShort {
                 received: data_len_in_frames,
                 expected: nbr_frames_returned as usize,
@@ -2277,9 +2282,12 @@ impl AudioCaptureClient {
         // Extending from a slice of a `Copy` type reserves once and then memcpies,
         // rather than pushing a byte at a time. See [copy_from_deque] for why that
         // matters on an audio callback thread.
+        let old_len = data.len();
         data.extend(bufferslice);
-        if nbr_frames_returned > 0 {
-            unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
+        if let Err(err) = unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok() } {
+            // Take the packet back out, so that an error always means nothing was read.
+            data.truncate(old_len);
+            return Err(err.into());
         }
         trace!("read {nbr_frames_returned} frames");
         Ok(buffer_info)
