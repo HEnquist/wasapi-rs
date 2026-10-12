@@ -4,12 +4,12 @@
 // Windows bindings it uses itself. The tests are about the crate's side of that: a
 // pointer handed out can be wrapped again, the wrapper holds a reference of its own,
 // the interface is looked up rather than assumed, a service the crate does not wrap
-// can be activated through the device, and the event handle works in a wait on
-// several handles at once. The caller's side uses the bindings in tests/device/bindings.rs.
+// can be activated through the device, a newer interface version can be reached
+// from the client, and the event handle works in a wait on several handles at once. The caller's side uses the bindings in tests/device/bindings.rs.
 
 use crate::bindings::{
-    CLSCTX_ALL, CloseHandle, CreateEventW, HANDLE, IAudioEndpointVolume, IMMDevice, SetEvent,
-    WaitForMultipleObjects,
+    CLSCTX_ALL, CloseHandle, CreateEventW, HANDLE, IAudioClient, IAudioClient3,
+    IAudioEndpointVolume, IMMDevice, SetEvent, WaitForMultipleObjects,
 };
 use crate::support;
 use wasapi::*;
@@ -87,6 +87,51 @@ fn wrong_interface_is_refused() {
     assert!(
         support::is_hresult(&error, E_NOINTERFACE),
         "wrapping a device as a client gave {error}, expected E_NOINTERFACE"
+    );
+}
+
+/// A newer interface version can be reached from the client and called directly.
+///
+/// What is under test is the accessor, not the interface. `IAudioClient3` happens to be
+/// wrapped by the crate as well, see `audioclient23`, so this calls the raw getter and
+/// leaves the comparison alone: an interface the crate does not wrap would look exactly
+/// the same from here. The client is deliberately left uninitialised, since the call
+/// does not need it and casting is all this asks about.
+#[test]
+fn engine_period_through_as_raw() {
+    let Some(fx) = support::fixture() else { return };
+    let client = fx.cable.render.get_iaudioclient().unwrap();
+    let format = client.get_mixformat().unwrap();
+
+    let raw = client.as_raw();
+    let client3: IAudioClient3 = unsafe { IAudioClient::from_raw_borrowed(&raw) }
+        .expect("as_raw gave a null pointer")
+        .cast()
+        .expect("could not cast to IAudioClient3");
+
+    let mut default = 0;
+    let mut fundamental = 0;
+    let mut min = 0;
+    let mut max = 0;
+    unsafe {
+        client3.GetSharedModeEnginePeriod(
+            std::ptr::from_ref(format.as_waveformatex_ref()).cast(),
+            &mut default,
+            &mut fundamental,
+            &mut min,
+            &mut max,
+        )
+    }
+    .ok()
+    .expect("GetSharedModeEnginePeriod failed");
+
+    println!(
+        "engine period in frames: default {default}, fundamental {fundamental}, min {min}, max {max}"
+    );
+    assert!(min > 0, "the minimum period is {min} frames");
+    assert!(
+        min <= default && default <= max,
+        "the default is outside the range"
     );
 }
 

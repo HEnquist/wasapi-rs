@@ -10,6 +10,9 @@ DEVINTERFACE_AUDIO_CAPTURE
 DEVINTERFACE_AUDIO_RENDER
 IAudioClient
 
+// Reaching a newer interface version from a client.
+IAudioClient3
+
 // Activating an endpoint service the crate does not wrap.
 IMMDevice
 IAudioEndpointVolume

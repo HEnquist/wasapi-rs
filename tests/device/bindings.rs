@@ -580,6 +580,117 @@ pub struct IAudioClient_Vtbl {
     ) -> windows_core::HRESULT,
 }
 windows_core::imp::define_interface!(
+    IAudioClient2,
+    IAudioClient2_Vtbl,
+    0x726778cd_f60a_4eda_82de_e47610cd78aa
+);
+impl core::ops::Deref for IAudioClient2 {
+    type Target = IAudioClient;
+    fn deref(&self) -> &Self::Target {
+        unsafe { core::mem::transmute(self) }
+    }
+}
+windows_core::imp::interface_hierarchy!(IAudioClient2, windows_core::IUnknown, IAudioClient);
+#[repr(C)]
+pub struct IAudioClient2_Vtbl {
+    pub base__: IAudioClient_Vtbl,
+    IsOffloadCapable: usize,
+    SetClientProperties: usize,
+    GetBufferSizeLimits: usize,
+}
+windows_core::imp::define_interface!(
+    IAudioClient3,
+    IAudioClient3_Vtbl,
+    0x7ed4ee07_8e67_4cd4_8c1a_2b7a5987ad42
+);
+impl core::ops::Deref for IAudioClient3 {
+    type Target = IAudioClient2;
+    fn deref(&self) -> &Self::Target {
+        unsafe { core::mem::transmute(self) }
+    }
+}
+windows_core::imp::interface_hierarchy!(
+    IAudioClient3,
+    windows_core::IUnknown,
+    IAudioClient,
+    IAudioClient2
+);
+impl IAudioClient3 {
+    pub unsafe fn GetSharedModeEnginePeriod(
+        &self,
+        pformat: *const WAVEFORMATEX,
+        pdefaultperiodinframes: *mut u32,
+        pfundamentalperiodinframes: *mut u32,
+        pminperiodinframes: *mut u32,
+        pmaxperiodinframes: *mut u32,
+    ) -> windows_core::HRESULT {
+        unsafe {
+            (windows_core::Interface::vtable(self).GetSharedModeEnginePeriod)(
+                windows_core::Interface::as_raw(self),
+                pformat,
+                pdefaultperiodinframes as _,
+                pfundamentalperiodinframes as _,
+                pminperiodinframes as _,
+                pmaxperiodinframes as _,
+            )
+        }
+    }
+    pub unsafe fn GetCurrentSharedModeEnginePeriod(
+        &self,
+        ppformat: *mut *mut WAVEFORMATEX,
+        pcurrentperiodinframes: *mut u32,
+    ) -> windows_core::HRESULT {
+        unsafe {
+            (windows_core::Interface::vtable(self).GetCurrentSharedModeEnginePeriod)(
+                windows_core::Interface::as_raw(self),
+                ppformat as _,
+                pcurrentperiodinframes as _,
+            )
+        }
+    }
+    pub unsafe fn InitializeSharedAudioStream(
+        &self,
+        streamflags: u32,
+        periodinframes: u32,
+        pformat: *const WAVEFORMATEX,
+        audiosessionguid: Option<*const windows_core::GUID>,
+    ) -> windows_core::HRESULT {
+        unsafe {
+            (windows_core::Interface::vtable(self).InitializeSharedAudioStream)(
+                windows_core::Interface::as_raw(self),
+                streamflags,
+                periodinframes,
+                pformat,
+                audiosessionguid.unwrap_or(core::mem::zeroed()) as _,
+            )
+        }
+    }
+}
+#[repr(C)]
+pub struct IAudioClient3_Vtbl {
+    pub base__: IAudioClient2_Vtbl,
+    pub GetSharedModeEnginePeriod: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        *const WAVEFORMATEX,
+        *mut u32,
+        *mut u32,
+        *mut u32,
+        *mut u32,
+    ) -> windows_core::HRESULT,
+    pub GetCurrentSharedModeEnginePeriod: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        *mut *mut WAVEFORMATEX,
+        *mut u32,
+    ) -> windows_core::HRESULT,
+    pub InitializeSharedAudioStream: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        u32,
+        u32,
+        *const WAVEFORMATEX,
+        *const windows_core::GUID,
+    ) -> windows_core::HRESULT,
+}
+windows_core::imp::define_interface!(
     IAudioEndpointVolume,
     IAudioEndpointVolume_Vtbl,
     0x5cdf2c82_841e_4546_9722_0cf74078229a
