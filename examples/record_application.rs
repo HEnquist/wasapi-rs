@@ -92,6 +92,8 @@ fn capture_loop(
 // It picks the process whose parent is not another process with the same name.
 // If the application runs as several independent instances, it takes the first one.
 // The name goes in through an environment variable, so that it is never parsed as part of the script.
+// Any error stops the script with a failed exit status. Stderr alone says nothing, since
+// PowerShell also writes progress records there, such as when it loads a module for the first time.
 fn find_main_process(name: &str) -> Res<u32> {
     // Win32_Process names include the extension.
     let name = if name.to_lowercase().ends_with(".exe") {
@@ -99,14 +101,15 @@ fn find_main_process(name: &str) -> Res<u32> {
     } else {
         format!("{name}.exe")
     };
-    let script = "$p = Get-CimInstance Win32_Process | Where-Object Name -eq $env:PROCESS_NAME; \
+    let script = "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; \
+                  $p = Get-CimInstance Win32_Process | Where-Object Name -eq $env:PROCESS_NAME; \
                   ($p | Where-Object { $p.ProcessId -notcontains $_.ParentProcessId }).ProcessId";
     let output = Command::new("powershell")
         .args(["-NoProfile", "-Command", script])
         .env("PROCESS_NAME", &name)
         .output()?;
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !output.status.success() || !stderr.trim().is_empty() {
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("the process lookup failed: {}", stderr.trim()).into());
     }
     let stdout = String::from_utf8(output.stdout)?;
