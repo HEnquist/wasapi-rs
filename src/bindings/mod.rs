@@ -28,3 +28,23 @@ pub const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID =
 pub const KSDATAFORMAT_TYPE_AUDIO: GUID = GUID::from_u128(0x73647561_0000_0010_8000_00aa00389b71);
 #[allow(non_upper_case_globals)]
 pub const KSPROPSETID_Pin: GUID = GUID::from_u128(0x8c134960_51ad_11cf_878a_94f801c10000);
+
+// The metadata does not mark the output of GetChannelsPeakValues as an array,
+// so the generated wrapper hands Windows room for a single value,
+// and any channel count above 1 makes Windows write past it.
+// The generated method can not be removed, so clippy.toml forbids calling it,
+// and this one takes a slice instead.
+impl IAudioMeterInformation {
+    /// Fill `peaks` with the peak value of each channel, one per element.
+    #[allow(non_snake_case)]
+    pub unsafe fn GetChannelsPeakValuesSlice(&self, peaks: &mut [f32]) -> windows_core::Result<()> {
+        unsafe {
+            (windows_core::Interface::vtable(self).GetChannelsPeakValues)(
+                windows_core::Interface::as_raw(self),
+                peaks.len() as u32,
+                peaks.as_mut_ptr(),
+            )
+            .ok()
+        }
+    }
+}

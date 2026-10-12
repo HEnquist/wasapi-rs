@@ -1905,17 +1905,7 @@ impl AudioMeterInformation {
     pub fn get_channels_peak_values(&self) -> WasapiRes<Vec<f32>> {
         let nbr_channels = unsafe { self.meter.GetMeteringChannelCount()? };
         let mut peaks = vec![0.0; nbr_channels as usize];
-        // The metadata does not mark the output as an array, so the generated wrapper
-        // would hand Windows room for a single value. Call through the vtable instead.
-        unsafe {
-            (Interface::vtable(&self.meter).GetChannelsPeakValues)(
-                self.meter.as_raw(),
-                nbr_channels,
-                peaks.as_mut_ptr(),
-            )
-            .ok()?
-        };
-
+        unsafe { self.meter.GetChannelsPeakValuesSlice(&mut peaks)? };
         Ok(peaks)
     }
 
