@@ -2263,7 +2263,7 @@ impl AudioCaptureClient {
         // matters on an audio callback thread.
         data.extend(bufferslice);
         if nbr_frames_returned > 0 {
-            unsafe { self.client.ReleaseBuffer(nbr_frames_returned).unwrap() };
+            unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
         }
         trace!("read {nbr_frames_returned} frames");
         Ok(buffer_info)

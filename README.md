@@ -100,7 +100,7 @@ The minimum is set by the `windows-core` crate.
 | `record`                   | Records audio from the default device, and saves the raw samples to a file.                            |
 | `devices`                  | Lists all available audio devices and displays the default devices.                                    |
 | `processes`                | Lists all audio devices and the processes that are using them, with the peak level of each session.    |
-| `record_application`       | Records audio from a single application, and saves the raw samples to a file. Needs Rust 1.88.         |
+| `record_application`       | Records audio from a single application, and saves the raw samples to a file.                          |
 | `aec`                      | Captures audio with Acoustic Echo Cancellation (AEC) enabled and saves the raw data to a file.         |
 | `device_notifications`     | Listens for devices being added, removed or changed, and for changes of the default device.            |
 | `capabilities`             | Lists the formats a single output device supports in exclusive mode.                                   |
