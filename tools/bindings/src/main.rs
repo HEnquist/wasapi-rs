@@ -1,7 +1,11 @@
 use std::path::{Path, PathBuf};
 
+// Read at run time rather than with env!, which bakes in the path of whichever copy
+// of the repo the binary was built in, and a stale build then writes into that copy.
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    let manifest_dir =
+        std::env::var_os("CARGO_MANIFEST_DIR").expect("run the generator with cargo run");
+    Path::new(&manifest_dir)
         .ancestors()
         .nth(2)
         .expect("generator lives under tools/bindings")

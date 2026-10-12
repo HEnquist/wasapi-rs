@@ -1,5 +1,7 @@
 /target
 /tools/bindings/target
 Cargo.lock
+# Pinned so that regenerating the bindings gives the same output everywhere.
+!/tools/bindings/Cargo.lock
 .idea/
 *.raw

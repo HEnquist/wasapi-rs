@@ -82,6 +82,14 @@ jobs:
         if: ${{ always() }}
         run: cargo publish --dry-run
 
+      # The checked in bindings must be what the generator makes from the filters,
+      # so a filter edit without a regeneration, or a hand edit, fails here.
+      - name: Generated bindings are up to date
+        if: ${{ always() }}
+        run: |
+          cargo run --locked --manifest-path tools/bindings/Cargo.toml
+          git diff --exit-code -- src/bindings/generated.rs tests/device/bindings.rs
+
   msrv:
     runs-on: windows-latest
     timeout-minutes: 20
