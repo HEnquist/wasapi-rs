@@ -1,24 +1,16 @@
-use crate::bindings;
-use windows_core::HRESULT;
+use crate::bindings::typed_consts;
 
 pub use crate::bindings::{E_INVALIDARG, E_NOINTERFACE, E_POINTER};
 
-/// Re-export the audio client result codes as [HRESULT], for matching against
-/// the code of a [WasapiError::Windows]. The metadata gives them as `i32`.
-macro_rules! audclnt_codes {
-    ($($name:ident),* $(,)?) => {
-        $(
-            #[doc = concat!(
-                "The `", stringify!($name), "` result code, see the ",
-                "[audio client error codes]",
-                "(https://learn.microsoft.com/en-us/windows/win32/coreaudio/audclnt-xxx-error-codes)."
-            )]
-            pub const $name: HRESULT = HRESULT(bindings::$name);
-        )*
-    };
-}
-
-audclnt_codes!(
+// The audio client result codes as HRESULT, for matching against the code of a
+// WasapiError::Windows. The metadata gives them as `i32`.
+typed_consts!(
+    HRESULT,
+    concat!(
+        "An audio client result code, see the ",
+        "[audio client error codes]",
+        "(https://learn.microsoft.com/en-us/windows/win32/coreaudio/audclnt-xxx-error-codes)."
+    );
     AUDCLNT_E_ALREADY_INITIALIZED,
     AUDCLNT_E_BUFDURATION_PERIOD_NOT_EQUAL,
     AUDCLNT_E_BUFFER_ERROR,

@@ -554,7 +554,7 @@ mod tests {
             client.OnDeviceAdded(id).unwrap();
             client.OnDeviceRemoved(id).unwrap();
             client
-                .OnDeviceStateChanged(id, DEVICE_STATE_UNPLUGGED as u32)
+                .OnDeviceStateChanged(id, DEVICE_STATE_UNPLUGGED)
                 .unwrap();
             client
                 .OnDefaultDeviceChanged(eCapture, eConsole, id)
@@ -638,7 +638,7 @@ mod tests {
             client.OnDeviceAdded(id).unwrap();
             client.OnDeviceRemoved(id).unwrap();
             client
-                .OnDeviceStateChanged(id, DEVICE_STATE_ACTIVE as u32)
+                .OnDeviceStateChanged(id, DEVICE_STATE_ACTIVE)
                 .unwrap();
             client
                 .OnDefaultDeviceChanged(eRender, eConsole, id)

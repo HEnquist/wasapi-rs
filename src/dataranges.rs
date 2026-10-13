@@ -28,8 +28,8 @@ use crate::{Direction, SampleType, WasapiRes, WaveFormat};
 const AUDIO_RANGE_SIZE: usize = size_of::<KSDATARANGE_0>() + 5 * size_of::<u32>();
 
 /// The errors that mean the reply did not fit in the buffer.
-const MORE_DATA: HRESULT = WIN32_ERROR(ERROR_MORE_DATA as u32).to_hresult();
-const INSUFFICIENT_BUFFER: HRESULT = WIN32_ERROR(ERROR_INSUFFICIENT_BUFFER as u32).to_hresult();
+const MORE_DATA: HRESULT = WIN32_ERROR(ERROR_MORE_DATA).to_hresult();
+const INSUFFICIENT_BUFFER: HRESULT = WIN32_ERROR(ERROR_INSUFFICIENT_BUFFER).to_hresult();
 
 /// One capability range, as declared by a device driver.
 ///
@@ -113,7 +113,7 @@ pub(crate) fn read_data_ranges(
     device: &IMMDevice,
     direction: Direction,
 ) -> WasapiRes<Vec<DataRange>> {
-    let topology: IDeviceTopology = unsafe { device.Activate(CLSCTX_ALL as u32, None)? };
+    let topology: IDeviceTopology = unsafe { device.Activate(CLSCTX_ALL, None)? };
     let endpoint_side = unsafe { topology.GetConnector(0)? };
     let device_side: IPart = unsafe { endpoint_side.GetConnectedTo()? }.cast()?;
     let topology_filter = filter_id(&device_side);
@@ -261,9 +261,9 @@ fn open_filter(device_id: &str) -> WasapiRes<HANDLE> {
             CreateFileW(
                 PCWSTR(wide.as_ptr()),
                 access,
-                (FILE_SHARE_READ | FILE_SHARE_WRITE) as u32,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
                 None,
-                OPEN_EXISTING as u32,
+                OPEN_EXISTING,
                 0,
                 None,
             )
@@ -278,7 +278,7 @@ fn open_filter(device_id: &str) -> WasapiRes<HANDLE> {
         Ok(handle) => Ok(handle),
         Err(err) => {
             debug!("Could not open the filter for reading, {err}, retrying with write access");
-            Ok(open(GENERIC_READ | GENERIC_WRITE as u32)?)
+            Ok(open(GENERIC_READ | GENERIC_WRITE)?)
         }
     }
 }
@@ -289,7 +289,7 @@ fn pin_property(id: KSPROPERTY_PIN, pin_id: u32) -> KSP_PIN {
     property.Property.Anonymous.Anonymous = KSIDENTIFIER_0_0 {
         Set: KSPROPSETID_Pin,
         Id: id as u32,
-        Flags: KSPROPERTY_TYPE_GET as u32,
+        Flags: KSPROPERTY_TYPE_GET,
     };
     property.PinId = pin_id;
     property
@@ -306,7 +306,7 @@ fn ks_property(filter: HANDLE, property: &KSP_PIN, buffer: Option<&mut [u8]>) ->
     let result = unsafe {
         DeviceIoControl(
             filter,
-            IOCTL_KS_PROPERTY as u32,
+            IOCTL_KS_PROPERTY,
             Some(from_ref(property).cast()),
             size_of::<KSP_PIN>() as u32,
             data,

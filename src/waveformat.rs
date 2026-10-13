@@ -1,27 +1,20 @@
 use crate::bindings::{
-    self, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE,
+    KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE,
     WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_PCM, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
-    WAVEFORMATEXTENSIBLE_0,
+    WAVEFORMATEXTENSIBLE_0, typed_consts,
 };
 use std::ffi::c_void;
 use std::fmt;
 
-/// Re-export the channel positions as `u32`, which is the type of a channel mask.
-/// The metadata gives them as `i32`.
-macro_rules! speaker_positions {
-    ($($name:ident),* $(,)?) => {
-        $(
-            #[doc = concat!(
-                "One of the [18 defined channel positions]",
-                "(https://learn.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)",
-                " of a channel mask, see [make_channelmasks] for how to use them."
-            )]
-            pub const $name: u32 = bindings::$name as u32;
-        )*
-    };
-}
-
-speaker_positions!(
+// The channel positions as `u32`, which is the type of a channel mask.
+// The metadata gives them as `i32`.
+typed_consts!(
+    u32,
+    concat!(
+        "One of the [18 defined channel positions]",
+        "(https://learn.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)",
+        " of a channel mask, see [make_channelmasks] for how to use them."
+    );
     SPEAKER_BACK_CENTER,
     SPEAKER_BACK_LEFT,
     SPEAKER_BACK_RIGHT,
@@ -126,7 +119,7 @@ impl WaveFormat {
 
         let waveformatex: WAVEFORMATEX = unsafe { std::ptr::read_unaligned(blob.as_ptr().cast()) };
 
-        if waveformatex.wFormatTag == WAVE_FORMAT_EXTENSIBLE as u16 {
+        if waveformatex.wFormatTag == WAVE_FORMAT_EXTENSIBLE {
             const ATLEAST_SIZE: usize =
                 size_of::<WAVEFORMATEXTENSIBLE>() - size_of::<WAVEFORMATEX>();
             if waveformatex.cbSize < ATLEAST_SIZE as u16 {
@@ -164,7 +157,7 @@ impl WaveFormat {
         let waveformatex = waveformatex.cast::<WAVEFORMATEX>();
         // SAFETY: The caller guarantees that the pointer is valid for reads of at least a WAVEFORMATEX.
         let header = unsafe { std::ptr::read(waveformatex) };
-        if header.wFormatTag == WAVE_FORMAT_EXTENSIBLE as u16 {
+        if header.wFormatTag == WAVE_FORMAT_EXTENSIBLE {
             const ATLEAST_SIZE: usize =
                 size_of::<WAVEFORMATEXTENSIBLE>() - size_of::<WAVEFORMATEX>();
             if header.cbSize < ATLEAST_SIZE as u16 {
@@ -203,7 +196,7 @@ impl WaveFormat {
             nChannels: channels as u16,
             nSamplesPerSec: samplerate as u32,
             wBitsPerSample: storebits as u16,
-            wFormatTag: WAVE_FORMAT_EXTENSIBLE as u16,
+            wFormatTag: WAVE_FORMAT_EXTENSIBLE,
         };
         let sample = WAVEFORMATEXTENSIBLE_0 {
             wValidBitsPerSample: validbits as u16,
@@ -241,7 +234,7 @@ impl WaveFormat {
         let samplerate = wavefmt.nSamplesPerSec as usize;
         let formattag = wavefmt.wFormatTag;
         let channels = wavefmt.nChannels as usize;
-        let sample_type = match formattag as i32 {
+        let sample_type = match formattag {
             WAVE_FORMAT_PCM => SampleType::Int,
             WAVE_FORMAT_IEEE_FLOAT => SampleType::Float,
             _ => return Err(WasapiError::UnsupportedFormat),
@@ -293,7 +286,7 @@ impl WaveFormat {
             nChannels: channels,
             nSamplesPerSec: samplerate,
             wBitsPerSample: storebits,
-            wFormatTag: sample_type as u16,
+            wFormatTag: sample_type,
         };
         let wave_fmt = WAVEFORMATEXTENSIBLE {
             Format: wave_format,
@@ -505,7 +498,7 @@ mod tests {
         ] {
             let fmt = WaveFormat::new(storebits, storebits, &sample_type, 48000, 2, None);
             let fmtex = fmt.to_waveformatex().unwrap();
-            assert_eq!(fmtex.wave_fmt.Format.wFormatTag as i32, formattag);
+            assert_eq!({ fmtex.wave_fmt.Format.wFormatTag }, formattag);
             assert_eq!({ fmtex.wave_fmt.Format.cbSize }, 0);
             assert_eq!(fmtex.get_bitspersample(), storebits as u16);
             assert_eq!(fmtex.get_blockalign(), fmt.get_blockalign());

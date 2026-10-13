@@ -319,7 +319,7 @@ impl<C: FormatChecker> Probing<'_, C> {
                 continue;
             };
             trace!("Supported {samplerate} Hz, {channels} ch, format {candidate:?}");
-            if accepted.wave_fmt.Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE as u16 {
+            if accepted.wave_fmt.Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE {
                 let mask = accepted.get_dwchannelmask();
                 if self.channel_masks.insert(channels, mask) != Some(mask) {
                     debug!("Channel count {channels} will use channel mask {mask:#010x}");

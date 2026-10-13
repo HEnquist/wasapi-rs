@@ -32,8 +32,8 @@ use crate::bindings::{
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, PROPERTYKEY, PROPVAR_PAD1, PROPVAR_PAD2,
     PROPVAR_PAD3, PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0, PropVariantClear,
     PropVariantToStringAlloc, REFERENCE_TIME, STGM_READ, VARTYPE,
-    VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, VT_BLOB, WAIT_OBJECT_0, WAVEFORMATEX, WaitForSingleObject, eCapture, eCommunications, eConsole,
-    eMultimedia, eRender,
+    VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, VT_BLOB, WAIT_OBJECT_0, WAVEFORMATEX,
+    WaitForSingleObject, eCapture, eCommunications, eConsole, eMultimedia, eRender,
 };
 use num_integer::Integer;
 use std::cmp;
@@ -55,12 +55,12 @@ pub(crate) type WasapiRes<T> = Result<T, WasapiError>;
 
 /// Initializes COM for use by the calling thread for the multi-threaded apartment (MTA).
 pub fn initialize_mta() -> HRESULT {
-    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED as u32) }
+    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
 }
 
 /// Initializes COM for use by the calling thread for a single-threaded apartment (STA).
 pub fn initialize_sta() -> HRESULT {
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED as u32) }
+    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
 }
 
 /// Close the COM library on the current thread.
@@ -280,7 +280,7 @@ impl fmt::Display for DeviceState {
 impl DeviceState {
     /// Convert a `DEVICE_STATE_XXX` value, which Windows hands over as a `u32`.
     pub(crate) fn from_device_state(value: u32) -> WasapiRes<Self> {
-        match value as i32 {
+        match value {
             DEVICE_STATE_ACTIVE => Ok(Self::Active),
             DEVICE_STATE_DISABLED => Ok(Self::Disabled),
             DEVICE_STATE_NOTPRESENT => Ok(Self::NotPresent),
@@ -325,7 +325,7 @@ impl DeviceEnumerator {
     /// Create a new [DeviceEnumerator]
     pub fn new() -> WasapiRes<DeviceEnumerator> {
         let enumerator: IMMDeviceEnumerator =
-            unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL as u32)? };
+            unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
         Ok(DeviceEnumerator { enumerator })
     }
 
@@ -334,7 +334,7 @@ impl DeviceEnumerator {
         let dir = direction.to_edataflow();
         let devs = unsafe {
             self.enumerator
-                .EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE as u32)?
+                .EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE)?
         };
         Ok(DeviceCollection {
             collection: devs,
@@ -557,10 +557,7 @@ impl Device {
 
     /// Get an `IAudioClient` from an `IMMDevice`
     pub fn get_iaudioclient(&self) -> WasapiRes<AudioClient> {
-        let audio_client = unsafe {
-            self.device
-                .Activate::<IAudioClient>(CLSCTX_ALL as u32, None)?
-        };
+        let audio_client = unsafe { self.device.Activate::<IAudioClient>(CLSCTX_ALL, None)? };
         Ok(AudioClient {
             client: audio_client,
             direction: self.direction,
@@ -592,7 +589,7 @@ impl Device {
     pub fn get_iaudiosessionmanager(&self) -> WasapiRes<AudioSessionManager> {
         let session_manager = unsafe {
             self.device
-                .Activate::<IAudioSessionManager>(CLSCTX_ALL as u32, None)?
+                .Activate::<IAudioSessionManager>(CLSCTX_ALL, None)?
         };
         Ok(AudioSessionManager { session_manager })
     }
@@ -602,7 +599,7 @@ impl Device {
     pub fn get_audiometerinformation(&self) -> WasapiRes<AudioMeterInformation> {
         let meter = unsafe {
             self.device
-                .Activate::<IAudioMeterInformation>(CLSCTX_ALL as u32, None)?
+                .Activate::<IAudioMeterInformation>(CLSCTX_ALL, None)?
         };
         Ok(AudioMeterInformation { meter })
     }
@@ -655,7 +652,7 @@ impl Device {
         key: &PROPERTYKEY,
         parse: impl FnOnce(&PROPVARIANT) -> WasapiRes<T>,
     ) -> WasapiRes<T> {
-        let store = unsafe { self.device.OpenPropertyStore(STGM_READ as u32)? };
+        let store = unsafe { self.device.OpenPropertyStore(STGM_READ)? };
         let mut prop = unsafe { store.GetValue(key)? };
         let ret = parse(&prop);
         unsafe { PropVariantClear(&mut prop) }.ok()?;
@@ -672,7 +669,7 @@ impl Device {
 
     /// Parse a device blob property to Vec<u8>
     fn parse_blob_property(prop: &PROPVARIANT) -> WasapiRes<Vec<u8>> {
-        if unsafe { prop.Anonymous.Anonymous.vt.0 } != VT_BLOB as u16 {
+        if unsafe { prop.Anonymous.Anonymous.vt.0 } != VT_BLOB {
             return Err(windows_core::Error::from(E_INVALIDARG).into());
         }
         let blob = unsafe { prop.Anonymous.Anonymous.Anonymous.blob };
@@ -801,7 +798,7 @@ impl AudioClient {
             let raw_prop = PROPVARIANT {
                 Anonymous: PROPVARIANT_0 {
                     Anonymous: ManuallyDrop::new(PROPVARIANT_0_0 {
-                        vt: VARTYPE(VT_BLOB as u16),
+                        vt: VARTYPE(VT_BLOB),
                         wReserved1: PROPVAR_PAD1(0),
                         wReserved2: PROPVAR_PAD2(0),
                         wReserved3: PROPVAR_PAD3(0),
@@ -1215,7 +1212,7 @@ impl AudioClient {
         };
         let mut streamflags = match (&self.direction, direction, sharemode) {
             (Direction::Render, Direction::Capture, ShareMode::Shared) => {
-                AUDCLNT_STREAMFLAGS_LOOPBACK as u32
+                AUDCLNT_STREAMFLAGS_LOOPBACK
             }
             (Direction::Render, Direction::Capture, ShareMode::Exclusive) => {
                 return Err(WasapiError::LoopbackWithExclusiveMode);
@@ -1236,10 +1233,10 @@ impl AudioClient {
             }
         ) {
             streamflags |=
-                AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY as u32;
+                AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
         }
         if timing == TimingMode::Events {
-            streamflags |= AUDCLNT_STREAMFLAGS_EVENTCALLBACK as u32;
+            streamflags |= AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
         }
         let mode = match sharemode {
             ShareMode::Exclusive => AUDCLNT_SHAREMODE_EXCLUSIVE,
@@ -1568,7 +1565,7 @@ impl AudioClient {
         let audio_client_3 = self.client.cast::<IAudioClient3>()?;
 
         let flags = match timing_mode {
-            TimingMode::Events => AUDCLNT_STREAMFLAGS_EVENTCALLBACK as u32,
+            TimingMode::Events => AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
             TimingMode::Polling => 0,
         };
 
@@ -1930,9 +1927,9 @@ impl HardwareSupport {
     /// Create a new [HardwareSupport] struct from a `u32` value.
     pub fn new(mask: u32) -> Self {
         HardwareSupport {
-            volume: mask & ENDPOINT_HARDWARE_SUPPORT_VOLUME as u32 > 0,
-            mute: mask & ENDPOINT_HARDWARE_SUPPORT_MUTE as u32 > 0,
-            meter: mask & ENDPOINT_HARDWARE_SUPPORT_METER as u32 > 0,
+            volume: mask & ENDPOINT_HARDWARE_SUPPORT_VOLUME > 0,
+            mute: mask & ENDPOINT_HARDWARE_SUPPORT_MUTE > 0,
+            meter: mask & ENDPOINT_HARDWARE_SUPPORT_METER > 0,
         }
     }
 }
@@ -2120,9 +2117,9 @@ impl BufferFlags {
     /// Create a new [BufferFlags] struct from a `u32` value.
     pub fn new(flags: u32) -> Self {
         BufferFlags {
-            data_discontinuity: flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY as u32 > 0,
-            silent: flags & AUDCLNT_BUFFERFLAGS_SILENT as u32 > 0,
-            timestamp_error: flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR as u32 > 0,
+            data_discontinuity: flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY > 0,
+            silent: flags & AUDCLNT_BUFFERFLAGS_SILENT > 0,
+            timestamp_error: flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR > 0,
         }
     }
 
@@ -2139,13 +2136,13 @@ impl BufferFlags {
     pub fn to_u32(&self) -> u32 {
         let mut value = 0;
         if self.data_discontinuity {
-            value += AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY as u32;
+            value += AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY;
         }
         if self.silent {
-            value += AUDCLNT_BUFFERFLAGS_SILENT as u32;
+            value += AUDCLNT_BUFFERFLAGS_SILENT;
         }
         if self.timestamp_error {
-            value += AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR as u32;
+            value += AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR;
         }
         value
     }
@@ -2285,7 +2282,7 @@ impl Handle {
     /// Wait for an event on a handle, with a timeout given in ms
     pub fn wait_for_event(&self, timeout_ms: u32) -> WasapiRes<()> {
         let retval = unsafe { WaitForSingleObject(self.handle, timeout_ms) };
-        if retval != WAIT_OBJECT_0 as u32 {
+        if retval != WAIT_OBJECT_0 {
             return Err(WasapiError::EventTimeout);
         }
         Ok(())

@@ -11,10 +11,75 @@
     dead_code,
     clippy::all
 )]
-mod generated;
+pub(crate) mod generated;
 pub use generated::*;
 
 use windows_core::GUID;
+
+/// Define constants with the type that the crate uses them as.
+///
+/// The default metadata gives most constants as `i32`,
+/// whatever type the functions and fields that take them use.
+/// This converts each one once, instead of at every place it is used.
+/// A constant defined here shadows the generated one of the same name,
+/// since a named item takes precedence over a glob import.
+/// The `HRESULT` form wraps the value instead of casting it.
+macro_rules! typed_consts {
+    (HRESULT, $doc:expr; $($name:ident),* $(,)?) => {
+        $(
+            #[doc = $doc]
+            pub const $name: windows_core::HRESULT =
+                windows_core::HRESULT($crate::bindings::generated::$name);
+        )*
+    };
+    ($ty:ty, $doc:expr; $($name:ident),* $(,)?) => {
+        $(
+            #[doc = $doc]
+            pub const $name: $ty = $crate::bindings::generated::$name as $ty;
+        )*
+    };
+}
+pub(crate) use typed_consts;
+
+typed_consts!(
+    u32,
+    "Retyped as the `u32` that the Windows functions and fields take.";
+    AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY,
+    AUDCLNT_BUFFERFLAGS_SILENT,
+    AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR,
+    AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+    AUDCLNT_STREAMFLAGS_LOOPBACK,
+    AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+    CLSCTX_ALL,
+    COINIT_APARTMENTTHREADED,
+    COINIT_MULTITHREADED,
+    DEVICE_STATE_ACTIVE,
+    DEVICE_STATE_DISABLED,
+    DEVICE_STATE_NOTPRESENT,
+    DEVICE_STATE_UNPLUGGED,
+    ENDPOINT_HARDWARE_SUPPORT_METER,
+    ENDPOINT_HARDWARE_SUPPORT_MUTE,
+    ENDPOINT_HARDWARE_SUPPORT_VOLUME,
+    ERROR_INSUFFICIENT_BUFFER,
+    ERROR_MORE_DATA,
+    FILE_SHARE_READ,
+    FILE_SHARE_WRITE,
+    GENERIC_WRITE,
+    IOCTL_KS_PROPERTY,
+    KSPROPERTY_TYPE_GET,
+    OPEN_EXISTING,
+    STGM_READ,
+    WAIT_OBJECT_0,
+);
+
+typed_consts!(
+    u16,
+    "Retyped as the `u16` of a `wFormatTag` or `VARTYPE`.";
+    VT_BLOB,
+    WAVE_FORMAT_EXTENSIBLE,
+    WAVE_FORMAT_IEEE_FLOAT,
+    WAVE_FORMAT_PCM,
+);
 
 // These are declared with DEFINE_GUIDSTRUCT in the Windows headers.
 // The default metadata has no GUID value for them, and the generator
