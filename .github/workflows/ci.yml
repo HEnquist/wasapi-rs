@@ -47,6 +47,15 @@ jobs:
           # Shared with device-tests.yml, which builds the same dependencies.
           shared-key: windows-stable
 
+      # The bindings generator is a separate crate with its own target directory,
+      # which the cache above does not cover. It gets a cache of its own, since
+      # adding it to the one above would change the key shared with device-tests.yml.
+      - name: Cache bindings generator
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: bindings-gen
+          workspaces: tools/bindings -> target
+
       # '--all-features' is what pulls in the device-tests feature, so the device
       # suite is compiled and linted here even though it is not run.
       - name: Cargo check (all targets)

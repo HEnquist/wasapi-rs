@@ -26,8 +26,9 @@ The following is a selection of the functionality currently available in the lib
 - Wrapping an `IAudioClient` that was activated elsewhere, for example through WinRT device
   enumeration
 - Raw access to the wrapped COM interfaces through `Device::as_raw`, `AudioClient::as_raw`
-  and `Handle::as_raw_handle`, and to formats through `WaveFormat::as_raw`, for reaching what the
-  library does not cover
+  and `Handle::as_raw_handle`,
+  and to formats through `WaveFormat::as_raw`,
+  for reaching what the library does not cover
 - …and additional features beyond this list
 
 The sharing modes (shared and exclusive) and timing modes (event-driven and polled) are described in
@@ -57,8 +58,8 @@ and wrap the interface that comes back with
 [`AudioClient::from_raw`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.from_raw).
 The device tests in `tests/device/activation.rs` walk the whole path, completion handler included.
 
-The raw accessors take and return plain COM interface pointers rather than the types of a binding
-crate.
+The raw accessors take and return plain COM interface pointers,
+rather than the types of a binding crate.
 This library generates its own bindings and does not depend on the `windows` crate,
 so a caller can use any version of it, or any other bindings, on its side of the pointer.
 
