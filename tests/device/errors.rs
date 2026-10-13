@@ -205,17 +205,20 @@ fn short_read_keeps_the_packet() {
     let capture = opened.client.get_audiocaptureclient().unwrap();
 
     opened.client.start_stream().unwrap();
+    // A one frame packet would make the short slice empty, and an empty slice
+    // returns before the packet is looked at. Shared mode packets are a whole
+    // engine period, so this only rules out something unexpected.
     let mut announced = 0;
     for _ in 0..200 {
         std::thread::sleep(std::time::Duration::from_millis(5));
         announced = capture.get_next_packet_size().unwrap().unwrap() as usize;
-        if announced > 0 {
+        if announced > 1 {
             break;
         }
     }
     // Stopped, so that no further packets arrive while the reads run.
     opened.client.stop_stream().unwrap();
-    assert!(announced > 0, "no packet arrived");
+    assert!(announced > 1, "no packet of more than one frame arrived");
 
     let mut buffer = vec![0u8; (announced - 1) * blockalign];
     let error = capture

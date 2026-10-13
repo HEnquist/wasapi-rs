@@ -32,8 +32,7 @@ use crate::bindings::{
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, PROPERTYKEY, PROPVAR_PAD1, PROPVAR_PAD2,
     PROPVAR_PAD3, PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0, PropVariantClear,
     PropVariantToStringAlloc, REFERENCE_TIME, STGM_READ, VARTYPE,
-    VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, VT_BLOB, WAIT_OBJECT_0, WAVE_FORMAT_EXTENSIBLE,
-    WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WaitForSingleObject, eCapture, eCommunications, eConsole,
+    VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, VT_BLOB, WAIT_OBJECT_0, WAVEFORMATEX, WaitForSingleObject, eCapture, eCommunications, eConsole,
     eMultimedia, eRender,
 };
 use num_integer::Integer;
@@ -912,16 +911,19 @@ impl AudioClient {
     /// completion handler included.
     /// ```no_run
     /// use wasapi::{AudioClient, Direction, StreamMode, initialize_mta};
+    /// use windows_core::{IUnknown, Interface};
     ///
-    /// # fn activate_somehow() -> *mut std::ffi::c_void { unimplemented!() }
+    /// # fn activate_somehow() -> IUnknown { unimplemented!() }
     /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
     /// // Activate the interface in some other way, for example through
-    /// // ActivateAudioInterfaceAsync with a device path from WinRT,
-    /// // and get the raw pointer from the bindings that did it.
-    /// let ptr = activate_somehow();
+    /// // ActivateAudioInterfaceAsync with a device path from WinRT.
+    /// // The bindings that did it hand back an interface that owns its reference.
+    /// let interface = activate_somehow();
     ///
-    /// let mut audio_client = unsafe { AudioClient::from_raw(ptr, Direction::Render) }.unwrap();
-    /// // The wrapper holds its own reference, release the caller's one here.
+    /// let mut audio_client =
+    ///     unsafe { AudioClient::from_raw(interface.as_raw(), Direction::Render) }.unwrap();
+    /// // The wrapper holds its own reference, so the caller's one can be released.
+    /// drop(interface);
     /// let format = audio_client.get_mixformat().unwrap();
     /// let (default_period, _min_period) = audio_client.get_device_period().unwrap();
     /// let mode = StreamMode::EventsShared {
@@ -967,26 +969,10 @@ impl AudioClient {
 
     /// Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
-        let temp_fmt_ptr = unsafe { self.client.GetMixFormat()? };
-        let temp_fmt = unsafe { *temp_fmt_ptr };
-
-        let mix_format =
-            if temp_fmt.cbSize == 22 && temp_fmt.wFormatTag as i32 == WAVE_FORMAT_EXTENSIBLE {
-                let format = unsafe {
-                    WaveFormat {
-                        wave_fmt: temp_fmt_ptr.cast::<WAVEFORMATEXTENSIBLE>().read(),
-                    }
-                };
-
-                unsafe { CoTaskMemFree(temp_fmt_ptr.cast()) };
-
-                format
-            } else {
-                unsafe { CoTaskMemFree(temp_fmt_ptr.cast()) };
-
-                WaveFormat::from_waveformatex(temp_fmt)?
-            };
-        Ok(mix_format)
+        let format_ptr = unsafe { self.client.GetMixFormat()? };
+        let parse_result = unsafe { WaveFormat::parse(format_ptr.cast()) };
+        unsafe { CoTaskMemFree(format_ptr.cast()) };
+        parse_result
     }
 
     /// Check if a format is supported.
@@ -1043,28 +1029,10 @@ impl AudioClient {
                     debug!("The requested format is supported");
                     None
                 } else {
-                    // Read the structure
-                    let temp_fmt: WAVEFORMATEX = unsafe { supported_format.read() };
                     debug!("The requested format is not supported but a simular one is");
-                    let new_fmt = if temp_fmt.cbSize == 22
-                        && temp_fmt.wFormatTag as i32 == WAVE_FORMAT_EXTENSIBLE
-                    {
-                        debug!("got the nearest matching format as a WAVEFORMATEXTENSIBLE");
-                        let temp_fmt_ext: WAVEFORMATEXTENSIBLE =
-                            unsafe { supported_format.cast::<WAVEFORMATEXTENSIBLE>().read() };
-
-                        unsafe { CoTaskMemFree(supported_format.cast()) };
-
-                        WaveFormat {
-                            wave_fmt: temp_fmt_ext,
-                        }
-                    } else {
-                        unsafe { CoTaskMemFree(supported_format.cast()) };
-
-                        debug!("got the nearest matching format as a WAVEFORMATEX, converting..");
-                        WaveFormat::from_waveformatex(temp_fmt)?
-                    };
-                    Some(new_fmt)
+                    let parse_result = unsafe { WaveFormat::parse(supported_format.cast()) };
+                    unsafe { CoTaskMemFree(supported_format.cast()) };
+                    Some(parse_result?)
                 }
             }
         };
@@ -2207,6 +2175,9 @@ impl AudioCaptureClient {
     /// The slice must be large enough to hold all data.
     /// If it is not, this returns [WasapiError::DataLengthTooShort] and leaves the packet
     /// unread, so the next call returns the same packet.
+    /// Calling again with the same slice therefore fails the same way every time,
+    /// while the capture buffer fills up behind the unread packet.
+    /// Use the `expected` frame count from the error to size a slice that fits.
     /// If it is longer than needed, the unused elements will not be modified.
     pub fn read_from_device(&self, data: &mut [u8]) -> WasapiRes<(u32, BufferInfo)> {
         let data_len_in_frames = data.len() / self.bytes_per_frame;
@@ -2236,9 +2207,9 @@ impl AudioCaptureClient {
         }
         if data_len_in_frames < nbr_frames_returned as usize {
             // Releasing zero frames leaves the packet unread, so that a retry with a
-            // larger buffer gets it again. A failure here is left for the next call to
-            // report, since the caller needs to know that the buffer was too short.
-            let _ = unsafe { self.client.ReleaseBuffer(0) };
+            // larger buffer gets it again. If that release fails, the packet state is
+            // unknown, and the release error is the one the caller needs to see.
+            unsafe { self.client.ReleaseBuffer(0).ok()? };
             return Err(WasapiError::DataLengthTooShort {
                 received: data_len_in_frames,
                 expected: nbr_frames_returned as usize,
@@ -2247,9 +2218,7 @@ impl AudioCaptureClient {
         let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
         let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
         data[..len_in_bytes].copy_from_slice(bufferslice);
-        if nbr_frames_returned > 0 {
-            unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
-        }
+        unsafe { self.client.ReleaseBuffer(nbr_frames_returned).ok()? };
         trace!("read {nbr_frames_returned} frames");
         Ok((nbr_frames_returned, buffer_info))
     }
