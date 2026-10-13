@@ -1,21 +1,39 @@
+use crate::bindings::{
+    KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE,
+    WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_PCM, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
+    WAVEFORMATEXTENSIBLE_0, typed_consts,
+};
+use std::ffi::c_void;
 use std::fmt;
-use windows::{
-    Win32::Media::Audio::{
-        WAVE_FORMAT_PCM, WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
-    },
-    Win32::Media::KernelStreaming::{KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE},
-    Win32::Media::Multimedia::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, WAVE_FORMAT_IEEE_FLOAT},
-};
 
-/// The [18 defined channel positions](https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)
-/// of a channel mask, see [make_channelmasks] for how to use them.
-pub use windows::Win32::Media::KernelStreaming::{
-    SPEAKER_BACK_CENTER, SPEAKER_BACK_LEFT, SPEAKER_BACK_RIGHT, SPEAKER_FRONT_CENTER,
-    SPEAKER_FRONT_LEFT, SPEAKER_FRONT_LEFT_OF_CENTER, SPEAKER_FRONT_RIGHT,
-    SPEAKER_FRONT_RIGHT_OF_CENTER, SPEAKER_LOW_FREQUENCY, SPEAKER_SIDE_LEFT, SPEAKER_SIDE_RIGHT,
-    SPEAKER_TOP_BACK_CENTER, SPEAKER_TOP_BACK_LEFT, SPEAKER_TOP_BACK_RIGHT, SPEAKER_TOP_CENTER,
-    SPEAKER_TOP_FRONT_CENTER, SPEAKER_TOP_FRONT_LEFT, SPEAKER_TOP_FRONT_RIGHT,
-};
+// The channel positions as `u32`, which is the type of a channel mask.
+// The metadata gives them as `i32`.
+typed_consts!(
+    u32,
+    concat!(
+        "One of the [18 defined channel positions]",
+        "(https://learn.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible)",
+        " of a channel mask, see [make_channelmasks] for how to use them."
+    );
+    SPEAKER_BACK_CENTER,
+    SPEAKER_BACK_LEFT,
+    SPEAKER_BACK_RIGHT,
+    SPEAKER_FRONT_CENTER,
+    SPEAKER_FRONT_LEFT,
+    SPEAKER_FRONT_LEFT_OF_CENTER,
+    SPEAKER_FRONT_RIGHT,
+    SPEAKER_FRONT_RIGHT_OF_CENTER,
+    SPEAKER_LOW_FREQUENCY,
+    SPEAKER_SIDE_LEFT,
+    SPEAKER_SIDE_RIGHT,
+    SPEAKER_TOP_BACK_CENTER,
+    SPEAKER_TOP_BACK_LEFT,
+    SPEAKER_TOP_BACK_RIGHT,
+    SPEAKER_TOP_CENTER,
+    SPEAKER_TOP_FRONT_CENTER,
+    SPEAKER_TOP_FRONT_LEFT,
+    SPEAKER_TOP_FRONT_RIGHT,
+);
 
 use crate::{SampleType, WasapiError, WasapiRes};
 
@@ -101,7 +119,7 @@ impl WaveFormat {
 
         let waveformatex: WAVEFORMATEX = unsafe { std::ptr::read_unaligned(blob.as_ptr().cast()) };
 
-        if waveformatex.wFormatTag == WAVE_FORMAT_EXTENSIBLE as u16 {
+        if waveformatex.wFormatTag == WAVE_FORMAT_EXTENSIBLE {
             const ATLEAST_SIZE: usize =
                 size_of::<WAVEFORMATEXTENSIBLE>() - size_of::<WAVEFORMATEX>();
             if waveformatex.cbSize < ATLEAST_SIZE as u16 {
@@ -127,15 +145,19 @@ impl WaveFormat {
     ///
     /// Use [WaveFormat::parse_from_blob_bytes] instead when the format is available as a byte slice.
     ///
+    /// The pointer is untyped, like the other raw accessors of this crate,
+    /// so that it can come from any Windows bindings, see [WaveFormat::as_raw].
+    ///
     /// # Safety
     /// `waveformatex` must be non-null, properly aligned, and valid for reads of
     /// `size_of::<WAVEFORMATEX>() + cbSize` bytes, where `cbSize` is the value in the header.
     /// A pointer returned by WASAPI, for example from `GetMixFormat`, meets this.
     /// A pointer to a lone `WAVEFORMATEX` does not, when the format tag says extensible.
-    pub unsafe fn parse(waveformatex: *const WAVEFORMATEX) -> WasapiRes<Self> {
+    pub unsafe fn parse(waveformatex: *const c_void) -> WasapiRes<Self> {
+        let waveformatex = waveformatex.cast::<WAVEFORMATEX>();
         // SAFETY: The caller guarantees that the pointer is valid for reads of at least a WAVEFORMATEX.
         let header = unsafe { std::ptr::read(waveformatex) };
-        if header.wFormatTag == WAVE_FORMAT_EXTENSIBLE as u16 {
+        if header.wFormatTag == WAVE_FORMAT_EXTENSIBLE {
             const ATLEAST_SIZE: usize =
                 size_of::<WAVEFORMATEXTENSIBLE>() - size_of::<WAVEFORMATEX>();
             if header.cbSize < ATLEAST_SIZE as u16 {
@@ -174,7 +196,7 @@ impl WaveFormat {
             nChannels: channels as u16,
             nSamplesPerSec: samplerate as u32,
             wBitsPerSample: storebits as u16,
-            wFormatTag: WAVE_FORMAT_EXTENSIBLE as u16,
+            wFormatTag: WAVE_FORMAT_EXTENSIBLE,
         };
         let sample = WAVEFORMATEXTENSIBLE_0 {
             wValidBitsPerSample: validbits as u16,
@@ -206,13 +228,13 @@ impl WaveFormat {
     }
 
     /// Create from a [WAVEFORMATEX](https://docs.microsoft.com/en-us/previous-versions/dd757713(v=vs.85)) structure
-    pub fn from_waveformatex(wavefmt: WAVEFORMATEX) -> WasapiRes<Self> {
+    pub(crate) fn from_waveformatex(wavefmt: WAVEFORMATEX) -> WasapiRes<Self> {
         let validbits = wavefmt.wBitsPerSample as usize;
         let blockalign = wavefmt.nBlockAlign as usize;
         let samplerate = wavefmt.nSamplesPerSec as usize;
         let formattag = wavefmt.wFormatTag;
         let channels = wavefmt.nChannels as usize;
-        let sample_type = match formattag as u32 {
+        let sample_type = match formattag {
             WAVE_FORMAT_PCM => SampleType::Int,
             WAVE_FORMAT_IEEE_FLOAT => SampleType::Float,
             _ => return Err(WasapiError::UnsupportedFormat),
@@ -264,7 +286,7 @@ impl WaveFormat {
             nChannels: channels,
             nSamplesPerSec: samplerate,
             wBitsPerSample: storebits,
-            wFormatTag: sample_type as u16,
+            wFormatTag: sample_type,
         };
         let wave_fmt = WAVEFORMATEXTENSIBLE {
             Format: wave_format,
@@ -278,8 +300,22 @@ impl WaveFormat {
     }
 
     /// get a reference of type &WAVEFORMATEX, used internally
-    pub fn as_waveformatex_ref(&self) -> &WAVEFORMATEX {
+    pub(crate) fn as_waveformatex_ref(&self) -> &WAVEFORMATEX {
         &self.wave_fmt.Format
+    }
+
+    /// Returns a raw pointer to the format, for passing it to the parts of WASAPI
+    /// that this crate does not wrap.
+    ///
+    /// It points to a
+    /// [WAVEFORMATEXTENSIBLE](https://learn.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible),
+    /// which starts with a `WAVEFORMATEX`, so it can be cast to a pointer to either.
+    /// A format from [WaveFormat::to_waveformatex] has `cbSize` set to zero,
+    /// and is then only a `WAVEFORMATEX` to whoever reads it.
+    ///
+    /// The pointer is borrowed, and stays valid only as long as the [WaveFormat] does.
+    pub fn as_raw(&self) -> *const c_void {
+        std::ptr::from_ref(&self.wave_fmt).cast()
     }
 
     /// Read nBlockAlign.
@@ -462,7 +498,7 @@ mod tests {
         ] {
             let fmt = WaveFormat::new(storebits, storebits, &sample_type, 48000, 2, None);
             let fmtex = fmt.to_waveformatex().unwrap();
-            assert_eq!(fmtex.wave_fmt.Format.wFormatTag as u32, formattag);
+            assert_eq!({ fmtex.wave_fmt.Format.wFormatTag }, formattag);
             assert_eq!({ fmtex.wave_fmt.Format.cbSize }, 0);
             assert_eq!(fmtex.get_bitspersample(), storebits as u16);
             assert_eq!(fmtex.get_blockalign(), fmt.get_blockalign());

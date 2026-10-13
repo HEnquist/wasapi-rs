@@ -1,8 +1,8 @@
 // Wrapping an IAudioClient that was activated outside this crate.
 //
-// This covers `AudioClient::from_iaudioclient`, the escape hatch for finding a device
-// by some other means than the `DeviceCollection`, for instance through the WinRT
-// `MediaDevice` and `DeviceInformation` classes.
+// This covers `AudioClient::from_raw` for the case it exists for: finding a device by
+// some other means than the `DeviceCollection`, for instance through the WinRT
+// `MediaDevice` and `DeviceInformation` classes, with bindings of the caller's own.
 //
 // There is no WinRT here. What those classes hand over is a device interface path for
 // `ActivateAudioInterfaceAsync`, and that path is built from the same endpoint id an
@@ -11,15 +11,15 @@
 // projections into the suite. The completion handler is a copy of the private one in
 // the library, which is the point: it is what a caller has to write.
 
+use crate::bindings::{
+    ActivateAudioInterfaceAsync, DEVINTERFACE_AUDIO_CAPTURE, DEVINTERFACE_AUDIO_RENDER,
+    IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
+    IActivateAudioInterfaceCompletionHandler_Impl, IAudioClient,
+};
 use crate::support;
 use std::sync::{Arc, Condvar, Mutex};
 use wasapi::*;
-use windows::Win32::Media::Audio::{
-    ActivateAudioInterfaceAsync, DEVINTERFACE_AUDIO_CAPTURE, DEVINTERFACE_AUDIO_RENDER,
-    IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
-    IActivateAudioInterfaceCompletionHandler_Impl,
-};
-use windows::core::{HRESULT, Interface, PCWSTR, Ref, implement};
+use windows_core::{Interface, PCWSTR, Ref, implement};
 
 /// Signals the waiting thread when the activation has finished.
 #[implement(IActivateAudioInterfaceCompletionHandler)]
@@ -29,7 +29,7 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
     fn ActivateCompleted(
         &self,
         _operation: Ref<IActivateAudioInterfaceAsyncOperation>,
-    ) -> windows::core::Result<()> {
+    ) -> windows_core::Result<()> {
         let (lock, cvar) = &*self.0;
         *lock.lock().unwrap() = true;
         cvar.notify_one();
@@ -53,12 +53,12 @@ fn interface_path(id: &str, direction: &Direction) -> String {
     format!("\\\\?\\SWD#MMDEVAPI#{id}#{{{class:?}}}")
 }
 
-/// Activate an [IAudioClient] on the endpoint with the given id, the long way round.
+/// Activate an `IAudioClient` on the endpoint with the given id, the long way round.
 ///
 /// Blocks until the activation completes. No timeout: the callback is made by the
 /// audio service, and if that never answers the test harness hanging is a clearer
 /// signal than a spurious failure would be.
-fn activate(id: &str, direction: &Direction) -> windows::core::Result<IAudioClient> {
+fn activate(id: &str, direction: &Direction) -> windows_core::Result<IAudioClient> {
     let path = interface_path(id, direction);
     println!("activating {path}");
     let path: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
@@ -78,7 +78,7 @@ fn activate(id: &str, direction: &Direction) -> windows::core::Result<IAudioClie
 
     let mut client = None;
     let mut result = HRESULT::default();
-    unsafe { operation.GetActivateResult(&mut result, &mut client)? };
+    unsafe { operation.GetActivateResult(&mut result, &mut client).ok()? };
     result.ok()?;
     // Safe to unwrap once the result above is checked.
     client.unwrap().cast()
@@ -100,7 +100,10 @@ fn activated_client_renders() {
 
     // The endpoint is a render endpoint, so that is what the direction describes,
     // and the stream direction passed to initialize_client is Render as well.
-    let mut client = AudioClient::from_iaudioclient(interface, Direction::Render);
+    // The wrapper takes a reference of its own, so the interface can go right away.
+    let mut client = unsafe { AudioClient::from_raw(interface.as_raw(), Direction::Render) }
+        .expect("AudioClient::from_raw failed");
+    drop(interface);
     let format = client.get_mixformat().unwrap();
     let (def_period, _min_period) = client.get_device_period().unwrap();
     let mode = support::mode_for(
@@ -128,7 +131,8 @@ fn activated_client_reports_its_state() {
     let id = fixture.cable.capture.get_id().unwrap();
     let interface = activate(&id, &Direction::Capture).expect("ActivateAudioInterfaceAsync failed");
 
-    let mut client = AudioClient::from_iaudioclient(interface, Direction::Capture);
+    let mut client = unsafe { AudioClient::from_raw(interface.as_raw(), Direction::Capture) }
+        .expect("AudioClient::from_raw failed");
     assert_eq!(client.get_direction(), Direction::Capture);
     assert_eq!(client.get_sharemode(), None);
     assert_eq!(client.get_timing_mode(), None);

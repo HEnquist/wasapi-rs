@@ -155,3 +155,28 @@ fn notification_registration_round_trip() {
     drop(second);
     drop(register());
 }
+
+/// The device meter reports one peak value per metered channel.
+///
+/// `get_channels_peak_values` sizes the output by the channel count itself, rather
+/// than through the generated wrapper, which only has room for one value. Nothing is
+/// playing, so only the count and the range of the values are checked.
+#[test]
+fn meter_reports_a_peak_per_channel() {
+    let Some(fx) = support::fixture() else { return };
+    for device in [&fx.cable.render, &fx.cable.capture] {
+        let meter = device.get_audiometerinformation().unwrap();
+        let channels = meter.get_metering_channel_count().unwrap();
+        let peaks = meter.get_channels_peak_values().unwrap();
+        println!(
+            "{}: {channels} metered channels, peaks {peaks:?}",
+            device.get_direction()
+        );
+        assert!(channels > 0, "the meter reports no channels");
+        assert_eq!(peaks.len(), channels as usize);
+        assert!(
+            peaks.iter().all(|p| (0.0..=1.0).contains(p)),
+            "peak values {peaks:?} outside 0.0 to 1.0"
+        );
+    }
+}

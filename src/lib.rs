@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod api;
+mod bindings;
 mod capabilities;
 mod dataranges;
 mod errors;
@@ -12,13 +13,13 @@ pub use dataranges::*;
 pub use errors::*;
 pub use events::*;
 pub use waveformat::*;
-pub use windows::core::GUID;
-// Re-exported so that `AudioClient::from_iaudioclient` and the raw accessors can be
-// used without depending on a matching version of the windows crate. HANDLE is left
-// out on purpose: it would collide with this crate's own Handle in the generated
-// documentation, since the two names differ only in case and the crate only ever
-// builds for Windows, where filenames do not.
-pub use windows::Win32::Media::Audio::{IAudioClient, IMMDevice};
+// These appear in the public API, re-exported so that callers need no windows-core
+// dependency of their own, and can not end up with a mismatched version of it.
+pub use windows_core::{Error as WindowsError, GUID, HRESULT};
+// The subformats a DataRange or an UnsupportedSubformat error can be compared with.
+pub use bindings::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM};
+// The effect type an AudioEffect id can be compared with.
+pub use bindings::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
 
 #[macro_use]
 extern crate log;
