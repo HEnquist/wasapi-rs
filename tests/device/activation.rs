@@ -112,7 +112,7 @@ fn activated_client_renders() {
     )
     .unwrap();
     client
-        .initialize_client(&format, &Direction::Render, &mode)
+        .initialize_client(&format, &Direction::Render, &mode, None)
         .unwrap();
 
     let run = support::render_for(&client, &format, support::RUN_TIME).unwrap();
@@ -144,7 +144,7 @@ fn activated_client_reports_its_state() {
     )
     .unwrap();
     client
-        .initialize_client(&format, &Direction::Capture, &mode)
+        .initialize_client(&format, &Direction::Capture, &mode, None)
         .unwrap();
 
     assert_eq!(client.get_direction(), Direction::Capture);

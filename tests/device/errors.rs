@@ -43,6 +43,7 @@ fn initialize_twice_is_refused() {
                 autoconvert: false,
                 buffer_duration_hns: def_period,
             },
+            None,
         )
         .expect_err("a second initialize_client succeeded");
     assert!(
@@ -67,6 +68,7 @@ fn direction_mismatches_are_refused() {
             &StreamMode::EventsExclusive {
                 period_hns: 100_000
             },
+            None,
         ),
         Err(WasapiError::LoopbackWithExclusiveMode)
     ));
@@ -84,7 +86,7 @@ fn direction_mismatches_are_refused() {
         },
     ] {
         assert!(matches!(
-            client.initialize_client(&format, &Direction::Render, &mode),
+            client.initialize_client(&format, &Direction::Render, &mode, None),
             Err(WasapiError::RenderToCaptureDevice)
         ));
     }
@@ -276,6 +278,7 @@ fn loopback_capture_mechanics() {
                 autoconvert: false,
                 buffer_duration_hns: def_period,
             },
+            None,
         )
         .expect("a loopback client on a render endpoint did not initialise");
 
@@ -356,6 +359,7 @@ fn process_loopback_reports_its_limitations() {
                 autoconvert: true,
                 buffer_duration_hns: 0,
             },
+            None,
         )
         .expect("a process loopback client did not initialise");
 

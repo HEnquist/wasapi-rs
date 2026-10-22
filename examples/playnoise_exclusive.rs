@@ -63,7 +63,8 @@ fn main() {
     let mode = StreamMode::EventsExclusive {
         period_hns: desired_period,
     };
-    let init_result = audio_client.initialize_client(&desired_format, &Direction::Render, &mode);
+    let init_result =
+        audio_client.initialize_client(&desired_format, &Direction::Render, &mode, None);
     match init_result {
         Ok(()) => debug!("IAudioClient::Initialize ok"),
         Err(e) => {
@@ -96,7 +97,7 @@ fn main() {
                         audio_client = device.get_iaudioclient().unwrap();
                         // 5. Call Initialize again on the created audio client.
                         audio_client
-                            .initialize_client(&desired_format, &Direction::Render, &mode)
+                            .initialize_client(&desired_format, &Direction::Render, &mode, None)
                             .unwrap();
                         debug!("IAudioClient::Initialize ok");
                     }
