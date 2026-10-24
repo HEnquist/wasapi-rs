@@ -2372,6 +2372,12 @@ pub struct Handle {
     handle: HANDLE,
 }
 
+/// SAFETY:
+/// The inner [HANDLE] always represents a thread synchronization object, and is thus thread-safe itself.
+/// See <https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createeventa>
+unsafe impl Send for Handle {}
+unsafe impl Sync for Handle {}
+
 impl Drop for Handle {
     fn drop(&mut self) {
         let _ = unsafe { CloseHandle(self.handle) };
