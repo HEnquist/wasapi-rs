@@ -138,6 +138,23 @@ fn device_lookup_round_trips() {
     ));
 }
 
+/// The peak meter returns one value per metered channel.
+///
+/// `get_channels_peak_values` calls the vtable entry by hand, since the generated
+/// wrapper passes Windows a pointer it may not write through.
+#[test]
+fn peak_meter_reports_every_channel() {
+    let Some(fx) = support::fixture() else { return };
+    for device in [&fx.cable.render, &fx.cable.capture] {
+        let meter = device.get_audiometerinformation().unwrap();
+        let channels = meter.get_metering_channel_count().unwrap();
+        let peaks = meter.get_channels_peak_values().unwrap();
+        println!("{}: peaks {peaks:?}", support::describe(device));
+        assert_eq!(peaks.len(), channels as usize);
+        assert!(peaks.iter().all(|p| (0.0..=1.0).contains(p)));
+    }
+}
+
 /// Registering for device notifications and dropping the registration is clean.
 ///
 /// `DeviceEventRegistration` unregisters in its `Drop`, which is hand-written. The

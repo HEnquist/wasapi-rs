@@ -1927,7 +1927,17 @@ impl AudioMeterInformation {
     pub fn get_channels_peak_values(&self) -> WasapiRes<Vec<f32>> {
         let nbr_channels = unsafe { self.meter.GetMeteringChannelCount()? };
         let mut peaks = vec![0.0; nbr_channels as usize];
-        unsafe { self.meter.GetChannelsPeakValues(&mut peaks)? };
+        // The generated GetChannelsPeakValues takes `&mut [f32]` but passes Windows
+        // a pointer from a shared reborrow, which it may not write through.
+        // Call the vtable entry directly with a pointer that allows writes.
+        unsafe {
+            (self.meter.vtable().GetChannelsPeakValues)(
+                self.meter.as_raw(),
+                peaks.len() as u32,
+                peaks.as_mut_ptr(),
+            )
+            .ok()?
+        };
 
         Ok(peaks)
     }
