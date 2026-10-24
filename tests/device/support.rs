@@ -291,7 +291,7 @@ pub fn open(
         ))?,
     };
     let mode = mode_for(&client, share, timing, def_period, &format)?;
-    client.initialize_client(&format, direction, &mode)?;
+    client.initialize_client(&format, direction, &mode, None)?;
     Ok(Opened { client, format })
 }
 

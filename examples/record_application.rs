@@ -43,7 +43,7 @@ fn capture_loop(
         autoconvert,
         buffer_duration_hns: 0,
     };
-    audio_client.initialize_client(&desired_format, &Direction::Capture, &mode)?;
+    audio_client.initialize_client(&desired_format, &Direction::Capture, &mode, None)?;
 
     debug!("initialized capture");
     let h_event = audio_client.set_get_eventhandle().unwrap();

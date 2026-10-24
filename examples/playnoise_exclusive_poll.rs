@@ -67,7 +67,8 @@ fn main() {
         buffer_duration_hns: 16 * desired_period,
     };
 
-    let init_result = audio_client.initialize_client(&desired_format, &Direction::Render, &mode);
+    let init_result =
+        audio_client.initialize_client(&desired_format, &Direction::Render, &mode, None);
     match init_result {
         Ok(()) => debug!("IAudioClient::Initialize ok"),
         Err(e) => {
@@ -105,7 +106,7 @@ fn main() {
                         };
 
                         audio_client
-                            .initialize_client(&desired_format, &Direction::Render, &mode)
+                            .initialize_client(&desired_format, &Direction::Render, &mode, None)
                             .unwrap();
                         debug!("IAudioClient::Initialize ok");
                     }

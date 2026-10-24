@@ -70,7 +70,7 @@ fn main() {
         buffer_duration_hns: def_time,
     };
     audio_client
-        .initialize_client(&desired_format, &Direction::Render, &mode)
+        .initialize_client(&desired_format, &Direction::Render, &mode, None)
         .unwrap();
     debug!("initialized playback");
 
