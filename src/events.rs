@@ -27,6 +27,12 @@ fn read_pcwstr(pcwstr: &PCWSTR) -> std::result::Result<Option<String>, FromUtf16
     unsafe { pcwstr.to_string() }.map(Some)
 }
 
+/// Read a [GUID] passed to a session event callback.
+/// The docs allow the event context to be null, so a null pointer gives `GUID_NULL`.
+fn read_guid(ptr: *const GUID) -> GUID {
+    unsafe { ptr.as_ref() }.copied().unwrap_or_default()
+}
+
 /// Read the id of the device that a notification refers to.
 /// Returns None, after logging the reason, if no usable id was provided.
 fn read_device_id(pcwstr: &PCWSTR, notification: &str) -> Option<String> {
@@ -230,7 +236,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         let name = unsafe { newdisplayname.to_string().unwrap_or_default() };
         trace!("New display name: {name}");
         if let Some(callback) = &self.callbacks.displayname {
-            let context = unsafe { *eventcontext };
+            let context = read_guid(eventcontext);
             callback(name, context);
         }
         Ok(())
@@ -240,7 +246,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         let path = unsafe { newiconpath.to_string().unwrap_or_default() };
         trace!("New icon path: {path}");
         if let Some(callback) = &self.callbacks.iconpath {
-            let context = unsafe { *eventcontext };
+            let context = read_guid(eventcontext);
             callback(path, context);
         }
         Ok(())
@@ -254,7 +260,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
     ) -> Result<()> {
         trace!("New volume: {newvolume}, mute: {newmute:?}");
         if let Some(callback) = &self.callbacks.simple_volume {
-            let context = unsafe { *eventcontext };
+            let context = read_guid(eventcontext);
             callback(newvolume, bool::from(newmute), context);
         }
         Ok(())
@@ -271,13 +277,14 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         let volslice =
             unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
         if let Some(callback) = &self.callbacks.channel_volume {
-            let context = unsafe { *eventcontext };
+            let context = read_guid(eventcontext);
             if changedchannel == u32::MAX {
                 // special meaning by specs: (DWORD)(-1) - "more than one channel have changed"
                 // using all channels
                 for (idx, newvol) in volslice.iter().enumerate() {
                     callback(idx, *newvol, context);
                 }
+                return Ok(());
             }
             if (changedchannel as usize) < volslice.len() {
                 let newvol = volslice[changedchannel as usize];
@@ -301,8 +308,8 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
     ) -> Result<()> {
         trace!("Grouping changed");
         if let Some(callback) = &self.callbacks.groupingparam {
-            let context = unsafe { *eventcontext };
-            let grouping = unsafe { *newgroupingparam };
+            let context = read_guid(eventcontext);
+            let grouping = read_guid(newgroupingparam);
             callback(grouping, context);
         }
         Ok(())
@@ -624,6 +631,104 @@ mod tests {
         }
 
         assert!(log.lock().unwrap().is_empty());
+    }
+
+    /// Build a session event sink that appends a description of every event to the returned vector.
+    fn logging_session() -> (IAudioSessionEvents, Arc<Mutex<Vec<String>>>) {
+        let log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let mut callbacks = EventCallbacks::new();
+
+        let name = log.clone();
+        callbacks.set_displayname_callback(move |n, ctx| {
+            name.lock().unwrap().push(format!("name {n} {ctx:?}"))
+        });
+        let icon = log.clone();
+        callbacks.set_iconpath_callback(move |p, ctx| {
+            icon.lock().unwrap().push(format!("icon {p} {ctx:?}"))
+        });
+        let simple = log.clone();
+        callbacks.set_simple_volume_callback(move |vol, mute, ctx| {
+            simple
+                .lock()
+                .unwrap()
+                .push(format!("volume {vol} {mute} {ctx:?}"))
+        });
+        let channel = log.clone();
+        callbacks.set_channel_volume_callback(move |idx, vol, ctx| {
+            channel
+                .lock()
+                .unwrap()
+                .push(format!("channel {idx} {vol} {ctx:?}"))
+        });
+        let grouping = log.clone();
+        callbacks.set_groupingparam_callback(move |g, ctx| {
+            grouping
+                .lock()
+                .unwrap()
+                .push(format!("grouping {g:?} {ctx:?}"))
+        });
+
+        (AudioSessionEvents::new(callbacks).into(), log)
+    }
+
+    /// The docs allow a null event context, which reaches the callbacks as `GUID_NULL`.
+    #[test]
+    fn a_null_event_context_is_handled() {
+        let (session, log) = logging_session();
+        let text = HSTRING::from("x");
+        let text = PCWSTR::from_raw(text.as_ptr());
+        let null = std::ptr::null();
+        let zero = GUID::zeroed();
+
+        unsafe {
+            session.OnDisplayNameChanged(text, null).unwrap();
+            session.OnIconPathChanged(text, null).unwrap();
+            session.OnSimpleVolumeChanged(0.5, true, null).unwrap();
+            session.OnChannelVolumeChanged(&[0.25], 0, null).unwrap();
+            session.OnGroupingParamChanged(null, null).unwrap();
+        }
+
+        assert_eq!(
+            *log.lock().unwrap(),
+            vec![
+                format!("name x {zero:?}"),
+                format!("icon x {zero:?}"),
+                format!("volume 0.5 true {zero:?}"),
+                format!("channel 0 0.25 {zero:?}"),
+                format!("grouping {zero:?} {zero:?}"),
+            ]
+        );
+    }
+
+    /// A changed channel of `u32::MAX` means more than one channel changed,
+    /// and reports every channel once.
+    #[test]
+    fn channel_volume_reports_the_changed_channels() {
+        let (session, log) = logging_session();
+        let context = GUID::from_u128(1);
+        let volumes = [0.25, 0.5, 0.75];
+
+        unsafe {
+            session
+                .OnChannelVolumeChanged(&volumes, u32::MAX, &context)
+                .unwrap();
+            session
+                .OnChannelVolumeChanged(&volumes, 1, &context)
+                .unwrap();
+            session
+                .OnChannelVolumeChanged(&volumes, 3, &context)
+                .unwrap();
+        }
+
+        assert_eq!(
+            *log.lock().unwrap(),
+            vec![
+                format!("channel 0 0.25 {context:?}"),
+                format!("channel 1 0.5 {context:?}"),
+                format!("channel 2 0.75 {context:?}"),
+                format!("channel 1 0.5 {context:?}"),
+            ]
+        );
     }
 
     /// A client with no callbacks set should accept every notification.

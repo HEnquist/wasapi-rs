@@ -349,3 +349,64 @@ fn session_state_follows_the_stream() {
         "the session never went inactive again"
     );
 }
+
+/// A shared client initialised in a session, with the GUID passed through to WASAPI.
+fn open_in_session(fx: &support::Fixture, session: &GUID) -> AudioClient {
+    let mut client = fx.cable.render.get_iaudioclient().unwrap();
+    let (def_period, _min_period) = client.get_device_period().unwrap();
+    let format = client.get_mixformat().unwrap();
+    let mode = support::mode_for(
+        &client,
+        ShareMode::Shared,
+        TimingMode::Polling,
+        def_period,
+        &format,
+    )
+    .unwrap();
+    client
+        .initialize_client(&format, &Direction::Render, &mode, Some(*session))
+        .unwrap();
+    client
+}
+
+/// Clients initialised with the same session GUID share a session, and the
+/// display name set on one is the name read back from the other.
+///
+/// The GUIDs are random so that a name left on a session by an earlier run in the
+/// same process can not make the test pass.
+#[test]
+fn display_name_is_per_session() {
+    let Some(fx) = support::fixture() else { return };
+    let shared = GUID::from_u128(rand::random());
+    let other = GUID::from_u128(rand::random());
+    let first = open_in_session(&fx, &shared);
+    let second = open_in_session(&fx, &shared);
+    let third = open_in_session(&fx, &other);
+
+    first
+        .get_audiosessioncontrol()
+        .unwrap()
+        .set_display_name("wasapi-rs test session")
+        .unwrap();
+    let name_of = |client: &AudioClient| {
+        client
+            .get_audiosessioncontrol()
+            .unwrap()
+            .get_display_name()
+            .unwrap()
+    };
+    assert_eq!(name_of(&first), "wasapi-rs test session");
+    assert_eq!(name_of(&second), "wasapi-rs test session");
+    assert_eq!(name_of(&third), "");
+}
+
+/// The icon path round trips through the session, like the display name.
+#[test]
+fn icon_path_round_trips() {
+    let Some(fx) = support::fixture() else { return };
+    let client = open_in_session(&fx, &GUID::from_u128(rand::random()));
+    let control = client.get_audiosessioncontrol().unwrap();
+    let path = r"%windir%\system32\shell32.dll,-16";
+    control.set_icon_path(path).unwrap();
+    assert_eq!(control.get_icon_path().unwrap(), path);
+}

@@ -71,7 +71,7 @@ fn try_initialize(device: &Device, share: ShareMode, format: &WaveFormat) -> Att
         Ok(mode) => mode,
         Err(e) => return Attempt::Inconclusive(format!("no aligned period: {e}")),
     };
-    match client.initialize_client(format, &device.get_direction(), &mode) {
+    match client.initialize_client(format, &device.get_direction(), &mode, None) {
         Ok(()) => Attempt::Accepted,
         Err(e)
             if support::is_hresult(&e, AUDCLNT_E_DEVICE_IN_USE)
@@ -267,6 +267,7 @@ fn autoconvert_accepts_an_unsupported_rate() {
                 autoconvert: true,
                 buffer_duration_hns: def_period,
             },
+            None,
         )
         .expect("autoconvert did not accept a rate the engine is not running");
 }
