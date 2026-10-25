@@ -5,6 +5,7 @@ use crate::bindings::{
 };
 use std::ffi::c_void;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 // The channel positions as `u32`, which is the type of a channel mask.
 // The metadata gives them as `i32`.
@@ -107,6 +108,39 @@ impl fmt::Debug for WaveFormat {
             .field("nChannel", &{ self.wave_fmt.Format.nChannels })
             .field("dwChannelMask", &{ self.wave_fmt.dwChannelMask })
             .finish()
+    }
+}
+
+impl PartialEq for WaveFormat {
+    fn eq(&self, other: &Self) -> bool {
+        ({ self.wave_fmt.Format.wFormatTag } == { other.wave_fmt.Format.wFormatTag })
+            && { self.wave_fmt.Format.nChannels } == { other.wave_fmt.Format.nChannels }
+            && { self.wave_fmt.Format.nSamplesPerSec } == { other.wave_fmt.Format.nSamplesPerSec }
+            && { self.wave_fmt.Format.nAvgBytesPerSec } == { other.wave_fmt.Format.nAvgBytesPerSec }
+            && { self.wave_fmt.Format.nBlockAlign } == { other.wave_fmt.Format.nBlockAlign }
+            && { self.wave_fmt.Format.wBitsPerSample } == { other.wave_fmt.Format.wBitsPerSample }
+            && { self.wave_fmt.Format.cbSize } == { other.wave_fmt.Format.cbSize }
+            && unsafe { self.wave_fmt.Samples.wValidBitsPerSample }
+                == unsafe { other.wave_fmt.Samples.wValidBitsPerSample }
+            && { self.wave_fmt.dwChannelMask } == { other.wave_fmt.dwChannelMask }
+            && { self.wave_fmt.SubFormat } == { other.wave_fmt.SubFormat }
+    }
+}
+
+impl Eq for WaveFormat {}
+
+impl Hash for WaveFormat {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        { self.wave_fmt.Format.wFormatTag }.hash(state);
+        { self.wave_fmt.Format.nChannels }.hash(state);
+        { self.wave_fmt.Format.nSamplesPerSec }.hash(state);
+        { self.wave_fmt.Format.nAvgBytesPerSec }.hash(state);
+        { self.wave_fmt.Format.nBlockAlign }.hash(state);
+        { self.wave_fmt.Format.wBitsPerSample }.hash(state);
+        { self.wave_fmt.Format.cbSize }.hash(state);
+        unsafe { self.wave_fmt.Samples.wValidBitsPerSample }.hash(state);
+        { self.wave_fmt.dwChannelMask }.hash(state);
+        { self.wave_fmt.SubFormat }.hash(state);
     }
 }
 
