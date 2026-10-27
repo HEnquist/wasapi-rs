@@ -171,8 +171,9 @@ fn client3_engine_period_queries() {
 /// hand, so they can drift from what `initialize_client` does.
 /// `get_available_space_in_frames` reads the first two and returns `ClientNotInit` when
 /// either is unset, so getting a number out of it is the check. The write is what proves
-/// the third: the slice is sized from the format's block align, so a `bytes_per_frame`
-/// that disagrees comes back as a `DataLengthMismatch` without ever reaching WASAPI.
+/// the third: the slice is sized from the format's block align to fill the free space,
+/// so a `bytes_per_frame` that disagrees either writes the wrong number of frames and
+/// leaves space free, or is refused.
 ///
 /// Nothing is started. Whether a shared mode stream then runs at the format's rate is
 /// WASAPI's side of it, and the render tests in `streams` already ask that of an
@@ -223,7 +224,15 @@ fn client3_shared_audio_stream_sets_up_the_client() {
             .expect("get_audiorenderclient failed");
         let silence = vec![0u8; available as usize * blockalign];
         render
-            .write_to_device(available as usize, &silence, None)
+            .write_to_device(&silence, None)
             .unwrap_or_else(|e| panic!("{timing:?}: writing {available} frames of silence: {e}"));
+        // The stream is not started, so nothing drains what was just written.
+        let left = client
+            .get_available_space_in_frames()
+            .expect("get_available_space_in_frames failed");
+        assert_eq!(
+            left, 0,
+            "{timing:?}: writing {available} frames left {left} free"
+        );
     }
 }

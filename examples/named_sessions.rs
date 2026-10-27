@@ -50,7 +50,7 @@ fn play_sine(freq: f64, session: GUID, name: &str) -> Result<(), WasapiError> {
                 value.copy_from_slice(&sample.to_le_bytes());
             }
         }
-        render_client.write_to_device(nbr_frames, &data, None)
+        render_client.write_to_device(&data, None)
     };
 
     // Fill the buffer before starting the stream, see the playsine example.

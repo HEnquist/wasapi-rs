@@ -378,7 +378,7 @@ pub fn render_for(
     // Fill the buffer before starting the stream, so playback starts with data.
     // https://learn.microsoft.com/en-us/windows/win32/coreaudio/rendering-a-stream
     let prefill = client.get_available_space_in_frames()? as usize;
-    render_client.write_to_device(prefill, &silence[..prefill * blockalign], None)?;
+    render_client.write_to_device(&silence[..prefill * blockalign], None)?;
 
     let mut run = Run::new(buffer_size);
     let start = Instant::now();
@@ -392,7 +392,7 @@ pub fn render_for(
             break;
         }
         let frames = client.get_available_space_in_frames()? as usize;
-        render_client.write_to_device(frames, &silence[..frames * blockalign], None)?;
+        render_client.write_to_device(&silence[..frames * blockalign], None)?;
         run.frames += frames as u64;
     }
     run.elapsed = start.elapsed();

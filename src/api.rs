@@ -2126,24 +2126,25 @@ pub struct AudioRenderClient {
 
 impl AudioRenderClient {
     /// Write raw bytes data to a device from a slice.
-    /// The number of frames to write should first be checked with the
+    /// The whole slice is written, so its length decides the number of frames.
+    /// The number of frames that fit should first be checked with the
     /// [AudioClient::get_available_space_in_frames()] method.
     /// The buffer_flags argument can be used to mark a buffer as silent.
-    pub fn write_to_device(
-        &self,
-        nbr_frames: usize,
-        data: &[u8],
-        buffer_flags: Option<BufferFlags>,
-    ) -> WasapiRes<()> {
-        if nbr_frames == 0 {
-            return Ok(());
-        }
+    ///
+    /// Returns [WasapiError::DataLengthMismatch] if the slice does not hold a whole number of frames.
+    pub fn write_to_device(&self, data: &[u8], buffer_flags: Option<BufferFlags>) -> WasapiRes<()> {
+        // The frame size is zero when the client was not initialised through this crate.
+        // Any data is then a mismatch, as when the caller gave the frame count.
+        let nbr_frames = data.len().checked_div(self.bytes_per_frame).unwrap_or(0);
         let nbr_bytes = nbr_frames * self.bytes_per_frame;
         if nbr_bytes != data.len() {
             return Err(WasapiError::DataLengthMismatch {
                 received: data.len(),
                 expected: nbr_bytes,
             });
+        }
+        if nbr_frames == 0 {
+            return Ok(());
         }
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };

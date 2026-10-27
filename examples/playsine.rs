@@ -134,9 +134,7 @@ fn main() {
             }
         }
         trace!("write {} frames", nbr_frames);
-        render_client
-            .write_to_device(nbr_frames, &data, None)
-            .unwrap();
+        render_client.write_to_device(&data, None).unwrap();
         trace!("write ok");
     };
 

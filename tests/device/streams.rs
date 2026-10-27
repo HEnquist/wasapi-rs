@@ -90,7 +90,7 @@ fn available_space_tracks_padding() {
         let render = opened.client.get_audiorenderclient().unwrap();
         let frames = free() as usize;
         render
-            .write_to_device(frames, &vec![0u8; frames * blockalign], None)
+            .write_to_device(&vec![0u8; frames * blockalign], None)
             .unwrap();
         assert_eq!(
             padding(),
@@ -335,7 +335,7 @@ fn session_state_follows_the_stream() {
     let render = opened.client.get_audiorenderclient().unwrap();
     let frames = opened.client.get_available_space_in_frames().unwrap() as usize;
     render
-        .write_to_device(frames, &vec![0u8; frames * blockalign], None)
+        .write_to_device(&vec![0u8; frames * blockalign], None)
         .unwrap();
 
     opened.client.start_stream().unwrap();
