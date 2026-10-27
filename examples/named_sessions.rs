@@ -22,17 +22,17 @@ const HIGH_SESSION: GUID = GUID::from_u128(0x5d0c_2b1e_8a43_4f6e_9c27_1e4a_b3f0_
 
 fn play_sine(freq: f64, session: GUID, name: &str) -> Result<(), WasapiError> {
     initialize_mta().ok()?;
-    let device = DeviceEnumerator::new()?.get_default_device(&Direction::Render)?;
+    let device = DeviceEnumerator::new()?.get_default_device(Direction::Render)?;
     let mut audio_client = device.get_iaudioclient()?;
     let channels = 2;
-    let format = WaveFormat::new(32, 32, &SampleType::Float, 44100, channels, None);
+    let format = WaveFormat::new(32, 32, SampleType::Float, 44100, channels, None);
     let blockalign = format.get_blockalign() as usize;
     let (def_time, _min_time) = audio_client.get_device_period()?;
     let mode = StreamMode::EventsShared {
         autoconvert: true,
         buffer_duration_hns: def_time,
     };
-    audio_client.initialize_client(&format, &Direction::Render, &mode, Some(session))?;
+    audio_client.initialize_client(&format, Direction::Render, mode, Some(session))?;
     audio_client
         .get_audiosessioncontrol()?
         .set_display_name(name)?;

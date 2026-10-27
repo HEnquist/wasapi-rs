@@ -56,12 +56,12 @@ fn main() {
     let channels = 2;
 
     let enumerator = DeviceEnumerator::new().unwrap();
-    let device = enumerator.get_default_device(&Direction::Render).unwrap();
+    let device = enumerator.get_default_device(Direction::Render).unwrap();
     let mut audio_client = device.get_iaudioclient().unwrap();
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, channels, None);
+    let desired_format = WaveFormat::new(32, 32, SampleType::Float, 44100, channels, None);
 
     // Check if the desired format is supported.
-    let needs_convert = match audio_client.is_supported(&desired_format, &ShareMode::Shared) {
+    let needs_convert = match audio_client.is_supported(&desired_format, ShareMode::Shared) {
         Ok(None) => {
             debug!("Device supports format {:?}", desired_format);
             false
@@ -80,7 +80,7 @@ fn main() {
             );
             debug!("Repeating query with format as WAVEFORMATEX");
             let desired_formatex = desired_format.to_waveformatex().unwrap();
-            match audio_client.is_supported(&desired_formatex, &ShareMode::Shared) {
+            match audio_client.is_supported(&desired_formatex, ShareMode::Shared) {
                 Ok(None) => {
                     debug!("Device supports format {:?}", desired_formatex);
                     false
@@ -117,7 +117,7 @@ fn main() {
     };
 
     audio_client
-        .initialize_client(&desired_format, &Direction::Render, &mode, None)
+        .initialize_client(&desired_format, Direction::Render, mode, None)
         .unwrap();
     debug!("initialized playback");
 

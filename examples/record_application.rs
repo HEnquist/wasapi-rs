@@ -32,7 +32,7 @@ fn capture_loop(
 ) -> Res<()> {
     initialize_mta().ok().unwrap();
 
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 48000, 2, None);
+    let desired_format = WaveFormat::new(32, 32, SampleType::Float, 48000, 2, None);
     let blockalign = desired_format.get_blockalign();
     debug!("Desired capture format: {:?}", desired_format);
     let autoconvert = true;
@@ -43,7 +43,7 @@ fn capture_loop(
         autoconvert,
         buffer_duration_hns: 0,
     };
-    audio_client.initialize_client(&desired_format, &Direction::Capture, &mode, None)?;
+    audio_client.initialize_client(&desired_format, Direction::Capture, mode, None)?;
 
     debug!("initialized capture");
     let h_event = audio_client.set_get_eventhandle().unwrap();

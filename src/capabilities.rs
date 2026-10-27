@@ -164,7 +164,7 @@ impl FormatChecker for AudioClient {
 /// ```no_run
 /// use wasapi::{CapabilityProbe, Direction, DeviceEnumerator};
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let device = DeviceEnumerator::new()?.get_default_device(&Direction::Render)?;
+/// let device = DeviceEnumerator::new()?.get_default_device(Direction::Render)?;
 /// let mut probe = CapabilityProbe::new(&device)?;
 ///
 /// // Everything the device accepts at 48 kHz.
@@ -303,7 +303,7 @@ impl<C: FormatChecker> Probing<'_, C> {
             let requested = WaveFormat::new(
                 candidate.storebits,
                 candidate.validbits,
-                &candidate.sample_type,
+                candidate.sample_type,
                 samplerate,
                 channels,
                 preferred_mask,

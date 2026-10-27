@@ -15,7 +15,7 @@ use windows::Win32::Media::Audio::{AUDCLNT_E_ALREADY_INITIALIZED, AUDCLNT_E_NOT_
 fn shared(device: &Device) -> support::Opened {
     support::open(
         device,
-        &device.get_direction(),
+        device.get_direction(),
         ShareMode::Shared,
         TimingMode::Polling,
     )
@@ -38,8 +38,8 @@ fn initialize_twice_is_refused() {
         .client
         .initialize_client(
             &opened.format,
-            &Direction::Render,
-            &StreamMode::PollingShared {
+            Direction::Render,
+            StreamMode::PollingShared {
                 autoconvert: false,
                 buffer_duration_hns: def_period,
             },
@@ -64,8 +64,8 @@ fn direction_mismatches_are_refused() {
     assert!(matches!(
         client.initialize_client(
             &format,
-            &Direction::Capture,
-            &StreamMode::EventsExclusive {
+            Direction::Capture,
+            StreamMode::EventsExclusive {
                 period_hns: 100_000
             },
             None,
@@ -86,7 +86,7 @@ fn direction_mismatches_are_refused() {
         },
     ] {
         assert!(matches!(
-            client.initialize_client(&format, &Direction::Render, &mode, None),
+            client.initialize_client(&format, Direction::Render, mode, None),
             Err(WasapiError::RenderToCaptureDevice)
         ));
     }
@@ -273,8 +273,8 @@ fn loopback_capture_mechanics() {
     client
         .initialize_client(
             &format,
-            &Direction::Capture,
-            &StreamMode::PollingShared {
+            Direction::Capture,
+            StreamMode::PollingShared {
                 autoconvert: false,
                 buffer_duration_hns: def_period,
             },
@@ -319,12 +319,12 @@ fn process_loopback_reports_its_limitations() {
 
     // Every method the documentation lists as non-functional, except get_buffer_size,
     // which it says returns a huge number rather than an error.
-    let format = WaveFormat::new(32, 32, &SampleType::Float, 48000, 2, None);
+    let format = WaveFormat::new(32, 32, SampleType::Float, 48000, 2, None);
     let broken: [(&str, bool); 7] = [
         ("get_mixformat", client.get_mixformat().is_err()),
         (
             "is_supported",
-            client.is_supported(&format, &ShareMode::Shared).is_err(),
+            client.is_supported(&format, ShareMode::Shared).is_err(),
         ),
         (
             "is_supported_exclusive_with_quirks",
@@ -354,8 +354,8 @@ fn process_loopback_reports_its_limitations() {
     client
         .initialize_client(
             &format,
-            &Direction::Capture,
-            &StreamMode::EventsShared {
+            Direction::Capture,
+            StreamMode::EventsShared {
                 autoconvert: true,
                 buffer_duration_hns: 0,
             },

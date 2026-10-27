@@ -34,7 +34,7 @@ fn render_mechanics() {
     let Some(fx) = support::fixture() else { return };
     for (share, timing) in MODES {
         let Some(opened) =
-            support::open_or_skip(&fx.cable.render, &Direction::Render, share, timing)
+            support::open_or_skip(&fx.cable.render, Direction::Render, share, timing)
         else {
             continue;
         };
@@ -63,7 +63,7 @@ fn available_space_tracks_padding() {
     let Some(fx) = support::fixture() else { return };
     for (share, timing) in MODES {
         let Some(opened) =
-            support::open_or_skip(&fx.cable.render, &Direction::Render, share, timing)
+            support::open_or_skip(&fx.cable.render, Direction::Render, share, timing)
         else {
             continue;
         };
@@ -125,7 +125,7 @@ fn capture_mechanics() {
     let Some(fx) = support::fixture() else { return };
     for (share, timing) in MODES {
         let Some(opened) =
-            support::open_or_skip(&fx.cable.capture, &Direction::Capture, share, timing)
+            support::open_or_skip(&fx.cable.capture, Direction::Capture, share, timing)
         else {
             continue;
         };
@@ -219,7 +219,7 @@ fn packet_size_matches_the_read() {
     for share in [ShareMode::Shared, ShareMode::Exclusive] {
         let Some(opened) = support::open_or_skip(
             &fx.cable.capture,
-            &Direction::Capture,
+            Direction::Capture,
             share,
             TimingMode::Polling,
         ) else {
@@ -281,7 +281,7 @@ fn device_period_is_sane_and_accepted() {
         "the default period {def_period} is below the minimum {min_period}"
     );
 
-    let format = WaveFormat::new(16, 16, &SampleType::Int, 48000, 2, None);
+    let format = WaveFormat::new(16, 16, SampleType::Int, 48000, 2, None);
     let aligned = client
         .calculate_aligned_period_near(min_period, Some(128), &format)
         .unwrap();
@@ -295,7 +295,7 @@ fn device_period_is_sane_and_accepted() {
     // And an exclusive stream really opens with a period from the same helper.
     match support::open(
         &fx.cable.render,
-        &Direction::Render,
+        Direction::Render,
         ShareMode::Exclusive,
         TimingMode::Events,
     ) {
@@ -312,7 +312,7 @@ fn session_state_follows_the_stream() {
     let Some(fx) = support::fixture() else { return };
     let Some(opened) = support::open_or_skip(
         &fx.cable.render,
-        &Direction::Render,
+        Direction::Render,
         ShareMode::Shared,
         TimingMode::Polling,
     ) else {
@@ -364,7 +364,7 @@ fn open_in_session(fx: &support::Fixture, session: &GUID) -> AudioClient {
     )
     .unwrap();
     client
-        .initialize_client(&format, &Direction::Render, &mode, Some(*session))
+        .initialize_client(&format, Direction::Render, mode, Some(*session))
         .unwrap();
     client
 }

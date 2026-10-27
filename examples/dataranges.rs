@@ -55,11 +55,9 @@ fn main() {
 
     let enumerator = DeviceEnumerator::new().unwrap();
     let collections = [
+        enumerator.get_device_collection(Direction::Render).unwrap(),
         enumerator
-            .get_device_collection(&Direction::Render)
-            .unwrap(),
-        enumerator
-            .get_device_collection(&Direction::Capture)
+            .get_device_collection(Direction::Capture)
             .unwrap(),
     ];
 
