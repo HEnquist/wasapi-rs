@@ -1644,6 +1644,16 @@ impl AudioClient {
 
         Ok(())
     }
+    
+        
+    /// The maximum latency of the current stream, in 100-nanosecond units.
+    /// Requires this [AudioClient] to be initialized.
+    /// 
+    /// WASAPI docs: [IAudioClient::GetStreamLatency](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getstreamlatency)
+    pub fn get_stream_latency(&self) -> WasapiRes<i64> {
+        unsafe { self.client.GetStreamLatency() }
+            .map_err(WasapiError::from)
+    }
 }
 
 /// The values reported by [AudioClient::get_shared_mode_engine_period].
