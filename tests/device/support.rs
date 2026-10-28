@@ -157,7 +157,7 @@ pub fn require_device() -> bool {
 }
 
 /// Every endpoint of the given direction that belongs to the cable.
-pub fn cable_endpoints(enumerator: &DeviceEnumerator, direction: &Direction) -> Vec<Device> {
+pub fn cable_endpoints(enumerator: &DeviceEnumerator, direction: Direction) -> Vec<Device> {
     let Ok(collection) = enumerator.get_device_collection(direction) else {
         return Vec::new();
     };
@@ -184,13 +184,13 @@ fn find_cable(enumerator: &DeviceEnumerator) -> Option<Cable> {
             .is_ok_and(|desc| desc.to_lowercase().replace(' ', "").contains("16ch"))
     };
     let (multichannel, stereo): (Vec<Device>, Vec<Device>) =
-        cable_endpoints(enumerator, &Direction::Render)
+        cable_endpoints(enumerator, Direction::Render)
             .into_iter()
             .partition(is_multichannel);
     drop(multichannel);
     Some(Cable {
         render: stereo.into_iter().next()?,
-        capture: cable_endpoints(enumerator, &Direction::Capture)
+        capture: cable_endpoints(enumerator, Direction::Capture)
             .into_iter()
             .next()?,
     })
@@ -273,7 +273,7 @@ pub struct Opened {
 /// `AUDCLNT_E_EVENTHANDLE_NOT_SET`.
 pub fn open(
     device: &Device,
-    direction: &Direction,
+    direction: Direction,
     share: ShareMode,
     timing: TimingMode,
 ) -> Result<Opened, WasapiError> {
@@ -284,14 +284,14 @@ pub fn open(
         ShareMode::Exclusive => client.is_supported_exclusive_with_quirks(&WaveFormat::new(
             16,
             16,
-            &SampleType::Int,
+            SampleType::Int,
             48000,
             2,
             None,
         ))?,
     };
     let mode = mode_for(&client, share, timing, def_period, &format)?;
-    client.initialize_client(&format, direction, &mode, None)?;
+    client.initialize_client(&format, direction, mode, None)?;
     Ok(Opened { client, format })
 }
 
@@ -328,7 +328,7 @@ pub fn mode_for(
 /// As [open], but prints a skip note and returns `None` when the device cannot do it.
 pub fn open_or_skip(
     device: &Device,
-    direction: &Direction,
+    direction: Direction,
     share: ShareMode,
     timing: TimingMode,
 ) -> Option<Opened> {
@@ -378,7 +378,7 @@ pub fn render_for(
     // Fill the buffer before starting the stream, so playback starts with data.
     // https://learn.microsoft.com/en-us/windows/win32/coreaudio/rendering-a-stream
     let prefill = client.get_available_space_in_frames()? as usize;
-    render_client.write_to_device(prefill, &silence[..prefill * blockalign], None)?;
+    render_client.write_to_device(&silence[..prefill * blockalign], None)?;
 
     let mut run = Run::new(buffer_size);
     let start = Instant::now();
@@ -392,7 +392,7 @@ pub fn render_for(
             break;
         }
         let frames = client.get_available_space_in_frames()? as usize;
-        render_client.write_to_device(frames, &silence[..frames * blockalign], None)?;
+        render_client.write_to_device(&silence[..frames * blockalign], None)?;
         run.frames += frames as u64;
     }
     run.elapsed = start.elapsed();

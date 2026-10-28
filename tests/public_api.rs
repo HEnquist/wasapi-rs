@@ -32,12 +32,12 @@ fn enumerator_works_without_any_device() {
 
     for direction in [Direction::Render, Direction::Capture] {
         let collection = enumerator
-            .get_device_collection(&direction)
+            .get_device_collection(direction)
             .expect("get_device_collection failed");
         let count = collection
             .get_nbr_devices()
             .expect("get_nbr_devices failed");
-        let default = enumerator.get_default_device(&direction);
+        let default = enumerator.get_default_device(direction);
         match &default {
             Ok(device) => println!(
                 "{direction}: {count} devices, default: {}",

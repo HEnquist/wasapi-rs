@@ -22,11 +22,11 @@ type Res<T> = Result<T, Box<dyn error::Error>>;
 fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize) -> Res<()> {
     let enumerator = DeviceEnumerator::new()?;
     let input_device =
-        enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications)?;
+        enumerator.get_default_device_for_role(Direction::Capture, Role::Communications)?;
 
     let mut audio_client = input_device.get_iaudioclient()?;
 
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
+    let desired_format = WaveFormat::new(32, 32, SampleType::Float, 44100, 2, None);
 
     let blockalign = desired_format.get_blockalign();
     debug!("Desired capture format: {:?}", desired_format);
@@ -43,14 +43,14 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
         autoconvert: true,
         buffer_duration_hns: min_time,
     };
-    audio_client.initialize_client(&desired_format, &Direction::Capture, &mode, None)?;
+    audio_client.initialize_client(&desired_format, Direction::Capture, mode, None)?;
     debug!("initialized capture");
 
     // Enable Acoustic Echo Cancellation if it is supported.
     if audio_client.is_aec_supported()? {
         let aec_ctrl = audio_client.get_aec_control()?;
 
-        let output_device = enumerator.get_default_device(&Direction::Render)?;
+        let output_device = enumerator.get_default_device(Direction::Render)?;
         let render_endpoint_id = output_device.get_id()?;
         // Pass the endpoint id of the audio render endpoint that should be used as the reference stream for AEC.
         aec_ctrl.set_echo_cancellation_render_endpoint(Some(render_endpoint_id))?;

@@ -35,9 +35,9 @@ fn main() {
     let enumerator = DeviceEnumerator::new().unwrap();
 
     let channels = 2;
-    let device = enumerator.get_default_device(&Direction::Render).unwrap();
+    let device = enumerator.get_default_device(Direction::Render).unwrap();
     let mut audio_client = device.get_iaudioclient().unwrap();
-    let desired_format = WaveFormat::new(24, 24, &SampleType::Int, 48000, channels, None);
+    let desired_format = WaveFormat::new(24, 24, SampleType::Int, 48000, channels, None);
 
     // Make sure the format is supported, panic if not.
     let desired_format = audio_client
@@ -64,7 +64,7 @@ fn main() {
         period_hns: desired_period,
     };
     let init_result =
-        audio_client.initialize_client(&desired_format, &Direction::Render, &mode, None);
+        audio_client.initialize_client(&desired_format, Direction::Render, mode, None);
     match init_result {
         Ok(()) => debug!("IAudioClient::Initialize ok"),
         Err(e) => {
@@ -97,7 +97,7 @@ fn main() {
                         audio_client = device.get_iaudioclient().unwrap();
                         // 5. Call Initialize again on the created audio client.
                         audio_client
-                            .initialize_client(&desired_format, &Direction::Render, &mode, None)
+                            .initialize_client(&desired_format, Direction::Render, mode, None)
                             .unwrap();
                         debug!("IAudioClient::Initialize ok");
                     }
@@ -152,9 +152,7 @@ fn main() {
             }
         }
         trace!("write {} frames", nbr_frames);
-        render_client
-            .write_to_device(nbr_frames, &data, None)
-            .unwrap();
+        render_client.write_to_device(&data, None).unwrap();
         trace!("write ok");
     };
 

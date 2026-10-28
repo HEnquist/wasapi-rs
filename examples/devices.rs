@@ -9,10 +9,7 @@ fn main() {
     let enumerator = DeviceEnumerator::new().unwrap();
 
     println!("Found the following output devices:");
-    for device in &enumerator
-        .get_device_collection(&Direction::Render)
-        .unwrap()
-    {
+    for device in &enumerator.get_device_collection(Direction::Render).unwrap() {
         let dev = device.unwrap();
         let state = &dev.get_state().unwrap();
         println!(
@@ -30,7 +27,7 @@ fn main() {
                 "{:?}: {:?}",
                 role,
                 enumerator
-                    .get_default_device_for_role(&Direction::Render, role)
+                    .get_default_device_for_role(Direction::Render, *role)
                     .unwrap()
                     .get_friendlyname()
                     .unwrap()

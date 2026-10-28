@@ -11,7 +11,7 @@ fn main() {
 
     for direction in [Direction::Capture, Direction::Render] {
         println!("The following {direction} devices are being used by:");
-        for device in &enumerator.get_device_collection(&direction).unwrap() {
+        for device in &enumerator.get_device_collection(direction).unwrap() {
             let dev = device.unwrap();
             let manager = dev.get_iaudiosessionmanager().unwrap();
             let sessions = manager.get_audiosessionenumerator().unwrap();
