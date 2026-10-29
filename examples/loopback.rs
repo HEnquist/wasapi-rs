@@ -18,9 +18,9 @@ type Res<T> = Result<T, Box<dyn error::Error>>;
 // Playback loop, play samples received from channel
 fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
     let enumerator = DeviceEnumerator::new()?;
-    let device = enumerator.get_default_device(&Direction::Render)?;
+    let device = enumerator.get_default_device(Direction::Render)?;
     let mut audio_client = device.get_iaudioclient()?;
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
+    let desired_format = WaveFormat::new(32, 32, SampleType::Float, 44100, 2, None);
 
     let blockalign = desired_format.get_blockalign();
     debug!("Desired playback format: {:?}", desired_format);
@@ -32,7 +32,7 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
         autoconvert: true,
         buffer_duration_hns: min_time,
     };
-    audio_client.initialize_client(&desired_format, &Direction::Render, &mode, None)?;
+    audio_client.initialize_client(&desired_format, Direction::Render, mode, None)?;
     debug!("initialized playback");
 
     let h_event = audio_client.set_get_eventhandle()?;
@@ -84,10 +84,10 @@ fn playback_loop(rx_play: std::sync::mpsc::Receiver<Vec<u8>>) -> Res<()> {
 // Capture loop, capture samples and send in chunks of "chunksize" frames to channel
 fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize) -> Res<()> {
     let enumerator = DeviceEnumerator::new()?;
-    let device = enumerator.get_default_device(&Direction::Capture)?;
+    let device = enumerator.get_default_device(Direction::Capture)?;
     let mut audio_client = device.get_iaudioclient()?;
 
-    let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
+    let desired_format = WaveFormat::new(32, 32, SampleType::Float, 44100, 2, None);
 
     let blockalign = desired_format.get_blockalign();
     debug!("Desired capture format: {:?}", desired_format);
@@ -99,7 +99,7 @@ fn capture_loop(tx_capt: std::sync::mpsc::SyncSender<Vec<u8>>, chunksize: usize)
         autoconvert: true,
         buffer_duration_hns: min_time,
     };
-    audio_client.initialize_client(&desired_format, &Direction::Capture, &mode, None)?;
+    audio_client.initialize_client(&desired_format, Direction::Capture, mode, None)?;
     debug!("initialized capture");
 
     let h_event = audio_client.set_get_eventhandle()?;

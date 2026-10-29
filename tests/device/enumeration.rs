@@ -16,8 +16,8 @@ use wasapi::*;
 fn cable_is_present() {
     support::init_com();
     let enumerator = DeviceEnumerator::new().unwrap();
-    let render = support::cable_endpoints(&enumerator, &Direction::Render);
-    let capture = support::cable_endpoints(&enumerator, &Direction::Capture);
+    let render = support::cable_endpoints(&enumerator, Direction::Render);
+    let capture = support::cable_endpoints(&enumerator, Direction::Capture);
     println!(
         "found {} render and {} capture endpoints of \"{}\"",
         render.len(),
@@ -51,7 +51,7 @@ fn endpoint_inventory() {
         Err(e) => format!("<{e}>"),
     };
     for direction in [Direction::Render, Direction::Capture] {
-        let collection = enumerator.get_device_collection(&direction).unwrap();
+        let collection = enumerator.get_device_collection(direction).unwrap();
         println!(
             "\n{direction}: {} devices",
             collection.get_nbr_devices().unwrap()
@@ -81,7 +81,7 @@ fn endpoint_inventory() {
 fn collection_agrees_with_iterator() {
     let Some(fx) = support::fixture() else { return };
     for direction in [Direction::Render, Direction::Capture] {
-        let collection = fx.enumerator.get_device_collection(&direction).unwrap();
+        let collection = fx.enumerator.get_device_collection(direction).unwrap();
         let count = collection.get_nbr_devices().unwrap();
         assert_eq!(collection.get_direction(), direction);
 
@@ -122,7 +122,7 @@ fn device_lookup_round_trips() {
 
         let collection = fx
             .enumerator
-            .get_device_collection(&device.get_direction())
+            .get_device_collection(device.get_direction())
             .unwrap();
         let by_name = collection.get_device_with_name(&name).unwrap();
         assert_eq!(by_name.get_id().unwrap(), id);
@@ -130,7 +130,7 @@ fn device_lookup_round_trips() {
 
     let collection = fx
         .enumerator
-        .get_device_collection(&Direction::Render)
+        .get_device_collection(Direction::Render)
         .unwrap();
     assert!(matches!(
         collection.get_device_with_name("no such device"),

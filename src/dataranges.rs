@@ -416,15 +416,15 @@ mod tests {
     #[test]
     fn a_range_covers_the_formats_inside_it() {
         let declared = range(8, (16, 24), (44100, 192000), KSDATAFORMAT_SUBTYPE_PCM);
-        let inside = WaveFormat::new(24, 24, &SampleType::Int, 96000, 8, None);
+        let inside = WaveFormat::new(24, 24, SampleType::Int, 96000, 8, None);
         assert!(declared.covers(&inside));
 
         for outside in [
-            WaveFormat::new(24, 24, &SampleType::Int, 96000, 9, None),
-            WaveFormat::new(32, 32, &SampleType::Int, 96000, 8, None),
-            WaveFormat::new(16, 16, &SampleType::Int, 22050, 8, None),
-            WaveFormat::new(16, 16, &SampleType::Int, 384000, 8, None),
-            WaveFormat::new(24, 24, &SampleType::Float, 96000, 8, None),
+            WaveFormat::new(24, 24, SampleType::Int, 96000, 9, None),
+            WaveFormat::new(32, 32, SampleType::Int, 96000, 8, None),
+            WaveFormat::new(16, 16, SampleType::Int, 22050, 8, None),
+            WaveFormat::new(16, 16, SampleType::Int, 384000, 8, None),
+            WaveFormat::new(24, 24, SampleType::Float, 96000, 8, None),
         ] {
             assert!(!declared.covers(&outside), "{outside:?}");
         }
@@ -434,8 +434,8 @@ mod tests {
     fn a_wildcard_range_ignores_the_sample_type() {
         let declared = range(2, (16, 16), (48000, 48000), GUID::zeroed());
         assert_eq!(declared.sample_type(), None);
-        assert!(declared.covers(&WaveFormat::new(16, 16, &SampleType::Int, 48000, 2, None)));
-        assert!(declared.covers(&WaveFormat::new(16, 16, &SampleType::Float, 48000, 2, None)));
+        assert!(declared.covers(&WaveFormat::new(16, 16, SampleType::Int, 48000, 2, None)));
+        assert!(declared.covers(&WaveFormat::new(16, 16, SampleType::Float, 48000, 2, None)));
     }
 
     #[test]
@@ -445,12 +445,12 @@ mod tests {
             range(8, (16, 16), (44100, 48000), KSDATAFORMAT_SUBTYPE_PCM),
         ];
         // Each format is outside one of the ranges but inside the other.
-        let packed_24 = WaveFormat::new(24, 24, &SampleType::Int, 48000, 2, None);
-        let eight_channels = WaveFormat::new(16, 16, &SampleType::Int, 44100, 8, None);
+        let packed_24 = WaveFormat::new(24, 24, SampleType::Int, 48000, 2, None);
+        let eight_channels = WaveFormat::new(16, 16, SampleType::Int, 44100, 8, None);
         assert!(covered_by_any(&declared, &packed_24));
         assert!(covered_by_any(&declared, &eight_channels));
         // A combination that no single range covers.
-        let both = WaveFormat::new(24, 24, &SampleType::Int, 44100, 8, None);
+        let both = WaveFormat::new(24, 24, SampleType::Int, 44100, 8, None);
         assert!(!covered_by_any(&declared, &both));
         // Without any ranges nothing is known, so everything passes.
         assert!(covered_by_any(&[], &both));

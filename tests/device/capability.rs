@@ -20,7 +20,7 @@ const FORMATS: [(&str, usize, usize, SampleType); 5] = [
 
 /// Build one of [FORMATS] at a rate and channel count.
 fn format_of(spec: &(&str, usize, usize, SampleType), rate: usize, channels: usize) -> WaveFormat {
-    WaveFormat::new(spec.1, spec.2, &spec.3, rate, channels, None)
+    WaveFormat::new(spec.1, spec.2, spec.3, rate, channels, None)
 }
 
 /// A format's bit depths and sample type, enough to tell any two of [FORMATS] apart.
@@ -44,7 +44,7 @@ fn approved(result: &Result<Option<WaveFormat>, WasapiError>) -> bool {
 
 /// S16 at 48 kHz in stereo, the format VB-Cable is known to have in exclusive mode.
 fn s16_48k() -> WaveFormat {
-    WaveFormat::new(16, 16, &SampleType::Int, 48000, 2, None)
+    WaveFormat::new(16, 16, SampleType::Int, 48000, 2, None)
 }
 
 /// What happened when a format was handed to `initialize_client`.
@@ -71,7 +71,7 @@ fn try_initialize(device: &Device, share: ShareMode, format: &WaveFormat) -> Att
         Ok(mode) => mode,
         Err(e) => return Attempt::Inconclusive(format!("no aligned period: {e}")),
     };
-    match client.initialize_client(format, &device.get_direction(), &mode, None) {
+    match client.initialize_client(format, device.get_direction(), mode, None) {
         Ok(()) => Attempt::Accepted,
         Err(e)
             if support::is_hresult(&e, AUDCLNT_E_DEVICE_IN_USE)
@@ -107,7 +107,7 @@ fn is_supported_agrees_with_initialize_client() {
                 for channels in [1, 2] {
                     for spec in &FORMATS {
                         let format = format_of(spec, rate, channels);
-                        let query = client.is_supported(&format, &share);
+                        let query = client.is_supported(&format, share);
                         let says_yes = approved(&query);
                         let what = format!("{side} {share} {} {rate} Hz {channels} ch", spec.0);
                         match try_initialize(device, share, &format) {
@@ -162,7 +162,7 @@ fn mixformat_and_deviceformat() {
         let mix = client.get_mixformat().unwrap();
 
         assert!(
-            approved(&client.is_supported(&mix, &ShareMode::Shared)),
+            approved(&client.is_supported(&mix, ShareMode::Shared)),
             "the mix format was not accepted as is"
         );
         drop(client);
@@ -201,11 +201,11 @@ fn exclusive_supports_s16_and_s24() {
     let client = fx.cable.render.get_iaudioclient().unwrap();
 
     for (storebits, validbits) in [(16, 16), (24, 24)] {
-        let format = WaveFormat::new(storebits, validbits, &SampleType::Int, 48000, 2, None);
+        let format = WaveFormat::new(storebits, validbits, SampleType::Int, 48000, 2, None);
         // Some drivers only accept one and two channel formats when asked as a plain
         // WAVEFORMATEX, which is what the quirks helper exists for.
         assert!(
-            approved(&client.is_supported(&format, &ShareMode::Exclusive))
+            approved(&client.is_supported(&format, ShareMode::Exclusive))
                 || client.is_supported_exclusive_with_quirks(&format).is_ok(),
             "{validbits} in {storebits} bits at 48 kHz is not supported in exclusive mode"
         );
@@ -213,7 +213,7 @@ fn exclusive_supports_s16_and_s24() {
 
     for spec in FORMATS.iter().filter(|s| s.0 == "S32" || s.0 == "F32") {
         let format = format_of(spec, 48000, 2);
-        match client.is_supported(&format, &ShareMode::Exclusive) {
+        match client.is_supported(&format, ShareMode::Exclusive) {
             Ok(None) => println!("note: this device does accept {} in exclusive mode", spec.0),
             Ok(Some(_)) => panic!("exclusive mode offered a near match, which it never does"),
             Err(e) => assert!(
@@ -240,12 +240,12 @@ fn autoconvert_accepts_an_unsupported_rate() {
     let format = WaveFormat::new(
         32,
         32,
-        &SampleType::Float,
+        SampleType::Float,
         odd_rate,
         mix.get_nchannels() as usize,
         None,
     );
-    if approved(&client.is_supported(&format, &ShareMode::Shared)) {
+    if approved(&client.is_supported(&format, ShareMode::Shared)) {
         support::skip(&format!("the engine already runs at {odd_rate} Hz"));
         return;
     }
@@ -262,8 +262,8 @@ fn autoconvert_accepts_an_unsupported_rate() {
     client
         .initialize_client(
             &format,
-            &Direction::Render,
-            &StreamMode::PollingShared {
+            Direction::Render,
+            StreamMode::PollingShared {
                 autoconvert: true,
                 buffer_duration_hns: def_period,
             },
@@ -482,7 +482,7 @@ fn dataranges_are_declared_for_the_cable() {
 fn a_sixteen_channel_format_negotiates_a_mask() {
     let Some(fx) = support::fixture() else { return };
     let client = fx.cable.render.get_iaudioclient().unwrap();
-    let wanted = WaveFormat::new(16, 16, &SampleType::Int, 48000, 16, None);
+    let wanted = WaveFormat::new(16, 16, SampleType::Int, 48000, 16, None);
     match client.is_supported_exclusive_with_quirks(&wanted) {
         Ok(found) => {
             assert_eq!(found.get_nchannels(), 16);

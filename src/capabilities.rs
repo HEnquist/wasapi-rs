@@ -164,7 +164,7 @@ impl FormatChecker for AudioClient {
 /// ```no_run
 /// use wasapi::{CapabilityProbe, Direction, DeviceEnumerator};
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let device = DeviceEnumerator::new()?.get_default_device(&Direction::Render)?;
+/// let device = DeviceEnumerator::new()?.get_default_device(Direction::Render)?;
 /// let mut probe = CapabilityProbe::new(&device)?;
 ///
 /// // Everything the device accepts at 48 kHz.
@@ -175,6 +175,7 @@ impl FormatChecker for AudioClient {
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Debug)]
 pub struct CapabilityProbe {
     client: AudioClient,
     channel_masks: ChannelMaskMap,
@@ -276,6 +277,7 @@ impl CapabilityProbe {
 /// The logic lives here instead of directly on [CapabilityProbe] so that it can be
 /// generic over [FormatChecker]. That is what lets the unit tests run the real
 /// pruning logic against a fake device, since the real one needs hardware.
+#[derive(Debug)]
 struct Probing<'a, C: FormatChecker> {
     checker: &'a C,
     channel_masks: &'a mut ChannelMaskMap,
@@ -303,7 +305,7 @@ impl<C: FormatChecker> Probing<'_, C> {
             let requested = WaveFormat::new(
                 candidate.storebits,
                 candidate.validbits,
-                &candidate.sample_type,
+                candidate.sample_type,
                 samplerate,
                 channels,
                 preferred_mask,
@@ -519,6 +521,7 @@ impl<C: FormatChecker> Probing<'_, C> {
 }
 
 /// The outcome of probing a single sample rate.
+#[derive(Debug)]
 struct RateProbe {
     /// All accepted formats.
     formats: Vec<WaveFormat>,

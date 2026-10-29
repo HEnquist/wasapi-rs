@@ -43,7 +43,7 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
 /// `Device::get_id` returns, it takes the software device path that wraps it, and
 /// passing the id alone fails with `ERROR_FILE_NOT_FOUND`. The path is the MMDEVAPI
 /// software enumerator, the endpoint id, and the interface class of the direction.
-fn interface_path(id: &str, direction: &Direction) -> String {
+fn interface_path(id: &str, direction: Direction) -> String {
     let class = match direction {
         Direction::Render => DEVINTERFACE_AUDIO_RENDER,
         Direction::Capture => DEVINTERFACE_AUDIO_CAPTURE,
@@ -58,7 +58,7 @@ fn interface_path(id: &str, direction: &Direction) -> String {
 /// Blocks until the activation completes. No timeout: the callback is made by the
 /// audio service, and if that never answers the test harness hanging is a clearer
 /// signal than a spurious failure would be.
-fn activate(id: &str, direction: &Direction) -> windows_core::Result<IAudioClient> {
+fn activate(id: &str, direction: Direction) -> windows_core::Result<IAudioClient> {
     let path = interface_path(id, direction);
     println!("activating {path}");
     let path: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
@@ -96,7 +96,7 @@ fn activated_client_renders() {
         return;
     };
     let id = fixture.cable.render.get_id().unwrap();
-    let interface = activate(&id, &Direction::Render).expect("ActivateAudioInterfaceAsync failed");
+    let interface = activate(&id, Direction::Render).expect("ActivateAudioInterfaceAsync failed");
 
     // The endpoint is a render endpoint, so that is what the direction describes,
     // and the stream direction passed to initialize_client is Render as well.
@@ -115,7 +115,7 @@ fn activated_client_renders() {
     )
     .unwrap();
     client
-        .initialize_client(&format, &Direction::Render, &mode, None)
+        .initialize_client(&format, Direction::Render, mode, None)
         .unwrap();
 
     let run = support::render_for(&client, &format, support::RUN_TIME).unwrap();
@@ -129,7 +129,7 @@ fn activated_client_reports_its_state() {
         return;
     };
     let id = fixture.cable.capture.get_id().unwrap();
-    let interface = activate(&id, &Direction::Capture).expect("ActivateAudioInterfaceAsync failed");
+    let interface = activate(&id, Direction::Capture).expect("ActivateAudioInterfaceAsync failed");
 
     let mut client = unsafe { AudioClient::from_raw(interface.as_raw(), Direction::Capture) }
         .expect("AudioClient::from_raw failed");
@@ -148,7 +148,7 @@ fn activated_client_reports_its_state() {
     )
     .unwrap();
     client
-        .initialize_client(&format, &Direction::Capture, &mode, None)
+        .initialize_client(&format, Direction::Capture, mode, None)
         .unwrap();
 
     assert_eq!(client.get_direction(), Direction::Capture);

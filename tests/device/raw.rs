@@ -146,7 +146,7 @@ fn event_handle_in_a_multiple_object_wait() {
     let Some(fx) = support::fixture() else { return };
     let Some(opened) = support::open_or_skip(
         &fx.cable.render,
-        &Direction::Render,
+        Direction::Render,
         ShareMode::Shared,
         TimingMode::Events,
     ) else {

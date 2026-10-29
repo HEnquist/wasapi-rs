@@ -13,7 +13,7 @@ use wasapi::*;
 fn shared(device: &Device) -> support::Opened {
     support::open(
         device,
-        &device.get_direction(),
+        device.get_direction(),
         ShareMode::Shared,
         TimingMode::Polling,
     )
@@ -36,8 +36,8 @@ fn initialize_twice_is_refused() {
         .client
         .initialize_client(
             &opened.format,
-            &Direction::Render,
-            &StreamMode::PollingShared {
+            Direction::Render,
+            StreamMode::PollingShared {
                 autoconvert: false,
                 buffer_duration_hns: def_period,
             },
@@ -62,8 +62,8 @@ fn direction_mismatches_are_refused() {
     assert!(matches!(
         client.initialize_client(
             &format,
-            &Direction::Capture,
-            &StreamMode::EventsExclusive {
+            Direction::Capture,
+            StreamMode::EventsExclusive {
                 period_hns: 100_000
             },
             None,
@@ -84,7 +84,7 @@ fn direction_mismatches_are_refused() {
         },
     ] {
         assert!(matches!(
-            client.initialize_client(&format, &Direction::Render, &mode, None),
+            client.initialize_client(&format, Direction::Render, mode, None),
             Err(WasapiError::RenderToCaptureDevice)
         ));
     }
@@ -103,18 +103,18 @@ fn write_errors() {
     let blockalign = opened.format.get_blockalign() as usize;
     let render = opened.client.get_audiorenderclient().unwrap();
 
-    // Too few bytes for the frames asked for, and too many.
-    for (frames, bytes) in [(4usize, 3 * blockalign), (4, 5 * blockalign)] {
+    // A slice that ends in a partial frame, with and without whole frames before it.
+    for (frames, bytes) in [(4usize, 4 * blockalign + 1), (0, blockalign - 1)] {
         let error = render
-            .write_to_device(frames, &vec![0u8; bytes], None)
-            .expect_err("a wrong length write succeeded");
+            .write_to_device(&vec![0u8; bytes], None)
+            .expect_err("a partial frame write succeeded");
         assert!(
             matches!(
                 error,
                 WasapiError::DataLengthMismatch { received, expected }
                     if received == bytes && expected == frames * blockalign
             ),
-            "a {bytes} byte write of {frames} frames gave {error}"
+            "a {bytes} byte write gave {error}"
         );
     }
 
@@ -130,22 +130,22 @@ fn write_errors() {
     );
     assert_eq!(short.len(), 2 * blockalign, "the deque was consumed anyway");
 
-    // Zero frames is a no-op, not an error.
-    assert!(render.write_to_device(0, &[], None).is_ok());
+    // An empty slice is a no-op, not an error.
+    assert!(render.write_to_device(&[], None).is_ok());
 
     // More frames than the buffer holds is refused, and the client survives it.
     let buffer_size = opened.client.get_buffer_size().unwrap() as usize;
     let too_many = buffer_size + 1;
     assert!(
         render
-            .write_to_device(too_many, &vec![0u8; too_many * blockalign], None)
+            .write_to_device(&vec![0u8; too_many * blockalign], None)
             .is_err(),
         "a write larger than the buffer succeeded"
     );
     let space = opened.client.get_available_space_in_frames().unwrap() as usize;
     assert_eq!(space, buffer_size);
     render
-        .write_to_device(space, &vec![0u8; space * blockalign], None)
+        .write_to_device(&vec![0u8; space * blockalign], None)
         .expect("a correct write after an oversized one failed");
 }
 
@@ -251,7 +251,7 @@ fn reset_requires_a_stopped_stream() {
     let render = opened.client.get_audiorenderclient().unwrap();
     let frames = opened.client.get_available_space_in_frames().unwrap() as usize;
     render
-        .write_to_device(frames, &vec![0u8; frames * blockalign], None)
+        .write_to_device(&vec![0u8; frames * blockalign], None)
         .unwrap();
 
     opened.client.start_stream().unwrap();
@@ -318,8 +318,8 @@ fn loopback_capture_mechanics() {
     client
         .initialize_client(
             &format,
-            &Direction::Capture,
-            &StreamMode::PollingShared {
+            Direction::Capture,
+            StreamMode::PollingShared {
                 autoconvert: false,
                 buffer_duration_hns: def_period,
             },
@@ -364,12 +364,12 @@ fn process_loopback_reports_its_limitations() {
 
     // Every method the documentation lists as non-functional, except get_buffer_size,
     // which it says returns a huge number rather than an error.
-    let format = WaveFormat::new(32, 32, &SampleType::Float, 48000, 2, None);
+    let format = WaveFormat::new(32, 32, SampleType::Float, 48000, 2, None);
     let broken: [(&str, bool); 7] = [
         ("get_mixformat", client.get_mixformat().is_err()),
         (
             "is_supported",
-            client.is_supported(&format, &ShareMode::Shared).is_err(),
+            client.is_supported(&format, ShareMode::Shared).is_err(),
         ),
         (
             "is_supported_exclusive_with_quirks",
@@ -399,8 +399,8 @@ fn process_loopback_reports_its_limitations() {
     client
         .initialize_client(
             &format,
-            &Direction::Capture,
-            &StreamMode::EventsShared {
+            Direction::Capture,
+            StreamMode::EventsShared {
                 autoconvert: true,
                 buffer_duration_hns: 0,
             },

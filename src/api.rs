@@ -319,6 +319,7 @@ pub fn calculate_period_100ns(frames: i64, samplerate: i64) -> i64 {
 }
 
 /// Struct wrapping an [IMMDeviceEnumerator](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdeviceenumerator)
+#[derive(Debug)]
 pub struct DeviceEnumerator {
     enumerator: IMMDeviceEnumerator,
 }
@@ -332,7 +333,7 @@ impl DeviceEnumerator {
     }
 
     /// Get an `IMMDeviceCollection` of all active playback or capture devices
-    pub fn get_device_collection(&self, direction: &Direction) -> WasapiRes<DeviceCollection> {
+    pub fn get_device_collection(&self, direction: Direction) -> WasapiRes<DeviceCollection> {
         let dir = direction.to_edataflow();
         let devs = unsafe {
             self.enumerator
@@ -340,30 +341,27 @@ impl DeviceEnumerator {
         };
         Ok(DeviceCollection {
             collection: devs,
-            direction: *direction,
+            direction,
         })
     }
 
     /// Get the default playback or capture device for the console role
-    pub fn get_default_device(&self, direction: &Direction) -> WasapiRes<Device> {
-        self.get_default_device_for_role(direction, &Role::Console)
+    pub fn get_default_device(&self, direction: Direction) -> WasapiRes<Device> {
+        self.get_default_device_for_role(direction, Role::Console)
     }
 
     /// Get the default playback or capture device for a specific role
     pub fn get_default_device_for_role(
         &self,
-        direction: &Direction,
-        role: &Role,
+        direction: Direction,
+        role: Role,
     ) -> WasapiRes<Device> {
         let dir = direction.to_edataflow();
         let e_role = role.to_erole();
 
         let device = unsafe { self.enumerator.GetDefaultAudioEndpoint(dir, e_role)? };
 
-        let dev = Device {
-            device,
-            direction: *direction,
-        };
+        let dev = Device { device, direction };
         debug!("default device {:?}", dev.get_friendlyname());
         Ok(dev)
     }
@@ -411,6 +409,7 @@ impl DeviceEnumerator {
 }
 
 /// Struct for keeping track of the registered device notifications.
+#[derive(Debug)]
 pub struct DeviceEventRegistration {
     client: IMMNotificationClient,
     enumerator: IMMDeviceEnumerator,
@@ -427,6 +426,7 @@ impl Drop for DeviceEventRegistration {
 }
 
 /// Struct wrapping an [IMMDeviceCollection](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevicecollection).
+#[derive(Debug)]
 pub struct DeviceCollection {
     collection: IMMDeviceCollection,
     direction: Direction,
@@ -469,6 +469,7 @@ impl DeviceCollection {
 }
 
 /// Iterator for [DeviceCollection]
+#[derive(Debug)]
 pub struct DeviceCollectionIter<'a> {
     collection: &'a DeviceCollection,
     index: u32,
@@ -502,6 +503,7 @@ impl<'a> IntoIterator for &'a DeviceCollection {
 }
 
 /// Struct wrapping an [IMMDevice](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevice).
+#[derive(Debug)]
 pub struct Device {
     device: IMMDevice,
     direction: Direction,
@@ -718,6 +720,7 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
 }
 
 /// Struct wrapping an [IAudioClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclient).
+#[derive(Debug)]
 pub struct AudioClient {
     client: IAudioClient,
     direction: Direction,
@@ -764,7 +767,7 @@ impl AudioClient {
     /// machine may not have. The behaviour is covered by the device backed tests.
     /// ```no_run
     /// use wasapi::{WaveFormat, SampleType, AudioClient, Direction, StreamMode, initialize_mta};
-    /// let desired_format = WaveFormat::new(32, 32, &SampleType::Float, 44100, 2, None);
+    /// let desired_format = WaveFormat::new(32, 32, SampleType::Float, 44100, 2, None);
     /// let buffer_duration_hns = 200_000; // 20ms in hundreds of nanoseconds
     /// let autoconvert = true;
     /// let include_tree = false;
@@ -775,8 +778,8 @@ impl AudioClient {
     /// let mode = StreamMode::EventsShared { autoconvert, buffer_duration_hns };
     /// audio_client.initialize_client(
     ///     &desired_format,
-    ///     &Direction::Capture,
-    ///     &mode,
+    ///     Direction::Capture,
+    ///     mode,
     ///     None,
     /// ).unwrap();
     /// ```
@@ -930,7 +933,7 @@ impl AudioClient {
     ///     autoconvert: true,
     ///     buffer_duration_hns: default_period,
     /// };
-    /// audio_client.initialize_client(&format, &Direction::Render, &mode, None).unwrap();
+    /// audio_client.initialize_client(&format, Direction::Render, mode, None).unwrap();
     /// ```
     pub unsafe fn from_raw(ptr: *mut c_void, direction: Direction) -> WasapiRes<Self> {
         let client: IAudioClient = unsafe { cast_raw(ptr)? };
@@ -997,7 +1000,7 @@ impl AudioClient {
     pub fn is_supported(
         &self,
         wave_fmt: &WaveFormat,
-        sharemode: &ShareMode,
+        sharemode: ShareMode,
     ) -> WasapiRes<Option<WaveFormat>> {
         let supported = match sharemode {
             ShareMode::Exclusive => {
@@ -1063,7 +1066,7 @@ impl AudioClient {
         wave_fmt: &WaveFormat,
     ) -> WasapiRes<WaveFormat> {
         let mut wave_fmt = wave_fmt.clone();
-        let supported_direct = self.is_supported(&wave_fmt, &ShareMode::Exclusive);
+        let supported_direct = self.is_supported(&wave_fmt, ShareMode::Exclusive);
         if supported_direct.is_ok() {
             debug!("The requested format is supported as provided");
             return Ok(wave_fmt);
@@ -1075,7 +1078,7 @@ impl AudioClient {
                 Ok(wave_formatex) => {
                     debug!("Repeating query with format as WAVEFORMATEX");
                     if self
-                        .is_supported(&wave_formatex, &ShareMode::Exclusive)
+                        .is_supported(&wave_formatex, ShareMode::Exclusive)
                         .is_ok()
                     {
                         debug!("The requested format is supported as WAVEFORMATEX");
@@ -1091,7 +1094,7 @@ impl AudioClient {
         for mask in masks {
             debug!("Repeating query with channel mask: {mask:#010b}");
             wave_fmt.wave_fmt.dwChannelMask = mask;
-            if self.is_supported(&wave_fmt, &ShareMode::Exclusive).is_ok() {
+            if self.is_supported(&wave_fmt, ShareMode::Exclusive).is_ok() {
                 debug!("The requested format is supported with a modified mask: {mask:#010b}");
                 return Ok(wave_fmt);
             }
@@ -1212,7 +1215,7 @@ impl AudioClient {
     /// use wasapi::{DeviceEnumerator, Direction, GUID, StreamMode, initialize_mta};
     ///
     /// initialize_mta().ok().unwrap();
-    /// let device = DeviceEnumerator::new()?.get_default_device(&Direction::Render)?;
+    /// let device = DeviceEnumerator::new()?.get_default_device(Direction::Render)?;
     /// let mut client = device.get_iaudioclient()?;
     /// let format = client.get_mixformat()?;
     /// let (default_period, _) = client.get_device_period()?;
@@ -1222,7 +1225,7 @@ impl AudioClient {
     /// };
     /// // Any GUID that is stable for this stream, for example a fixed one per stream role.
     /// let session = GUID::from_u128(0x6d3f_2a71_0c4e_4b8a_9f15_83e2_7a0b_c4d1);
-    /// client.initialize_client(&format, &Direction::Render, &mode, Some(session))?;
+    /// client.initialize_client(&format, Direction::Render, mode, Some(session))?;
     /// client
     ///     .get_audiosessioncontrol()?
     ///     .set_display_name("Notifications")?;
@@ -1231,8 +1234,8 @@ impl AudioClient {
     pub fn initialize_client(
         &mut self,
         wavefmt: &WaveFormat,
-        direction: &Direction,
-        stream_mode: &StreamMode,
+        direction: Direction,
+        stream_mode: StreamMode,
         session_guid: Option<GUID>,
     ) -> WasapiRes<()> {
         let sharemode = match stream_mode {
@@ -1249,7 +1252,7 @@ impl AudioClient {
                 TimingMode::Events
             }
         };
-        let mut streamflags = match (&self.direction, direction, sharemode) {
+        let mut streamflags = match (self.direction, direction, sharemode) {
             (Direction::Render, Direction::Capture, ShareMode::Shared) => {
                 AUDCLNT_STREAMFLAGS_LOOPBACK
             }
@@ -1285,16 +1288,16 @@ impl AudioClient {
             StreamMode::PollingShared {
                 buffer_duration_hns,
                 ..
-            } => (0, *buffer_duration_hns),
+            } => (0, buffer_duration_hns),
             StreamMode::EventsShared {
                 buffer_duration_hns,
                 ..
-            } => (0, *buffer_duration_hns),
+            } => (0, buffer_duration_hns),
             StreamMode::PollingExclusive {
                 period_hns,
                 buffer_duration_hns,
-            } => (*period_hns, *buffer_duration_hns),
-            StreamMode::EventsExclusive { period_hns, .. } => (*period_hns, *period_hns),
+            } => (period_hns, buffer_duration_hns),
+            StreamMode::EventsExclusive { period_hns, .. } => (period_hns, period_hns),
         };
         unsafe {
             self.client
@@ -1308,7 +1311,7 @@ impl AudioClient {
                 )
                 .ok()?;
         }
-        self.direction = *direction;
+        self.direction = direction;
         self.sharemode = Some(sharemode);
         self.timingmode = Some(timing);
         self.bytes_per_frame = Some(wavefmt.get_blockalign() as usize);
@@ -1625,6 +1628,15 @@ impl AudioClient {
 
         Ok(())
     }
+
+    /// The maximum latency of the current stream, in 100-nanosecond units.
+    /// Requires this [AudioClient] to be initialized.
+    ///
+    /// WASAPI docs: [IAudioClient::GetStreamLatency](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getstreamlatency)
+    pub fn get_stream_latency(&self) -> WasapiRes<i64> {
+        let latency = unsafe { self.client.GetStreamLatency()? };
+        Ok(latency.0)
+    }
 }
 
 /// The values reported by [AudioClient::get_shared_mode_engine_period].
@@ -1690,6 +1702,7 @@ impl Default for AudioClientProperties {
 }
 
 /// Struct wrapping an [IAudioSessionManager](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionmanager)
+#[derive(Debug)]
 pub struct AudioSessionManager {
     session_manager: IAudioSessionManager,
 }
@@ -1705,6 +1718,7 @@ impl AudioSessionManager {
 }
 
 /// Struct wrapping an [IAudioSessionEnumerator](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionenumerator)
+#[derive(Debug)]
 pub struct AudioSessionEnumerator {
     session_enumerator: IAudioSessionEnumerator,
 }
@@ -1813,6 +1827,7 @@ impl StreamOption {
 }
 
 /// Struct wrapping an [IAudioSessionControl](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessioncontrol).
+#[derive(Debug)]
 pub struct AudioSessionControl {
     control: IAudioSessionControl,
 }
@@ -1952,6 +1967,7 @@ impl AudioSessionControl {
 ///
 /// The peak values are the peaks of the samples that were processed
 /// since the previous call, and are not affected by the volume settings.
+#[derive(Debug)]
 pub struct AudioMeterInformation {
     meter: IAudioMeterInformation,
 }
@@ -2010,6 +2026,7 @@ impl HardwareSupport {
 }
 
 /// Struct for keeping track of the registered notifications.
+#[derive(Debug)]
 pub struct EventRegistration {
     events: IAudioSessionEvents,
     control: IAudioSessionControl,
@@ -2026,6 +2043,7 @@ impl Drop for EventRegistration {
 }
 
 /// Struct wrapping an [IAudioClock](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclock).
+#[derive(Debug)]
 pub struct AudioClock {
     clock: IAudioClock,
 }
@@ -2076,6 +2094,7 @@ fn copy_from_deque(dest: &mut [u8], src: &mut VecDeque<u8>) {
 }
 
 /// Struct wrapping an [IAudioRenderClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudiorenderclient).
+#[derive(Debug)]
 pub struct AudioRenderClient {
     client: IAudioRenderClient,
     bytes_per_frame: usize,
@@ -2083,24 +2102,25 @@ pub struct AudioRenderClient {
 
 impl AudioRenderClient {
     /// Write raw bytes data to a device from a slice.
-    /// The number of frames to write should first be checked with the
+    /// The whole slice is written, so its length decides the number of frames.
+    /// The number of frames that fit should first be checked with the
     /// [AudioClient::get_available_space_in_frames()] method.
     /// The buffer_flags argument can be used to mark a buffer as silent.
-    pub fn write_to_device(
-        &self,
-        nbr_frames: usize,
-        data: &[u8],
-        buffer_flags: Option<BufferFlags>,
-    ) -> WasapiRes<()> {
-        if nbr_frames == 0 {
-            return Ok(());
-        }
+    ///
+    /// Returns [WasapiError::DataLengthMismatch] if the slice does not hold a whole number of frames.
+    pub fn write_to_device(&self, data: &[u8], buffer_flags: Option<BufferFlags>) -> WasapiRes<()> {
+        // The frame size is zero when the client was not initialised through this crate.
+        // Any data is then a mismatch, as when the caller gave the frame count.
+        let nbr_frames = data.len().checked_div(self.bytes_per_frame).unwrap_or(0);
         let nbr_bytes = nbr_frames * self.bytes_per_frame;
         if nbr_bytes != data.len() {
             return Err(WasapiError::DataLengthMismatch {
                 received: data.len(),
                 expected: nbr_bytes,
             });
+        }
+        if nbr_frames == 0 {
+            return Ok(());
         }
         let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
@@ -2224,6 +2244,7 @@ impl BufferFlags {
 }
 
 /// Struct wrapping an [IAudioCaptureClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudiocaptureclient).
+#[derive(Debug)]
 pub struct AudioCaptureClient {
     client: IAudioCaptureClient,
     sharemode: Option<ShareMode>,
@@ -2343,6 +2364,7 @@ impl AudioCaptureClient {
 }
 
 /// Struct wrapping a handle to an [Event Object](https://docs.microsoft.com/en-us/windows/win32/sync/event-objects).
+#[derive(Debug)]
 pub struct Handle {
     handle: HANDLE,
 }
@@ -2387,6 +2409,7 @@ impl std::os::windows::io::AsRawHandle for Handle {
 }
 
 // Struct wrapping an [IAudioEffectsManager](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioeffectsmanager).
+#[derive(Debug)]
 pub struct AudioEffectsManager {
     manager: IAudioEffectsManager,
 }
@@ -2445,6 +2468,7 @@ impl AudioEffectsManager {
 }
 
 /// Struct wrapping an [AcousticEchoCancellationControl](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iacousticechocancellationcontrol).
+#[derive(Debug)]
 pub struct AcousticEchoCancellationControl {
     control: IAcousticEchoCancellationControl,
 }

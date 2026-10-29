@@ -215,7 +215,7 @@ impl WaveFormat {
     pub fn new(
         storebits: usize,
         validbits: usize,
-        sample_type: &SampleType,
+        sample_type: SampleType,
         samplerate: usize,
         channels: usize,
         channel_mask: Option<u32>,
@@ -277,7 +277,7 @@ impl WaveFormat {
         Ok(WaveFormat::new(
             storebits,
             validbits,
-            &sample_type,
+            sample_type,
             samplerate,
             channels,
             None,
@@ -530,7 +530,7 @@ mod tests {
             (32, SampleType::Float, WAVE_FORMAT_IEEE_FLOAT),
             (64, SampleType::Float, WAVE_FORMAT_IEEE_FLOAT),
         ] {
-            let fmt = WaveFormat::new(storebits, storebits, &sample_type, 48000, 2, None);
+            let fmt = WaveFormat::new(storebits, storebits, sample_type, 48000, 2, None);
             let fmtex = fmt.to_waveformatex().unwrap();
             assert_eq!({ fmtex.wave_fmt.Format.wFormatTag }, formattag);
             assert_eq!({ fmtex.wave_fmt.Format.cbSize }, 0);
@@ -548,9 +548,9 @@ mod tests {
     fn refuse_converting_ambiguous_formats() {
         // The two 24 bit layouts, packed in three bytes and padded in four,
         // cannot be told apart without wValidBitsPerSample.
-        let packed = WaveFormat::new(24, 24, &SampleType::Int, 48000, 2, None);
+        let packed = WaveFormat::new(24, 24, SampleType::Int, 48000, 2, None);
         assert!(packed.to_waveformatex().is_err());
-        let padded = WaveFormat::new(32, 24, &SampleType::Int, 48000, 2, None);
+        let padded = WaveFormat::new(32, 24, SampleType::Int, 48000, 2, None);
         assert!(padded.to_waveformatex().is_err());
     }
 }

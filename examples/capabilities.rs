@@ -41,11 +41,11 @@ fn main() {
     // Give a device name as an argument, or nothing to use the default device.
     let device = match std::env::args().nth(1) {
         Some(name) => enumerator
-            .get_device_collection(&Direction::Render)
+            .get_device_collection(Direction::Render)
             .unwrap()
             .get_device_with_name(&name)
             .unwrap(),
-        None => enumerator.get_default_device(&Direction::Render).unwrap(),
+        None => enumerator.get_default_device(Direction::Render).unwrap(),
     };
     println!("Scanning device {:?}..", device.get_friendlyname().unwrap());
 
