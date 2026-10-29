@@ -1,10 +1,8 @@
 [package]
 name = "wasapi"
-version = "0.26.0"
+version = "0.27.0"
 edition = "2024"
-# The library itself builds with 1.85. Note that some examples need a newer
-# compiler, see the comments in [dev-dependencies].
-rust-version = "1.85"
+rust-version = "1.95"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 description = "Bindings for the Wasapi API on Windows"
 license = "MIT"
@@ -13,25 +11,6 @@ keywords = ["audio", "sound", "windows", "wasapi"]
 categories = ["multimedia::audio", "os::windows-apis"]
 readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies.windows]
-version = "0.62.2"
-features = ["Foundation",
-            "Win32_Media_Audio",
-            "Win32_Media_Audio_Endpoints",
-            "Win32_Foundation",
-            "Win32_Devices_FunctionDiscovery",
-            "Win32_Devices_Properties",
-            "Win32_UI_Shell_PropertiesSystem",
-            "Win32_System_Com",
-            "Win32_System_Com_StructuredStorage",
-            "Win32_Media_KernelStreaming",
-            "Win32_Media_Multimedia",
-            "Win32_System_Threading",
-            "Win32_System_Variant",
-            "Win32_Security",
-            "Win32_Storage_FileSystem",
-            "Win32_System_IO",]
 
 [features]
 # Enables the device backed test suite in tests/device/. It needs a virtual
@@ -51,24 +30,14 @@ required-features = ["device-tests"]
 [dependencies]
 log = "0.4"
 num-integer = "0.1"
-windows-core = "0.62.2"
+# The Windows API bindings are generated into src/bindings/generated.rs, see tools/bindings.
+windows-core = "0.100.0"
 thiserror = "2.0"
 
 [dev-dependencies]
-simplelog = "0.12"
-# The device tests assert on specific AUDCLNT_E_* result codes, and the raw accessor
-# tests activate an endpoint service and wait on several handles at once. Same version
-# as the dependency above, so this pulls in nothing new.
-windows = { version = "0.62.2", features = ["Win32_Media_Audio",
-                                          "Win32_Media_Audio_Endpoints",
-                                          "Win32_Foundation",
-                                          "Win32_System_Com",
-                                          "Win32_System_Threading"] }
+# Only SimpleLogger is used, so the termcolor feature for TermLogger is left out.
+simplelog = { version = "0.12", default-features = false, features = ["local-offset"] }
 rand = "0.10"
-# sysinfo 0.38 requires Rust 1.88, which is higher than the rust-version of the
-# library. Only the 'record_application' example uses it, so building the library
-# still works with 1.85. Building the examples and running the tests needs 1.88.
-sysinfo = "0.38"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"

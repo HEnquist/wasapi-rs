@@ -13,13 +13,6 @@ use wasapi::*;
 extern crate log;
 use simplelog::*;
 
-// A selection of the possible errors
-use windows::Win32::Foundation::E_INVALIDARG;
-use windows::Win32::Media::Audio::{
-    AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_DEVICE_IN_USE, AUDCLNT_E_ENDPOINT_CREATE_FAILED,
-    AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED, AUDCLNT_E_UNSUPPORTED_FORMAT,
-};
-
 // Main loop
 fn main() {
     let _ = SimpleLogger::init(
