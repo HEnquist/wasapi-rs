@@ -359,6 +359,7 @@ pub fn calculate_period_100ns(frames: i64, samplerate: i64) -> i64 {
 }
 
 /// Struct wrapping an [IMMDeviceEnumerator](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdeviceenumerator)
+#[derive(Debug)]
 pub struct DeviceEnumerator {
     enumerator: IMMDeviceEnumerator,
 }
@@ -447,6 +448,7 @@ impl DeviceEnumerator {
 }
 
 /// Struct for keeping track of the registered device notifications.
+#[derive(Debug)]
 pub struct DeviceEventRegistration {
     client: IMMNotificationClient,
     enumerator: IMMDeviceEnumerator,
@@ -462,6 +464,7 @@ impl Drop for DeviceEventRegistration {
 }
 
 /// Struct wrapping an [IMMDeviceCollection](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevicecollection).
+#[derive(Debug)]
 pub struct DeviceCollection {
     collection: IMMDeviceCollection,
     direction: Direction,
@@ -504,6 +507,7 @@ impl DeviceCollection {
 }
 
 /// Iterator for [DeviceCollection]
+#[derive(Debug)]
 pub struct DeviceCollectionIter<'a> {
     collection: &'a DeviceCollection,
     index: u32,
@@ -537,6 +541,7 @@ impl<'a> IntoIterator for &'a DeviceCollection {
 }
 
 /// Struct wrapping an [IMMDevice](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevice).
+#[derive(Debug)]
 pub struct Device {
     device: IMMDevice,
     direction: Direction,
@@ -742,6 +747,7 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
 }
 
 /// Struct wrapping an [IAudioClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclient).
+#[derive(Debug)]
 pub struct AudioClient {
     client: IAudioClient,
     direction: Direction,
@@ -1723,6 +1729,7 @@ impl Default for AudioClientProperties {
 }
 
 /// Struct wrapping an [IAudioSessionManager](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionmanager)
+#[derive(Debug)]
 pub struct AudioSessionManager {
     session_manager: IAudioSessionManager,
 }
@@ -1738,6 +1745,7 @@ impl AudioSessionManager {
 }
 
 /// Struct wrapping an [IAudioSessionEnumerator](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionenumerator)
+#[derive(Debug)]
 pub struct AudioSessionEnumerator {
     session_enumerator: IAudioSessionEnumerator,
 }
@@ -1846,6 +1854,7 @@ impl From<StreamOption> for AUDCLNT_STREAMOPTIONS {
 }
 
 /// Struct wrapping an [IAudioSessionControl](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessioncontrol).
+#[derive(Debug)]
 pub struct AudioSessionControl {
     control: IAudioSessionControl,
 }
@@ -1985,6 +1994,7 @@ impl AudioSessionControl {
 ///
 /// The peak values are the peaks of the samples that were processed
 /// since the previous call, and are not affected by the volume settings.
+#[derive(Debug)]
 pub struct AudioMeterInformation {
     meter: IAudioMeterInformation,
 }
@@ -2054,6 +2064,7 @@ impl HardwareSupport {
 }
 
 /// Struct for keeping track of the registered notifications.
+#[derive(Debug)]
 pub struct EventRegistration {
     events: IAudioSessionEvents,
     control: IAudioSessionControl,
@@ -2069,6 +2080,7 @@ impl Drop for EventRegistration {
 }
 
 /// Struct wrapping an [IAudioClock](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclock).
+#[derive(Debug)]
 pub struct AudioClock {
     clock: IAudioClock,
 }
@@ -2119,6 +2131,7 @@ fn copy_from_deque(dest: &mut [u8], src: &mut VecDeque<u8>) {
 }
 
 /// Struct wrapping an [IAudioRenderClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudiorenderclient).
+#[derive(Debug)]
 pub struct AudioRenderClient {
     client: IAudioRenderClient,
     bytes_per_frame: usize,
@@ -2268,6 +2281,7 @@ impl BufferFlags {
 }
 
 /// Struct wrapping an [IAudioCaptureClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudiocaptureclient).
+#[derive(Debug)]
 pub struct AudioCaptureClient {
     client: IAudioCaptureClient,
     sharemode: Option<ShareMode>,
@@ -2374,6 +2388,7 @@ impl AudioCaptureClient {
 }
 
 /// Struct wrapping a [HANDLE] to an [Event Object](https://docs.microsoft.com/en-us/windows/win32/sync/event-objects).
+#[derive(Debug)]
 pub struct Handle {
     handle: HANDLE,
 }
@@ -2420,6 +2435,7 @@ impl Handle {
 }
 
 // Struct wrapping an [IAudioEffectsManager](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioeffectsmanager).
+#[derive(Debug)]
 pub struct AudioEffectsManager {
     manager: IAudioEffectsManager,
 }
@@ -2454,6 +2470,7 @@ impl AudioEffectsManager {
 }
 
 /// Struct wrapping an [AcousticEchoCancellationControl](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iacousticechocancellationcontrol).
+#[derive(Debug)]
 pub struct AcousticEchoCancellationControl {
     control: IAcousticEchoCancellationControl,
 }
