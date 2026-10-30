@@ -2336,8 +2336,18 @@ impl AudioCaptureClient {
             });
         }
         let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
-        let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
-        data[..len_in_bytes].copy_from_slice(bufferslice);
+        if buffer_info.flags.silent {
+            data[..len_in_bytes].fill(0);
+        } else if buffer_ptr.is_null() {
+            unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
+            return Err(WasapiError::DataLengthTooShort {
+                received: 0,
+                expected: nbr_frames_returned as usize,
+            });
+        } else {
+            let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
+            data[..len_in_bytes].copy_from_slice(bufferslice);
+        }
         if nbr_frames_returned > 0 {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
         }
@@ -2368,11 +2378,21 @@ impl AudioCaptureClient {
             return Ok(buffer_info);
         }
         let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
-        let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
-        // Extending from a slice of a `Copy` type reserves once and then memcpies,
-        // rather than pushing a byte at a time. See [copy_from_deque] for why that
-        // matters on an audio callback thread.
-        data.extend(bufferslice);
+        if buffer_info.flags.silent {
+            data.resize(data.len() + len_in_bytes, 0);
+        } else if buffer_ptr.is_null() {
+            unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
+            return Err(WasapiError::DataLengthTooShort {
+                received: 0,
+                expected: len_in_bytes,
+            });
+        } else {
+            let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
+            // Extending from a slice of a `Copy` type reserves once and then memcpies,
+            // rather than pushing a byte at a time. See [copy_from_deque] for why that
+            // matters on an audio callback thread.
+            data.extend(bufferslice);
+        }
         if nbr_frames_returned > 0 {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned).unwrap() };
         }
