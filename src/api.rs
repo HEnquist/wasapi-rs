@@ -2304,6 +2304,7 @@ impl AudioCaptureClient {
     /// that was read, and the `BufferInfo` describing the buffer that the data was read from.
     /// The slice must be large enough to hold all data.
     /// If it is longer that needed, the unused elements will not be modified.
+    /// Packets flagged as silent are written as zeros, since WASAPI says their data should be ignored.
     pub fn read_from_device(&self, data: &mut [u8]) -> WasapiRes<(u32, BufferInfo)> {
         let data_len_in_frames = data.len() / self.bytes_per_frame;
         if data_len_in_frames == 0 {
@@ -2336,8 +2337,12 @@ impl AudioCaptureClient {
             });
         }
         let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
-        let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
-        data[..len_in_bytes].copy_from_slice(bufferslice);
+        if buffer_info.flags.silent {
+            data[..len_in_bytes].fill(0);
+        } else {
+            let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
+            data[..len_in_bytes].copy_from_slice(bufferslice);
+        }
         if nbr_frames_returned > 0 {
             unsafe { self.client.ReleaseBuffer(nbr_frames_returned)? };
         }
@@ -2347,6 +2352,7 @@ impl AudioCaptureClient {
 
     /// Read raw bytes data from a device into a deque.
     /// Returns the [BufferInfo] describing the buffer that the data was read from.
+    /// Packets flagged as silent are written as zeros, since WASAPI says their data should be ignored.
     pub fn read_from_device_to_deque(&self, data: &mut VecDeque<u8>) -> WasapiRes<BufferInfo> {
         let mut buffer_ptr = ptr::null_mut();
         let mut nbr_frames_returned = 0;
@@ -2368,13 +2374,20 @@ impl AudioCaptureClient {
             return Ok(buffer_info);
         }
         let len_in_bytes = nbr_frames_returned as usize * self.bytes_per_frame;
-        let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
-        // Extending from a slice of a `Copy` type reserves once and then memcpies,
-        // rather than pushing a byte at a time. See [copy_from_deque] for why that
-        // matters on an audio callback thread.
-        data.extend(bufferslice);
-        if nbr_frames_returned > 0 {
-            unsafe { self.client.ReleaseBuffer(nbr_frames_returned).unwrap() };
+        let old_len = data.len();
+        if buffer_info.flags.silent {
+            data.resize(old_len + len_in_bytes, 0);
+        } else {
+            let bufferslice = unsafe { slice::from_raw_parts(buffer_ptr, len_in_bytes) };
+            // Extending from a slice of a `Copy` type reserves once and then memcpies,
+            // rather than pushing a byte at a time. See [copy_from_deque] for why that
+            // matters on an audio callback thread.
+            data.extend(bufferslice);
+        }
+        if let Err(err) = unsafe { self.client.ReleaseBuffer(nbr_frames_returned) } {
+            // Take the packet back out, so that an error always means nothing was read.
+            data.truncate(old_len);
+            return Err(err.into());
         }
         trace!("read {nbr_frames_returned} frames");
         Ok(buffer_info)
