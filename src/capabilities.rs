@@ -2,8 +2,8 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use crate::bindings::WAVE_FORMAT_EXTENSIBLE;
 use crate::{AudioClient, DataRange, Device, SampleType, WasapiRes, WaveFormat, covered_by_any};
-use windows::Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE;
 
 /// The channel count ceiling that a scan uses for a device
 /// that declares no [DataRange]s of its own.
@@ -321,7 +321,7 @@ impl<C: FormatChecker> Probing<'_, C> {
                 continue;
             };
             trace!("Supported {samplerate} Hz, {channels} ch, format {candidate:?}");
-            if accepted.wave_fmt.Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE as u16 {
+            if accepted.wave_fmt.Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE {
                 let mask = accepted.get_dwchannelmask();
                 if self.channel_masks.insert(channels, mask) != Some(mask) {
                     debug!("Channel count {channels} will use channel mask {mask:#010x}");
@@ -570,7 +570,7 @@ mod tests {
             max_bits_per_sample: bits.1,
             min_samplerate: rates.0,
             max_samplerate: rates.1,
-            subformat: windows::Win32::Media::KernelStreaming::KSDATAFORMAT_SUBTYPE_PCM,
+            subformat: crate::bindings::KSDATAFORMAT_SUBTYPE_PCM,
         }
     }
 

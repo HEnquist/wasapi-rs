@@ -1,0 +1,3 @@
+disallowed-methods = [
+    { path = "wasapi::bindings::generated::IAudioMeterInformation::GetChannelsPeakValues", reason = "the generated wrapper only has room for one value, use GetChannelsPeakValuesSlice" },
+]

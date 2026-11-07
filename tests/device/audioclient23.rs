@@ -25,7 +25,6 @@
 
 use crate::support;
 use wasapi::*;
-use windows::Win32::Foundation::E_NOINTERFACE;
 
 /// A fresh client on the cable's render endpoint, with the engine's own format.
 ///

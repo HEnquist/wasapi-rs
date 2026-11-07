@@ -26,9 +26,10 @@ The following is a selection of the functionality currently available in the lib
 - Reading the capabilities that a driver declares for a device
 - Wrapping an `IAudioClient` that was activated elsewhere, for example through WinRT device
   enumeration
-- Raw access to the wrapped COM interfaces through `Device::as_immdevice`,
-  `AudioClient::as_iaudioclient` and `Handle::as_handle`, for reaching what the library
-  does not cover
+- Raw access to the wrapped COM interfaces through `Device::as_raw`, `AudioClient::as_raw`
+  and `Handle::as_raw_handle`,
+  and to formats through `WaveFormat::as_raw`,
+  for reaching what the library does not cover
 - …and additional features beyond this list
 
 The sharing modes (shared and exclusive) and timing modes (event-driven and polled) are described in
@@ -55,8 +56,13 @@ The [windows](https://crates.io/crates/windows) crate exposes all of WinRT,
 so enumerate with the `MediaDevice` and `DeviceInformation` classes,
 pass the device path to `ActivateAudioInterfaceAsync`,
 and wrap the interface that comes back with
-[`AudioClient::from_iaudioclient`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.from_iaudioclient).
+[`AudioClient::from_raw`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.from_raw).
 The device tests in `tests/device/activation.rs` walk the whole path, completion handler included.
+
+The raw accessors take and return plain COM interface pointers,
+rather than the types of a binding crate.
+This library generates its own bindings and does not depend on the `windows` crate,
+so a caller can use any version of it, or any other bindings, on its side of the pointer.
 
 ## Tests
 
@@ -82,10 +88,8 @@ Set `WASAPI_REQUIRE_DEVICE` to turn those skips into failures, which is what CI 
 
 ## Minimum supported Rust version
 
-The library requires Rust 1.85, and uses edition 2024.
-
-The `record_application` example needs Rust 1.88, since it depends on `sysinfo`.
-This also applies to `cargo test`, which builds all examples.
+The library requires Rust 1.95, and uses edition 2024.
+The minimum is set by the `windows-core` crate.
 
 ## Included examples
 
@@ -101,7 +105,7 @@ This also applies to `cargo test`, which builds all examples.
 | `record`                   | Records audio from the default device, and saves the raw samples to a file.                            |
 | `devices`                  | Lists all available audio devices and displays the default devices.                                    |
 | `processes`                | Lists all audio devices and the processes that are using them, with the peak level of each session.    |
-| `record_application`       | Records audio from a single application, and saves the raw samples to a file. Needs Rust 1.88.         |
+| `record_application`       | Records audio from a single application, and saves the raw samples to a file.                          |
 | `aec`                      | Captures audio with Acoustic Echo Cancellation (AEC) enabled and saves the raw data to a file.         |
 | `device_notifications`     | Listens for devices being added, removed or changed, and for changes of the default device.            |
 | `capabilities`             | Lists the formats a single output device supports in exclusive mode.                                   |

@@ -192,3 +192,77 @@ fn client_properties_accumulate_options() {
         "setting the same option twice changed the result"
     );
 }
+
+/// A null raw pointer is refused with `E_POINTER` rather than dereferenced.
+///
+/// The check is the crate's own and happens before anything reaches Windows,
+/// so it needs no device and no COM.
+#[test]
+fn null_raw_pointers_are_refused() {
+    let is_e_pointer =
+        |error: &WasapiError| matches!(error, WasapiError::Windows(e) if e.code() == E_POINTER);
+
+    let device = unsafe { Device::from_raw(std::ptr::null_mut()) };
+    assert!(
+        matches!(&device, Err(e) if is_e_pointer(e)),
+        "Device::from_raw(null) did not give E_POINTER"
+    );
+
+    let client = unsafe { AudioClient::from_raw(std::ptr::null_mut(), Direction::Render) };
+    assert!(
+        matches!(&client, Err(e) if is_e_pointer(e)),
+        "AudioClient::from_raw(null) did not give E_POINTER"
+    );
+}
+
+/// The exported subformat constants are the ones the crate maps to sample types.
+///
+/// A caller compares a raw subformat against these, so they have to agree with
+/// what [DataRange::sample_type] does with the same GUID.
+#[test]
+fn subformat_constants_match_sample_types() {
+    let range = |subformat| DataRange {
+        max_channels: 2,
+        min_bits_per_sample: 16,
+        max_bits_per_sample: 32,
+        min_samplerate: 44100,
+        max_samplerate: 48000,
+        subformat,
+    };
+    assert_eq!(
+        range(KSDATAFORMAT_SUBTYPE_PCM).sample_type(),
+        Some(SampleType::Int)
+    );
+    assert_eq!(
+        range(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT).sample_type(),
+        Some(SampleType::Float)
+    );
+    assert_eq!(range(GUID::zeroed()).sample_type(), None);
+}
+
+/// A format read back through its own raw pointer is the same format.
+///
+/// Covers both layouts behind the pointer: the extensible one from [WaveFormat::new],
+/// and the plain `WAVEFORMATEX` one from [WaveFormat::to_waveformatex].
+#[test]
+fn wave_format_round_trips_through_raw() {
+    let extensible = WaveFormat::new(24, 20, SampleType::Int, 96000, 6, Some(0x3f));
+    let plain = WaveFormat::new(16, 16, SampleType::Int, 44100, 2, None)
+        .to_waveformatex()
+        .unwrap();
+    for format in [extensible, plain] {
+        let again = unsafe { WaveFormat::parse(format.as_raw()) }.unwrap();
+        assert_eq!(again.get_bitspersample(), format.get_bitspersample());
+        assert_eq!(
+            again.get_validbitspersample(),
+            format.get_validbitspersample()
+        );
+        assert_eq!(again.get_samplespersec(), format.get_samplespersec());
+        assert_eq!(again.get_nchannels(), format.get_nchannels());
+        assert_eq!(again.get_dwchannelmask(), format.get_dwchannelmask());
+        assert_eq!(
+            again.get_subformat().unwrap(),
+            format.get_subformat().unwrap()
+        );
+    }
+}
