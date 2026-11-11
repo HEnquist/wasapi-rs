@@ -19,6 +19,7 @@ The following is a selection of the functionality currently available in the lib
 - Shared and exclusive modes
 - Event-driven and polled buffering
 - Loopback capture
+- Streams on the default device that follow it when the default changes (automatic stream routing)
 - Notifications for volume change, device disconnect etc
 - Notifications when devices are added or removed, or when the default device changes
 - Named audio sessions: one volume mixer entry per stream, with a display name and icon of its own
@@ -94,6 +95,7 @@ This also applies to `cargo test`, which builds all examples.
 | `playsine`                 | Plays a sine wave in shared mode on the default output device.                                         |
 | `playsine_events`          | Similar to `playsine` but also listens to notifications.                                               |
 | `playsine_poll`            | Similar to `playsine` but uses polling instead of event driven timing mode.                            |
+| `playsine_autorouted`      | Plays a sine wave on the default output device, and follows it when the default device changes.        |
 | `named_sessions`           | Plays two sine waves, each in its own audio session with its own name in the volume mixer.             |
 | `playnoise_exclusive`      | Plays white noise in exclusive mode on the default output device. Shows how to handle HRESULT errors.  |
 | `playnoise_exclusive_poll` | Similar to `playnoise_exclusive` but uses polling instead of event driven timing mode.                 |

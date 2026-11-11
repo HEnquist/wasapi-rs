@@ -17,19 +17,19 @@ use windows::Win32::Media::Audio::{
     AudioCategory_FarFieldSpeech, AudioCategory_ForegroundOnlyMedia, AudioCategory_GameChat,
     AudioCategory_GameEffects, AudioCategory_GameMedia, AudioCategory_Media, AudioCategory_Movie,
     AudioCategory_Other, AudioCategory_SoundEffects, AudioCategory_Speech,
-    AudioCategory_UniformSpeech, AudioCategory_VoiceTyping, EDataFlow,
-    ENDPOINT_HARDWARE_SUPPORT_METER, ENDPOINT_HARDWARE_SUPPORT_MUTE,
-    ENDPOINT_HARDWARE_SUPPORT_VOLUME, ERole, IAcousticEchoCancellationControl,
-    IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
-    IActivateAudioInterfaceCompletionHandler_Impl, IAudioClient2, IAudioClient3,
-    IAudioEffectsManager, IAudioSessionControl2, IAudioSessionEnumerator, IAudioSessionManager,
-    IAudioSessionManager2, IMMEndpoint, PKEY_AudioEngine_DeviceFormat,
-    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    AudioCategory_UniformSpeech, AudioCategory_VoiceTyping, DEVINTERFACE_AUDIO_CAPTURE,
+    DEVINTERFACE_AUDIO_RENDER, EDataFlow, ENDPOINT_HARDWARE_SUPPORT_METER,
+    ENDPOINT_HARDWARE_SUPPORT_MUTE, ENDPOINT_HARDWARE_SUPPORT_VOLUME, ERole,
+    IAcousticEchoCancellationControl, IActivateAudioInterfaceAsyncOperation,
+    IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
+    IAudioClient2, IAudioClient3, IAudioEffectsManager, IAudioSessionControl2,
+    IAudioSessionEnumerator, IAudioSessionManager, IAudioSessionManager2, IMMEndpoint,
+    PKEY_AudioEngine_DeviceFormat, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
 };
 use windows::Win32::Media::KernelStreaming::AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION;
-use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::System::Com::StructuredStorage::PropVariantClear;
+use windows::Win32::System::Com::{CoTaskMemFree, StringFromIID};
 use windows::Win32::System::Variant::VT_BLOB;
 use windows::{
     Win32::Devices::FunctionDiscovery::{
@@ -385,7 +385,12 @@ impl DeviceEnumerator {
         })
     }
 
-    /// Get the default playback or capture device for the console role
+    /// Get the default playback or capture device for the console role.
+    ///
+    /// This is the endpoint that is the default when it is called,
+    /// and a stream opened on it stays there when the default changes.
+    /// For a stream that follows the default device,
+    /// see [AudioClient::new_default_device_client].
     pub fn get_default_device(&self, direction: Direction) -> WasapiRes<Device> {
         self.get_default_device_for_role(direction, Role::Console)
     }
@@ -569,7 +574,18 @@ impl Device {
         Ok(Device { device, direction })
     }
 
-    /// Get an [IAudioClient] from an [IMMDevice]
+    /// Get an [IAudioClient] from an [IMMDevice].
+    ///
+    /// The client is tied to this endpoint.
+    /// This matters when the [Device] is the default device from
+    /// [DeviceEnumerator::get_default_device].
+    /// A stream opened this way does __not__ follow the default device.
+    /// When the user picks another default device, the stream stays on the old one,
+    /// or fails if that endpoint goes away.
+    /// This is usually not what an application that plays to or records from
+    /// "the default device" wants.
+    /// Use [AudioClient::new_default_device_client] for that,
+    /// and use this method when the stream should stay on one specific endpoint.
     pub fn get_iaudioclient(&self) -> WasapiRes<AudioClient> {
         let audio_client = unsafe { self.device.Activate::<IAudioClient>(CLSCTX_ALL, None)? };
         Ok(AudioClient {
@@ -746,6 +762,37 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
     }
 }
 
+/// Activate an [IAudioClient] with `ActivateAudioInterfaceAsync`, and block until done.
+///
+/// # Safety
+///
+/// `params` must be `None`, or point to a valid `PROPVARIANT`
+/// that, together with whatever it points to, stays alive until this returns.
+unsafe fn activate_iaudioclient(
+    path: PCWSTR,
+    params: Option<*const PROPVARIANT>,
+) -> WasapiRes<IAudioClient> {
+    let setup = Arc::new((Mutex::new(false), Condvar::new()));
+    let callback: IActivateAudioInterfaceCompletionHandler = Handler::new(setup.clone()).into();
+
+    let operation =
+        unsafe { ActivateAudioInterfaceAsync(path, &IAudioClient::IID, params, &callback)? };
+
+    let (lock, cvar) = &*setup;
+    let mut completed = lock.lock().unwrap();
+    while !*completed {
+        completed = cvar.wait(completed).unwrap();
+    }
+    drop(completed);
+
+    let mut audio_client: Option<IUnknown> = Default::default();
+    let mut result: HRESULT = Default::default();
+    unsafe { operation.GetActivateResult(&mut result, &mut audio_client)? };
+    result.ok()?;
+    // Always safe to unwrap once the result above is checked.
+    Ok(audio_client.unwrap().cast()?)
+}
+
 /// Struct wrapping an [IAudioClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclient).
 #[derive(Debug)]
 pub struct AudioClient {
@@ -849,36 +896,8 @@ impl AudioClient {
             let pinned_prop = Pin::new(activation_prop.deref());
             let activation_params = Some(std::ptr::from_ref(pinned_prop.get_ref()));
 
-            // Create completion handler
-            let setup = Arc::new((Mutex::new(false), Condvar::new()));
-            let callback: IActivateAudioInterfaceCompletionHandler =
-                Handler::new(setup.clone()).into();
-
-            // Activate audio interface
-            let operation = ActivateAudioInterfaceAsync(
-                VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
-                &IAudioClient::IID,
-                activation_params,
-                &callback,
-            )?;
-
-            // Wait for completion
-            let (lock, cvar) = &*setup;
-            let mut completed = lock.lock().unwrap();
-            while !*completed {
-                completed = cvar.wait(completed).unwrap();
-            }
-            drop(completed);
-
-            // Get audio client and result
-            let mut audio_client: Option<IUnknown> = Default::default();
-            let mut result: HRESULT = Default::default();
-            operation.GetActivateResult(&mut result, &mut audio_client)?;
-
-            // Ensure successful activation
-            result.ok()?;
-            // always safe to unwrap if result above is checked first
-            let audio_client: IAudioClient = audio_client.unwrap().cast()?;
+            let audio_client =
+                activate_iaudioclient(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, activation_params)?;
 
             Ok(AudioClient {
                 client: audio_client,
@@ -888,6 +907,72 @@ impl AudioClient {
                 bytes_per_frame: None,
             })
         }
+    }
+
+    /// Creates an [AudioClient] on the default device of a direction,
+    /// with [automatic stream routing](https://learn.microsoft.com/en-us/windows/win32/coreaudio/automatic-stream-routing).
+    ///
+    /// A client made this way is not tied to one endpoint.
+    /// When the default device changes, Windows moves the stream over to the new one.
+    /// This differs from a client from [DeviceEnumerator::get_default_device],
+    /// which is opened on the endpoint that is the default at that moment,
+    /// and stays on that endpoint when the default changes.
+    /// It needs Windows 10 version 1607 or later.
+    ///
+    /// The client is activated with
+    /// [ActivateAudioInterfaceAsync](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync),
+    /// using the `DEVINTERFACE_AUDIO_RENDER` or `DEVINTERFACE_AUDIO_CAPTURE` interface class as the device path.
+    /// The calling thread must have COM initialised,
+    /// see [initialize_mta](crate::initialize_mta) and [initialize_sta](crate::initialize_sta).
+    ///
+    /// The `direction` selects the default render or capture device,
+    /// and is what [AudioClient::get_direction] reports until the client is initialised.
+    /// A loopback capture of the default render device is set up by passing [Direction::Render] here,
+    /// and then [Direction::Capture] to [AudioClient::initialize_client],
+    /// as for a render device from the [DeviceCollection].
+    ///
+    /// The Microsoft documentation does not say which device role the stream follows,
+    /// or what a running stream sees when it is moved to a device with a different mix format.
+    ///
+    /// # Exclusive mode
+    /// Exclusive mode does not work on a client made this way.
+    /// [AudioClient::is_supported] and [AudioClient::is_supported_exclusive_with_quirks]
+    /// accept an exclusive mode format exactly as they would on the device itself,
+    /// but [AudioClient::initialize_client] then fails with `E_INVALIDARG`,
+    /// for both event driven and polled exclusive mode.
+    /// This is not documented by Microsoft, and the error is passed through as it is.
+    /// Use a [Device] from the [DeviceEnumerator] for exclusive mode.
+    ///
+    /// # Non-functional methods
+    /// There is no [Device] behind a client made this way,
+    /// so everything that needs one is unavailable.
+    /// This includes the [CapabilityProbe](crate::CapabilityProbe),
+    /// the [DataRange](crate::DataRange)s, the device state, and the endpoint properties.
+    ///
+    /// # Example
+    /// Marked `no_run` because it needs a running audio service, which a build
+    /// machine may not have. The behaviour is covered by the device backed tests.
+    /// ```no_run
+    /// use wasapi::{AudioClient, Direction, StreamMode, initialize_mta};
+    ///
+    /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
+    /// let mut audio_client = AudioClient::new_default_device_client(Direction::Render).unwrap();
+    /// let format = audio_client.get_mixformat().unwrap();
+    /// let (default_period, _min_period) = audio_client.get_device_period().unwrap();
+    /// let mode = StreamMode::EventsShared {
+    ///     autoconvert: true,
+    ///     buffer_duration_hns: default_period,
+    /// };
+    /// audio_client.initialize_client(&format, Direction::Render, mode, None).unwrap();
+    /// ```
+    pub fn new_default_device_client(direction: Direction) -> WasapiRes<Self> {
+        let class = match direction {
+            Direction::Render => DEVINTERFACE_AUDIO_RENDER,
+            Direction::Capture => DEVINTERFACE_AUDIO_CAPTURE,
+        };
+        let path = HSTRING::from(take_pwstr(unsafe { StringFromIID(&class)? })?);
+        let client = unsafe { activate_iaudioclient(PCWSTR(path.as_ptr()), None)? };
+        Ok(AudioClient::from_iaudioclient(client, direction))
     }
 
     /// Creates an [AudioClient] from an [IAudioClient] that has already been activated.
