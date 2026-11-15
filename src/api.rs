@@ -385,17 +385,20 @@ impl DeviceEnumerator {
         })
     }
 
-    /// Get the default playback or capture device for the console role.
+    /// Get the current default playback or capture device for the console role.
     ///
-    /// This is the endpoint that is the default when it is called,
-    /// and a stream opened on it stays there when the default changes.
+    /// A stream opened on this device does __not__ move to another device
+    /// if the default is changed.
     /// For a stream that follows the default device,
     /// see [AudioClient::new_default_device_client].
     pub fn get_default_device(&self, direction: Direction) -> WasapiRes<Device> {
         self.get_default_device_for_role(direction, Role::Console)
     }
 
-    /// Get the default playback or capture device for a specific role
+    /// Get the current default playback or capture device for a specific role.
+    ///
+    /// As for [DeviceEnumerator::get_default_device], a stream opened on this device
+    /// does __not__ move to another device if the default is changed.
     pub fn get_default_device_for_role(
         &self,
         direction: Direction,
@@ -911,13 +914,13 @@ impl AudioClient {
 
     /// Creates an [AudioClient] on the default device of a direction,
     /// with [automatic stream routing](https://learn.microsoft.com/en-us/windows/win32/coreaudio/automatic-stream-routing).
+    /// This needs Windows 10 version 1607 or later.
     ///
     /// A client made this way is not tied to one endpoint.
     /// When the default device changes, Windows moves the stream over to the new one.
-    /// This differs from a client from [DeviceEnumerator::get_default_device],
-    /// which is opened on the endpoint that is the default at that moment,
-    /// and stays on that endpoint when the default changes.
-    /// It needs Windows 10 version 1607 or later.
+    /// This differs from a client from [DeviceEnumerator::get_default_device]
+    /// (that one is opened on the current default device,
+    /// and its stream does __not__ move to another device if the default is changed).
     ///
     /// The client is activated with
     /// [ActivateAudioInterfaceAsync](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync),
