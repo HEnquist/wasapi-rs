@@ -1,6 +1,11 @@
-// Wrapping an IAudioClient that was activated outside this crate.
+// Clients activated through `ActivateAudioInterfaceAsync` rather than an `IMMDevice`.
 //
-// This covers `AudioClient::from_iaudioclient`, the escape hatch for finding a device
+// The tests at the end cover `AudioClient::new_default_device_client`, which activates
+// the default device with automatic stream routing. They run on whatever the default
+// devices are, which is not necessarily the cable, but they still take the fixture so
+// that they are serialised with the rest of the suite.
+//
+// The rest covers `AudioClient::from_iaudioclient`, the escape hatch for finding a device
 // by some other means than the `DeviceCollection`, for instance through the WinRT
 // `MediaDevice` and `DeviceInformation` classes.
 //
@@ -14,6 +19,7 @@
 use crate::support;
 use std::sync::{Arc, Condvar, Mutex};
 use wasapi::*;
+use windows::Win32::Foundation::E_INVALIDARG;
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, DEVINTERFACE_AUDIO_CAPTURE, DEVINTERFACE_AUDIO_RENDER,
     IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
@@ -150,4 +156,108 @@ fn activated_client_reports_its_state() {
     assert_eq!(client.get_direction(), Direction::Capture);
     assert_eq!(client.get_sharemode(), Some(ShareMode::Shared));
     assert_eq!(client.get_timing_mode(), Some(TimingMode::Polling));
+}
+
+/// The default device of a direction, or `None` after a skip note when there is none.
+fn default_device(fixture: &support::Fixture, direction: Direction) -> Option<Device> {
+    match fixture.enumerator.get_default_device(direction) {
+        Ok(device) => {
+            println!("default {}", support::describe(&device));
+            Some(device)
+        }
+        Err(e) => {
+            support::skip(&format!("no default {direction:?} device: {e}"));
+            None
+        }
+    }
+}
+
+/// An auto-routed client activates, reports the direction it was given, and streams
+/// in shared mode in both directions.
+#[test]
+fn default_device_client_streams() {
+    let Some(fixture) = support::fixture() else {
+        return;
+    };
+    for direction in [Direction::Render, Direction::Capture] {
+        if default_device(&fixture, direction).is_none() {
+            continue;
+        }
+        let mut client = AudioClient::new_default_device_client(direction)
+            .expect("new_default_device_client failed");
+        assert_eq!(client.get_direction(), direction);
+        assert_eq!(client.get_sharemode(), None);
+        assert_eq!(client.get_timing_mode(), None);
+
+        let format = client.get_mixformat().unwrap();
+        let (def_period, _min_period) = client.get_device_period().unwrap();
+        let mode = support::mode_for(
+            &client,
+            ShareMode::Shared,
+            TimingMode::Events,
+            def_period,
+            &format,
+        )
+        .unwrap();
+        client
+            .initialize_client(&format, direction, mode, None)
+            .unwrap();
+
+        let what = format!("auto-routed {direction:?}");
+        let run = match direction {
+            Direction::Render => support::render_for(&client, &format, support::RUN_TIME),
+            Direction::Capture => support::capture_for(&client, &format, support::RUN_TIME),
+        }
+        .unwrap();
+        support::assert_rate(&run, &format, &what);
+    }
+}
+
+/// Exclusive mode fails as the documentation of `new_default_device_client` says.
+///
+/// The format queries agree with those on the device itself, and then `Initialize`
+/// fails with `E_INVALIDARG`. This is Windows behaviour, not the wrapper's, and the
+/// test is here to notice if the documented claim goes stale.
+#[test]
+fn default_device_client_rejects_exclusive() {
+    let Some(fixture) = support::fixture() else {
+        return;
+    };
+    for direction in [Direction::Render, Direction::Capture] {
+        let Some(device) = default_device(&fixture, direction) else {
+            continue;
+        };
+        let device_format = device.get_device_format().unwrap();
+        let on_device = device
+            .get_iaudioclient()
+            .unwrap()
+            .is_supported_exclusive_with_quirks(&device_format);
+        let mut client = AudioClient::new_default_device_client(direction).unwrap();
+        let auto_routed = client.is_supported_exclusive_with_quirks(&device_format);
+        assert_eq!(
+            auto_routed.is_ok(),
+            on_device.is_ok(),
+            "{direction:?}: the device gave {on_device:?}, the auto-routed client {auto_routed:?}"
+        );
+        let Ok(format) = auto_routed else {
+            println!("{direction:?}: the device takes no exclusive format, nothing more to check");
+            continue;
+        };
+
+        for timing in [TimingMode::Events, TimingMode::Polling] {
+            let (def_period, _min_period) = client.get_device_period().unwrap();
+            let mode =
+                support::mode_for(&client, ShareMode::Exclusive, timing, def_period, &format)
+                    .unwrap();
+            let error = client
+                .initialize_client(&format, direction, mode, None)
+                .expect_err("exclusive mode initialised on an auto-routed client");
+            assert!(
+                support::is_hresult(&error, E_INVALIDARG),
+                "{direction:?} {timing:?}: gave {error}, expected E_INVALIDARG"
+            );
+            // A failed Initialize leaves the client invalidated, so take a fresh one.
+            client = AudioClient::new_default_device_client(direction).unwrap();
+        }
+    }
 }
