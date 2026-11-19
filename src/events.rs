@@ -158,7 +158,7 @@ impl EventCallbacks {
 
 /// Reason for session disconnect, an enum representing the `DisconnectReasonXxx` values of the
 /// [AudioSessionDisconnectReason enum](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nf-audiopolicy-iaudiosessionevents-onsessiondisconnected)
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DisconnectReason {
     /// The user removed the audio endpoint device.
     DeviceRemoval,

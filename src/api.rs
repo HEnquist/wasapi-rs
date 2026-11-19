@@ -85,7 +85,7 @@ pub fn deinitialize() {
 }
 
 /// Audio direction, playback or capture.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Direction {
     Render,
     Capture,
@@ -136,7 +136,7 @@ impl From<Direction> for EDataFlow {
 
 /// Wrapper for [ERole](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/ne-mmdeviceapi-erole).
 /// Console is the role used by most applications
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Role {
     Console,
     Multimedia,
@@ -196,7 +196,7 @@ impl From<Role> for ERole {
 /// See the documentation of [AudioClient::initialize_client()]
 /// for a description of the sharing and timing modes,
 /// and how to choose between them.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum StreamMode {
     /// Shared mode using polling for timing.
     /// The parameters that can be set are the device buffer duration (in units on 100 ns)
@@ -229,7 +229,7 @@ pub enum StreamMode {
 /// Sharemode for device.
 /// See the documentation of [AudioClient::initialize_client()]
 /// for a description of the two sharing modes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ShareMode {
     Shared,
     Exclusive,
@@ -238,7 +238,7 @@ pub enum ShareMode {
 /// Timing mode for device.
 /// See the documentation of [AudioClient::initialize_client()]
 /// for a description of the two timing modes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum TimingMode {
     Polling,
     Events,
@@ -254,7 +254,7 @@ impl fmt::Display for ShareMode {
 }
 
 /// Sample type, float or integer
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum SampleType {
     Float,
     Int,
@@ -293,7 +293,7 @@ impl fmt::Display for SessionState {
 
 /// Possible states for an [IMMDevice], an enum representing the
 /// [DEVICE_STATE_XXX constants](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-state-xxx-constants)
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum DeviceState {
     /// The audio endpoint device is active. That is, the audio adapter that connects to the
     /// endpoint device is present and enabled. In addition, if the endpoint device plugs int
@@ -1746,7 +1746,7 @@ impl AudioClient {
 }
 
 /// The values reported by [AudioClient::get_shared_mode_engine_period].
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SharedModeEnginePeriod {
     /// The default period, in frames.
     pub default: u32,
@@ -1856,7 +1856,7 @@ impl AudioSessionEnumerator {
 ///
 /// Wrapper for
 /// [AUDIO_STREAM_CATEGORY](https://learn.microsoft.com/en-us/windows/win32/api/audiosessiontypes/ne-audiosessiontypes-audio_stream_category).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StreamCategory {
     /// Other audio stream.
     Other,
@@ -1919,7 +1919,7 @@ impl From<StreamCategory> for AUDIO_STREAM_CATEGORY {
 ///
 /// Wrapper for
 /// [AUDCLNT_STREAMOPTIONS](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-audclnt_streamoptions).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StreamOption {
     /// The audio stream is a 'raw' stream that bypasses all signal processing except for endpoint specific, always-on
     /// processing in the Audio Processing Object (APO), driver, and hardware.
