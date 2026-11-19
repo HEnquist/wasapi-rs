@@ -271,7 +271,7 @@ impl fmt::Display for SampleType {
 
 /// Possible states for an [AudioSessionControl], an enum representing the
 /// [AudioSessionStateXxx constants](https://learn.microsoft.com/en-us/windows/win32/api/audiosessiontypes/ne-audiosessiontypes-audiosessionstate)
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum SessionState {
     /// The audio session is active. (At least one of the streams in the session is running.)
     Active,
@@ -2130,7 +2130,7 @@ impl AudioMeterInformation {
 
 /// Struct representing the [ENDPOINT_HARDWARE_SUPPORT_XXX constants](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-hardware-support-xxx-constants),
 /// describing which functions an audio endpoint device implements in hardware.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct HardwareSupport {
     /// ENDPOINT_HARDWARE_SUPPORT_VOLUME
     pub volume: bool,
@@ -2293,7 +2293,7 @@ impl AudioRenderClient {
 }
 
 /// Struct representing information on data read from an audio client buffer.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BufferInfo {
     /// Decoded audio client flags.
     pub flags: BufferFlags,
@@ -2323,7 +2323,7 @@ impl BufferInfo {
 }
 
 /// Struct representing the [ _AUDCLNT_BUFFERFLAGS enum values](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-_audclnt_bufferflags).
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct BufferFlags {
     /// AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY
     pub data_discontinuity: bool,
