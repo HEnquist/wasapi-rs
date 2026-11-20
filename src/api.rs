@@ -978,14 +978,92 @@ impl AudioClient {
         Ok(AudioClient::from_iaudioclient(client, direction))
     }
 
+    /// Creates an [AudioClient] on the device with the given device interface path.
+    ///
+    /// This is for devices found by some other means than the [DeviceCollection] of this crate,
+    /// most commonly the WinRT `DeviceInformation` and `MediaDevice` classes.
+    /// The `Id` of a `DeviceInformation` from `MediaDevice.GetAudioRenderSelector()` or
+    /// `MediaDevice.GetAudioCaptureSelector()` is such a path,
+    /// and so are the ids from `MediaDevice.GetDefaultAudioRenderId()` and
+    /// `MediaDevice.GetDefaultAudioCaptureId()`.
+    /// The client is activated with
+    /// [ActivateAudioInterfaceAsync](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync),
+    /// which this method calls and waits for,
+    /// so the caller needs no completion handler and no bindings for the activation.
+    ///
+    /// A path has the form `\\?\SWD#MMDEVAPI#{endpoint id}#{interface class}`,
+    /// where the endpoint id is what [Device::get_id] returns for the same device,
+    /// and the interface class is `DEVINTERFACE_AUDIO_RENDER` or `DEVINTERFACE_AUDIO_CAPTURE`.
+    /// The bare endpoint id is __not__ a path,
+    /// and activation fails with `ERROR_FILE_NOT_FOUND` if it is passed instead.
+    ///
+    /// The client is tied to that one endpoint.
+    /// A path from `GetDefaultAudioRenderId()` names whichever device was the default at the time,
+    /// and a stream on it does not follow later changes of the default.
+    /// Use [AudioClient::new_default_device_client] for a stream that does.
+    ///
+    /// Exclusive mode works on a client made this way,
+    /// unlike on one from [AudioClient::new_default_device_client].
+    ///
+    /// The `direction` is the direction of the endpoint, as for [AudioClient::from_iaudioclient].
+    /// A loopback capture of a render device is set up by passing [Direction::Render] here,
+    /// and then [Direction::Capture] to [AudioClient::initialize_client].
+    ///
+    /// The calling thread must have COM initialised,
+    /// see [initialize_mta](crate::initialize_mta) and [initialize_sta](crate::initialize_sta).
+    /// A thread that has not initialised COM is in the
+    /// [implicit MTA](https://learn.microsoft.com/en-us/windows/win32/com/multithreaded-apartments)
+    /// when some other thread of the process already has the MTA open,
+    /// which is usually the case once the WinRT classes have been used,
+    /// and then the activation works without initialising COM on that thread.
+    ///
+    /// A path containing a nul character is rejected with `E_INVALIDARG`,
+    /// since it would otherwise be cut short at the nul.
+    ///
+    /// # Non-functional methods
+    /// There is no [Device] behind a client made this way,
+    /// so everything that needs one is unavailable.
+    /// This includes the [CapabilityProbe](crate::CapabilityProbe),
+    /// the [DataRange](crate::DataRange)s, the device state, and the endpoint properties.
+    /// Use the WinRT APIs for those.
+    ///
+    /// # Example
+    /// Marked `no_run` because it needs a running audio service, which a build
+    /// machine may not have. The behaviour is covered by the device backed tests.
+    /// ```no_run
+    /// use wasapi::{AudioClient, Direction, StreamMode, initialize_mta};
+    ///
+    /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
+    /// // From DeviceInformation.Id, for example.
+    /// let path = r"\\?\SWD#MMDEVAPI#{0.0.0.00000000}.{f34f553a-b91d-4484-9455-960340b7cdcd}#{e6327cad-dcec-4949-ae8a-991e976a79d2}";
+    /// let mut audio_client = AudioClient::from_device_path(path, Direction::Render).unwrap();
+    /// let format = audio_client.get_mixformat().unwrap();
+    /// let (default_period, _min_period) = audio_client.get_device_period().unwrap();
+    /// let mode = StreamMode::EventsShared {
+    ///     autoconvert: true,
+    ///     buffer_duration_hns: default_period,
+    /// };
+    /// audio_client.initialize_client(&format, Direction::Render, mode, None).unwrap();
+    /// ```
+    pub fn from_device_path(device_interface_path: &str, direction: Direction) -> WasapiRes<Self> {
+        if device_interface_path.contains('\0') {
+            return Err(windows_core::Error::from(E_INVALIDARG).into());
+        }
+        let path = HSTRING::from(device_interface_path);
+        let client = unsafe { activate_iaudioclient(PCWSTR(path.as_ptr()), None)? };
+        Ok(AudioClient::from_iaudioclient(client, direction))
+    }
+
     /// Creates an [AudioClient] from an [IAudioClient] that has already been activated.
     ///
     /// This is for the cases where the device is found by some other means than the
-    /// [DeviceCollection] of this crate.
-    /// The WinRT `MediaDevice` and `DeviceInformation` classes give a device path
-    /// that can be passed to
-    /// [ActivateAudioInterfaceAsync](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync),
-    /// and the resulting interface can then be wrapped here.
+    /// [DeviceCollection] of this crate,
+    /// and the interface is activated by the caller.
+    /// For a device path from the WinRT `MediaDevice` and `DeviceInformation` classes,
+    /// [AudioClient::from_device_path] does the activation
+    /// and is usually the simpler choice.
+    /// This method is for interfaces activated in some other way,
+    /// for example with activation parameters that this crate does not model.
     /// The streaming code of this crate works the same as for a client from
     /// [Device::get_iaudioclient].
     ///

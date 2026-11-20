@@ -192,3 +192,17 @@ fn client_properties_accumulate_options() {
         "setting the same option twice changed the result"
     );
 }
+
+/// A device interface path with a nul in it is rejected before anything reaches Windows,
+/// rather than being passed on cut short at the nul.
+#[test]
+fn device_interface_path_with_nul_is_rejected() {
+    let path = "\\\\?\\SWD#MMDEVAPI#\0{0.0.0.00000000}";
+    let error = AudioClient::from_device_path(path, Direction::Render)
+        .expect_err("a path with a nul was accepted");
+    assert!(
+        matches!(&error, WasapiError::Windows(e)
+            if e.code() == windows::Win32::Foundation::E_INVALIDARG),
+        "expected E_INVALIDARG, got {error}"
+    );
+}
