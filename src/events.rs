@@ -1,3 +1,4 @@
+use std::fmt;
 use std::slice;
 use std::string::FromUtf16Error;
 use windows::{
@@ -66,6 +67,21 @@ pub struct EventCallbacks {
 impl Default for EventCallbacks {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// The callbacks can't be printed, so this shows which ones are set.
+impl fmt::Debug for EventCallbacks {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EventCallbacks")
+            .field("simple_volume", &self.simple_volume.is_some())
+            .field("channel_volume", &self.channel_volume.is_some())
+            .field("state", &self.state.is_some())
+            .field("disconnected", &self.disconnected.is_some())
+            .field("iconpath", &self.iconpath.is_some())
+            .field("displayname", &self.displayname.is_some())
+            .field("groupingparam", &self.groupingparam.is_some())
+            .finish()
     }
 }
 
@@ -331,6 +347,19 @@ pub struct DeviceEventCallbacks {
 impl Default for DeviceEventCallbacks {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// The callbacks can't be printed, so this shows which ones are set.
+impl fmt::Debug for DeviceEventCallbacks {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DeviceEventCallbacks")
+            .field("device_state", &self.device_state.is_some())
+            .field("device_added", &self.device_added.is_some())
+            .field("device_removed", &self.device_removed.is_some())
+            .field("default_device", &self.default_device.is_some())
+            .field("property_value", &self.property_value.is_some())
+            .finish()
     }
 }
 

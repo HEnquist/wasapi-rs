@@ -549,7 +549,9 @@ impl<'a> IntoIterator for &'a DeviceCollection {
 }
 
 /// Struct wrapping an [IMMDevice](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevice).
-#[derive(Debug)]
+///
+/// Cloning is cheap, it adds a reference to the same COM object.
+#[derive(Clone, Debug)]
 pub struct Device {
     device: IMMDevice,
     direction: Direction,
@@ -2293,7 +2295,8 @@ impl AudioRenderClient {
 }
 
 /// Struct representing information on data read from an audio client buffer.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// The default value is the same as [BufferInfo::none].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub struct BufferInfo {
     /// Decoded audio client flags.
     pub flags: BufferFlags,
@@ -2313,6 +2316,7 @@ impl BufferInfo {
         }
     }
 
+    /// Create a new [BufferInfo] struct with no flags set, and index and timestamp set to zero.
     pub fn none() -> Self {
         Self {
             flags: BufferFlags::none(),
@@ -2323,7 +2327,8 @@ impl BufferInfo {
 }
 
 /// Struct representing the [ _AUDCLNT_BUFFERFLAGS enum values](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-_audclnt_bufferflags).
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+/// The default value is the same as [BufferFlags::none].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub struct BufferFlags {
     /// AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY
     pub data_discontinuity: bool,
