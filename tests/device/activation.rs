@@ -5,21 +5,24 @@
 // devices are, which is not necessarily the cable, but they still take the fixture so
 // that they are serialised with the rest of the suite.
 //
-// The rest covers `AudioClient::from_iaudioclient`, the escape hatch for finding a device
-// by some other means than the `DeviceCollection`, for instance through the WinRT
-// `MediaDevice` and `DeviceInformation` classes.
+// The rest covers the two ways in for a device found by some other means than the
+// `DeviceCollection`, for instance through the WinRT `MediaDevice` and
+// `DeviceInformation` classes: `AudioClient::new_device_interface_client`, which takes
+// the device interface path and activates it, and `AudioClient::from_iaudioclient`,
+// which wraps an interface the caller activated.
 //
 // There is no WinRT here. What those classes hand over is a device interface path for
 // `ActivateAudioInterfaceAsync`, and that path is built from the same endpoint id an
 // `IMMDevice` reports, so `interface_path` below produces what `DeviceInformation.Id`
 // would have given and the test takes the same route without pulling the WinRT
 // projections into the suite. The completion handler is a copy of the private one in
-// the library, which is the point: it is what a caller has to write.
+// the library, which is the point: it is what a caller of `from_iaudioclient` has to
+// write.
 
 use crate::support;
 use std::sync::{Arc, Condvar, Mutex};
 use wasapi::*;
-use windows::Win32::Foundation::E_INVALIDARG;
+use windows::Win32::Foundation::{E_INVALIDARG, ERROR_FILE_NOT_FOUND};
 use windows::Win32::Media::Audio::{
     ActivateAudioInterfaceAsync, DEVINTERFACE_AUDIO_CAPTURE, DEVINTERFACE_AUDIO_RENDER,
     IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
@@ -156,6 +159,103 @@ fn activated_client_reports_its_state() {
     assert_eq!(client.get_direction(), Direction::Capture);
     assert_eq!(client.get_sharemode(), Some(ShareMode::Shared));
     assert_eq!(client.get_timing_mode(), Some(TimingMode::Polling));
+}
+
+/// A client from a device interface path reports the direction it was given,
+/// and streams in shared mode in both directions.
+#[test]
+fn device_interface_client_streams() {
+    let Some(fixture) = support::fixture() else {
+        return;
+    };
+    for (device, direction) in [
+        (&fixture.cable.render, Direction::Render),
+        (&fixture.cable.capture, Direction::Capture),
+    ] {
+        let path = interface_path(&device.get_id().unwrap(), direction);
+        println!("activating {path}");
+        let mut client = AudioClient::new_device_interface_client(&path, direction)
+            .expect("new_device_interface_client failed");
+        assert_eq!(client.get_direction(), direction);
+        assert_eq!(client.get_sharemode(), None);
+        assert_eq!(client.get_timing_mode(), None);
+
+        let format = client.get_mixformat().unwrap();
+        let (def_period, _min_period) = client.get_device_period().unwrap();
+        let mode = support::mode_for(
+            &client,
+            ShareMode::Shared,
+            TimingMode::Events,
+            def_period,
+            &format,
+        )
+        .unwrap();
+        client
+            .initialize_client(&format, direction, mode, None)
+            .unwrap();
+
+        let what = format!("device interface {direction:?}");
+        let run = match direction {
+            Direction::Render => support::render_for(&client, &format, support::RUN_TIME),
+            Direction::Capture => support::capture_for(&client, &format, support::RUN_TIME),
+        }
+        .unwrap();
+        support::assert_rate(&run, &format, &what);
+    }
+}
+
+/// Exclusive mode works on a client from a device interface path, as the documentation
+/// of `new_device_interface_client` says, unlike on an auto-routed one.
+///
+/// Only event driven timing on the render side: the claim is about the activation
+/// route, and the timing modes are covered in full by `streams`.
+#[test]
+fn device_interface_client_allows_exclusive() {
+    let Some(fixture) = support::fixture() else {
+        return;
+    };
+    let path = interface_path(&fixture.cable.render.get_id().unwrap(), Direction::Render);
+    let mut client = AudioClient::new_device_interface_client(&path, Direction::Render).unwrap();
+    let wanted = WaveFormat::new(16, 16, SampleType::Int, 48000, 2, None);
+    let format = match client.is_supported_exclusive_with_quirks(&wanted) {
+        Ok(format) => format,
+        Err(e) => {
+            support::skip(&format!("the cable takes no exclusive format: {e}"));
+            return;
+        }
+    };
+    let (def_period, _min_period) = client.get_device_period().unwrap();
+    let mode = support::mode_for(
+        &client,
+        ShareMode::Exclusive,
+        TimingMode::Events,
+        def_period,
+        &format,
+    )
+    .unwrap();
+    client
+        .initialize_client(&format, Direction::Render, mode, None)
+        .expect("exclusive mode failed on a device interface client");
+    assert_eq!(client.get_sharemode(), Some(ShareMode::Exclusive));
+
+    let run = support::render_for(&client, &format, support::RUN_TIME).unwrap();
+    support::assert_rate(&run, &format, "device interface exclusive render");
+}
+
+/// The bare endpoint id is not a device interface path, and activating it fails with
+/// `ERROR_FILE_NOT_FOUND` as the documentation says.
+#[test]
+fn device_interface_client_rejects_bare_endpoint_id() {
+    let Some(fixture) = support::fixture() else {
+        return;
+    };
+    let id = fixture.cable.render.get_id().unwrap();
+    let error = AudioClient::new_device_interface_client(&id, Direction::Render)
+        .expect_err("the bare endpoint id was accepted as a path");
+    assert!(
+        support::is_hresult(&error, ERROR_FILE_NOT_FOUND.to_hresult()),
+        "gave {error}, expected ERROR_FILE_NOT_FOUND"
+    );
 }
 
 /// The default device of a direction, or `None` after a skip note when there is none.

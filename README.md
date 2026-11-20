@@ -25,8 +25,8 @@ The following is a selection of the functionality currently available in the lib
 - Named audio sessions: one volume mixer entry per stream, with a display name and icon of its own
 - Probing of the sample rates, channel counts and formats a device supports in exclusive mode
 - Reading the capabilities that a driver declares for a device
-- Wrapping an `IAudioClient` that was activated elsewhere, for example through WinRT device
-  enumeration
+- Opening a device found through WinRT device enumeration by its WinRT device id,
+  or wrapping an `IAudioClient` that was activated elsewhere
 - Raw access to the wrapped COM interfaces through `Device::as_immdevice`,
   `AudioClient::as_iaudioclient` and `Handle::as_handle`, for reaching what the library
   does not cover
@@ -48,16 +48,20 @@ WinRT is newer and sits on the same stack, with a narrower view of the device.
 This library is built on the MultiMedia API, where a device is an `IMMDevice` endpoint found
 through a `DeviceCollection`.
 It provides no second set of device types for WinRT, on purpose.
-A device found through WinRT has a different id format and carries no `IMMDevice`,
+A device found through WinRT is a device interface path and carries no `IMMDevice`,
 so the capability probe and the declared data ranges could not work for it.
 
 WinRT is still usable, from the other end.
 The [windows](https://crates.io/crates/windows) crate exposes all of WinRT,
 so enumerate with the `MediaDevice` and `DeviceInformation` classes,
-pass the device path to `ActivateAudioInterfaceAsync`,
-and wrap the interface that comes back with
+and pass the `Id` of the device to
+[`AudioClient::new_device_interface_client`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.new_device_interface_client).
+That activates the client, and the streaming code works as for a device from the `DeviceCollection`,
+exclusive mode included.
+The `playsine_winrt` example does exactly this.
+An interface activated in some other way can be wrapped with
 [`AudioClient::from_iaudioclient`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.from_iaudioclient).
-The device tests in `tests/device/activation.rs` walk the whole path, completion handler included.
+The device tests in `tests/device/activation.rs` cover both.
 
 ## Tests
 
@@ -96,6 +100,7 @@ This also applies to `cargo test`, which builds all examples.
 | `playsine_events`          | Similar to `playsine` but also listens to notifications.                                               |
 | `playsine_poll`            | Similar to `playsine` but uses polling instead of event driven timing mode.                            |
 | `playsine_autorouted`      | Plays a sine wave on the default output device, and follows it when the default device changes.        |
+| `playsine_winrt`           | Plays a sine wave on an output device found through WinRT, opened by its WinRT device id.              |
 | `named_sessions`           | Plays two sine waves, each in its own audio session with its own name in the volume mixer.             |
 | `playnoise_exclusive`      | Plays white noise in exclusive mode on the default output device. Shows how to handle HRESULT errors.  |
 | `playnoise_exclusive_poll` | Similar to `playnoise_exclusive` but uses polling instead of event driven timing mode.                 |
