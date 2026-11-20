@@ -55,7 +55,7 @@ WinRT is still usable, from the other end.
 The [windows](https://crates.io/crates/windows) crate exposes all of WinRT,
 so enumerate with the `MediaDevice` and `DeviceInformation` classes,
 and pass the `Id` of the device to
-[`AudioClient::new_device_interface_client`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.new_device_interface_client).
+[`AudioClient::from_device_path`](https://docs.rs/wasapi/latest/wasapi/struct.AudioClient.html#method.from_device_path).
 That activates the client, and the streaming code works as for a device from the `DeviceCollection`,
 exclusive mode included.
 The `playsine_winrt` example does exactly this.

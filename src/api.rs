@@ -1036,7 +1036,7 @@ impl AudioClient {
     /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
     /// // From DeviceInformation.Id, for example.
     /// let path = r"\\?\SWD#MMDEVAPI#{0.0.0.00000000}.{f34f553a-b91d-4484-9455-960340b7cdcd}#{e6327cad-dcec-4949-ae8a-991e976a79d2}";
-    /// let mut audio_client = AudioClient::new_device_interface_client(path, Direction::Render).unwrap();
+    /// let mut audio_client = AudioClient::from_device_path(path, Direction::Render).unwrap();
     /// let format = audio_client.get_mixformat().unwrap();
     /// let (default_period, _min_period) = audio_client.get_device_period().unwrap();
     /// let mode = StreamMode::EventsShared {
@@ -1045,10 +1045,7 @@ impl AudioClient {
     /// };
     /// audio_client.initialize_client(&format, Direction::Render, mode, None).unwrap();
     /// ```
-    pub fn new_device_interface_client(
-        device_interface_path: &str,
-        direction: Direction,
-    ) -> WasapiRes<Self> {
+    pub fn from_device_path(device_interface_path: &str, direction: Direction) -> WasapiRes<Self> {
         if device_interface_path.contains('\0') {
             return Err(windows_core::Error::from(E_INVALIDARG).into());
         }
@@ -1063,7 +1060,7 @@ impl AudioClient {
     /// [DeviceCollection] of this crate,
     /// and the interface is activated by the caller.
     /// For a device path from the WinRT `MediaDevice` and `DeviceInformation` classes,
-    /// [AudioClient::new_device_interface_client] does the activation
+    /// [AudioClient::from_device_path] does the activation
     /// and is usually the simpler choice.
     /// This method is for interfaces activated in some other way,
     /// for example with activation parameters that this crate does not model.

@@ -198,7 +198,7 @@ fn client_properties_accumulate_options() {
 #[test]
 fn device_interface_path_with_nul_is_rejected() {
     let path = "\\\\?\\SWD#MMDEVAPI#\0{0.0.0.00000000}";
-    let error = AudioClient::new_device_interface_client(path, Direction::Render)
+    let error = AudioClient::from_device_path(path, Direction::Render)
         .expect_err("a path with a nul was accepted");
     assert!(
         matches!(&error, WasapiError::Windows(e)

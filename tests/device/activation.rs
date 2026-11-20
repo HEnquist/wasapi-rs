@@ -7,7 +7,7 @@
 //
 // The rest covers the two ways in for a device found by some other means than the
 // `DeviceCollection`, for instance through the WinRT `MediaDevice` and
-// `DeviceInformation` classes: `AudioClient::new_device_interface_client`, which takes
+// `DeviceInformation` classes: `AudioClient::from_device_path`, which takes
 // the device interface path and activates it, and `AudioClient::from_iaudioclient`,
 // which wraps an interface the caller activated.
 //
@@ -164,7 +164,7 @@ fn activated_client_reports_its_state() {
 /// A client from a device interface path reports the direction it was given,
 /// and streams in shared mode in both directions.
 #[test]
-fn device_interface_client_streams() {
+fn device_path_client_streams() {
     let Some(fixture) = support::fixture() else {
         return;
     };
@@ -174,8 +174,8 @@ fn device_interface_client_streams() {
     ] {
         let path = interface_path(&device.get_id().unwrap(), direction);
         println!("activating {path}");
-        let mut client = AudioClient::new_device_interface_client(&path, direction)
-            .expect("new_device_interface_client failed");
+        let mut client =
+            AudioClient::from_device_path(&path, direction).expect("from_device_path failed");
         assert_eq!(client.get_direction(), direction);
         assert_eq!(client.get_sharemode(), None);
         assert_eq!(client.get_timing_mode(), None);
@@ -205,17 +205,17 @@ fn device_interface_client_streams() {
 }
 
 /// Exclusive mode works on a client from a device interface path, as the documentation
-/// of `new_device_interface_client` says, unlike on an auto-routed one.
+/// of `from_device_path` says, unlike on an auto-routed one.
 ///
 /// Only event driven timing on the render side: the claim is about the activation
 /// route, and the timing modes are covered in full by `streams`.
 #[test]
-fn device_interface_client_allows_exclusive() {
+fn device_path_client_allows_exclusive() {
     let Some(fixture) = support::fixture() else {
         return;
     };
     let path = interface_path(&fixture.cable.render.get_id().unwrap(), Direction::Render);
-    let mut client = AudioClient::new_device_interface_client(&path, Direction::Render).unwrap();
+    let mut client = AudioClient::from_device_path(&path, Direction::Render).unwrap();
     let wanted = WaveFormat::new(16, 16, SampleType::Int, 48000, 2, None);
     let format = match client.is_supported_exclusive_with_quirks(&wanted) {
         Ok(format) => format,
@@ -235,7 +235,7 @@ fn device_interface_client_allows_exclusive() {
     .unwrap();
     client
         .initialize_client(&format, Direction::Render, mode, None)
-        .expect("exclusive mode failed on a device interface client");
+        .expect("exclusive mode failed on a device path client");
     assert_eq!(client.get_sharemode(), Some(ShareMode::Exclusive));
 
     let run = support::render_for(&client, &format, support::RUN_TIME).unwrap();
@@ -245,12 +245,12 @@ fn device_interface_client_allows_exclusive() {
 /// The bare endpoint id is not a device interface path, and activating it fails with
 /// `ERROR_FILE_NOT_FOUND` as the documentation says.
 #[test]
-fn device_interface_client_rejects_bare_endpoint_id() {
+fn device_path_client_rejects_bare_endpoint_id() {
     let Some(fixture) = support::fixture() else {
         return;
     };
     let id = fixture.cable.render.get_id().unwrap();
-    let error = AudioClient::new_device_interface_client(&id, Direction::Render)
+    let error = AudioClient::from_device_path(&id, Direction::Render)
         .expect_err("the bare endpoint id was accepted as a path");
     assert!(
         support::is_hresult(&error, ERROR_FILE_NOT_FOUND.to_hresult()),

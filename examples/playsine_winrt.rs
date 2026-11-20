@@ -2,7 +2,7 @@
 //
 // The devices are enumerated with the WinRT `DeviceInformation` and `MediaDevice` classes
 // from the `windows` crate, and the chosen one is opened by its WinRT id with
-// `AudioClient::new_device_interface_client`. Nothing from the `DeviceCollection` of
+// `AudioClient::from_device_path`. Nothing from the `DeviceCollection` of
 // this library is used.
 //
 // Pass part of a device name to play on that device, for example
@@ -70,8 +70,7 @@ fn main() {
     let id = id.to_string();
     info!("Opening {id}");
 
-    let mut audio_client =
-        AudioClient::new_device_interface_client(&id, Direction::Render).unwrap();
+    let mut audio_client = AudioClient::from_device_path(&id, Direction::Render).unwrap();
 
     let channels = 2;
     let samplerate = 44100;
