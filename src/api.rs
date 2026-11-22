@@ -69,18 +69,69 @@ use crate::{
 
 pub(crate) type WasapiRes<T> = Result<T, WasapiError>;
 
-/// Initializes COM for use by the calling thread for the multi-threaded apartment (MTA).
+/// Initializes COM on the calling thread in the multithreaded apartment (MTA).
+///
+/// This is a plain call to [`CoInitializeEx`] with `COINIT_MULTITHREADED`,
+/// and the `HRESULT` is returned as is.
+/// It is only a convenience, so that a small program doesn't need the `windows` crate
+/// just for this call.
+///
+/// This crate never initializes COM by itself.
+/// Initializing COM, choosing the apartment type, and keeping COM alive for as long as
+/// any object from this crate is in use are all up to the application.
+/// See [Initializing the COM Library] and [Processes, Threads, and Apartments].
+///
+/// [`CoInitializeEx`]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-coinitializeex
+/// [Initializing the COM Library]: https://learn.microsoft.com/en-us/windows/win32/learnwin32/initializing-the-com-library
+/// [Processes, Threads, and Apartments]: https://learn.microsoft.com/en-us/windows/win32/com/processes--threads--and-apartments
 pub fn initialize_mta() -> HRESULT {
     unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
 }
 
-/// Initializes COM for use by the calling thread for a single-threaded apartment (STA).
+/// Initializes COM on the calling thread in a single-threaded apartment (STA).
+///
+/// This is a plain call to [`CoInitializeEx`] with `COINIT_APARTMENTTHREADED`,
+/// and the `HRESULT` is returned as is.
+/// It is only a convenience, so that a small program doesn't need the `windows` crate
+/// just for this call.
+///
+/// This crate never initializes COM by itself.
+/// Initializing COM, choosing the apartment type, and keeping COM alive for as long as
+/// any object from this crate is in use are all up to the application.
+/// See [Initializing the COM Library] and [Processes, Threads, and Apartments].
+///
+/// [`CoInitializeEx`]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-coinitializeex
+/// [Initializing the COM Library]: https://learn.microsoft.com/en-us/windows/win32/learnwin32/initializing-the-com-library
+/// [Processes, Threads, and Apartments]: https://learn.microsoft.com/en-us/windows/win32/com/processes--threads--and-apartments
 pub fn initialize_sta() -> HRESULT {
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
 }
 
-/// Close the COM library on the current thread.
-pub fn deinitialize() {
+/// Closes COM on the calling thread.
+///
+/// This is a plain call to [`CoUninitialize`].
+/// Most programs don't need it.
+/// COM is cleaned up when the process exits,
+/// and an initialization that is never closed only keeps the COM library loaded.
+///
+/// This crate never initializes or closes COM by itself, managing COM is up to the application.
+/// See [Initializing the COM Library] and [Processes, Threads, and Apartments].
+///
+/// # Safety
+///
+/// - The call must balance an earlier successful [`initialize_mta`], [`initialize_sta`]
+///   or `CoInitializeEx` call on the same thread.
+///   A call that returned `S_FALSE` counts as successful and needs balancing too.
+/// - Every object from this crate created in the apartment must be dropped before the call,
+///   unless something else keeps the apartment alive.
+///   When the last initialization of an apartment is closed, COM tears the apartment down and
+///   may unload the libraries behind its objects.
+///   Using or dropping such an object afterwards is undefined behaviour.
+///
+/// [`CoUninitialize`]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-couninitialize
+/// [Initializing the COM Library]: https://learn.microsoft.com/en-us/windows/win32/learnwin32/initializing-the-com-library
+/// [Processes, Threads, and Apartments]: https://learn.microsoft.com/en-us/windows/win32/com/processes--threads--and-apartments
+pub unsafe fn deinitialize() {
     unsafe { CoUninitialize() }
 }
 
