@@ -400,6 +400,40 @@ fn display_name_is_per_session() {
     assert_eq!(name_of(&third), "");
 }
 
+/// The session enumerator iterator yields the same sessions as indexed access.
+///
+/// A client is opened first, so that the device has at least one session.
+#[test]
+fn session_enumerator_agrees_with_iterator() {
+    let Some(fx) = support::fixture() else { return };
+    let _client = open_in_session(&fx, &GUID::from_u128(rand::random()));
+    let sessions = fx
+        .cable
+        .render
+        .get_iaudiosessionmanager()
+        .unwrap()
+        .get_audiosessionenumerator()
+        .unwrap();
+    let count = sessions.get_count().unwrap();
+    assert!(count > 0, "no sessions on a device with an open client");
+
+    let by_index: Vec<String> = (0..count)
+        .map(|n| {
+            sessions
+                .get_session(n)
+                .unwrap()
+                .get_session_instance_identifier()
+                .unwrap()
+        })
+        .collect();
+    let iter = (&sessions).into_iter();
+    assert_eq!(iter.len(), count as usize);
+    let by_iterator: Vec<String> = iter
+        .map(|session| session.unwrap().get_session_instance_identifier().unwrap())
+        .collect();
+    assert_eq!(by_index, by_iterator);
+}
+
 /// The icon path round trips through the session, like the display name.
 #[test]
 fn icon_path_round_trips() {
