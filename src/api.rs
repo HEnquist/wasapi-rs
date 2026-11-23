@@ -271,7 +271,7 @@ impl fmt::Display for SampleType {
 
 /// Possible states for an [AudioSessionControl], an enum representing the
 /// [AudioSessionStateXxx constants](https://learn.microsoft.com/en-us/windows/win32/api/audiosessiontypes/ne-audiosessiontypes-audiosessionstate)
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum SessionState {
     /// The audio session is active. (At least one of the streams in the session is running.)
     Active,
@@ -549,7 +549,9 @@ impl<'a> IntoIterator for &'a DeviceCollection {
 }
 
 /// Struct wrapping an [IMMDevice](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevice).
-#[derive(Debug)]
+///
+/// Cloning is cheap, it adds a reference to the same COM object.
+#[derive(Clone, Debug)]
 pub struct Device {
     device: IMMDevice,
     direction: Direction,
@@ -2130,7 +2132,7 @@ impl AudioMeterInformation {
 
 /// Struct representing the [ENDPOINT_HARDWARE_SUPPORT_XXX constants](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-hardware-support-xxx-constants),
 /// describing which functions an audio endpoint device implements in hardware.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct HardwareSupport {
     /// ENDPOINT_HARDWARE_SUPPORT_VOLUME
     pub volume: bool,
@@ -2293,7 +2295,8 @@ impl AudioRenderClient {
 }
 
 /// Struct representing information on data read from an audio client buffer.
-#[derive(Debug)]
+/// The default value is the same as [BufferInfo::none].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub struct BufferInfo {
     /// Decoded audio client flags.
     pub flags: BufferFlags,
@@ -2313,6 +2316,7 @@ impl BufferInfo {
         }
     }
 
+    /// Create a new [BufferInfo] struct with no flags set, and index and timestamp set to zero.
     pub fn none() -> Self {
         Self {
             flags: BufferFlags::none(),
@@ -2323,7 +2327,8 @@ impl BufferInfo {
 }
 
 /// Struct representing the [ _AUDCLNT_BUFFERFLAGS enum values](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-_audclnt_bufferflags).
-#[derive(Debug)]
+/// The default value is the same as [BufferFlags::none].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub struct BufferFlags {
     /// AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY
     pub data_discontinuity: bool,
