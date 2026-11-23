@@ -31,8 +31,11 @@ fn endpoint_volume_through_as_raw() {
     let volume: IAudioEndpointVolume = unsafe { device.Activate(CLSCTX_ALL as u32, None) }
         .expect("could not activate IAudioEndpointVolume");
 
-    let level = unsafe { volume.GetMasterVolumeLevelScalar() }.unwrap();
-    let muted = unsafe { volume.GetMute() }.unwrap().as_bool();
+    let mut level = 0.0;
+    unsafe { volume.GetMasterVolumeLevelScalar(&mut level) }.unwrap();
+    let mut muted = Default::default();
+    unsafe { volume.GetMute(&mut muted) }.unwrap();
+    let muted = muted.as_bool();
     println!("master volume {level:.3}, muted {muted}");
     assert!(
         (0.0..=1.0).contains(&level),
@@ -156,11 +159,12 @@ fn event_handle_in_a_multiple_object_wait() {
 
     // Stands in for a shutdown event. Manual reset, starts unsignalled.
     let quit = unsafe { CreateEventW(None, true, false, PCWSTR::null()) };
-    assert!(!quit.0.is_null(), "could not create the second event");
+    assert!(!quit.is_null(), "could not create the second event");
 
-    let handles = [HANDLE(event.as_raw_handle()), quit];
+    let handles: [HANDLE; 2] = [event.as_raw_handle(), quit];
+    let count = handles.len() as u32;
     opened.client.start_stream().unwrap();
-    let result = unsafe { WaitForMultipleObjects(&handles, false, 2000) };
+    let result = unsafe { WaitForMultipleObjects(count, handles.as_ptr(), false, 2000) };
     opened.client.stop_stream().unwrap();
 
     // WAIT_OBJECT_0 is the first handle, so the device woke the wait.
@@ -175,7 +179,7 @@ fn event_handle_in_a_multiple_object_wait() {
         unsafe { SetEvent(quit) }.as_bool(),
         "could not signal the event"
     );
-    let result = unsafe { WaitForMultipleObjects(&handles, false, 2000) };
+    let result = unsafe { WaitForMultipleObjects(count, handles.as_ptr(), false, 2000) };
     assert_eq!(
         result, 1,
         "the wait returned {result:#x}, expected the signalled handle at index 1"

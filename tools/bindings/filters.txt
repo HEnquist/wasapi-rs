@@ -168,6 +168,7 @@ CloseHandle
 CreateEventA
 WaitForSingleObject
 WAIT_OBJECT_0
+S_OK
 E_INVALIDARG
 E_NOINTERFACE
 E_POINTER

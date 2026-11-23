@@ -3,9 +3,10 @@ use crate::bindings::typed_consts;
 pub use crate::bindings::{E_INVALIDARG, E_NOINTERFACE, E_POINTER};
 
 // The audio client result codes as HRESULT, for matching against the code of a
-// WasapiError::Windows. The metadata gives them as `i32`.
+// WasapiError::Windows. The metadata gives the error codes as `HRESULT`,
+// and the success codes as an `i32` `SCODE`.
 typed_consts!(
-    HRESULT,
+    HRESULT unchanged,
     concat!(
         "An audio client result code, see the ",
         "[audio client error codes]",
@@ -49,6 +50,15 @@ typed_consts!(
     AUDCLNT_E_THREAD_NOT_REGISTERED,
     AUDCLNT_E_UNSUPPORTED_FORMAT,
     AUDCLNT_E_WRONG_ENDPOINT_TYPE,
+);
+
+typed_consts!(
+    HRESULT,
+    concat!(
+        "An audio client success code, see the ",
+        "[audio client error codes]",
+        "(https://learn.microsoft.com/en-us/windows/win32/coreaudio/audclnt-xxx-error-codes)."
+    );
     AUDCLNT_S_BUFFER_EMPTY,
     AUDCLNT_S_POSITION_STALLED,
     AUDCLNT_S_THREAD_ALREADY_REGISTERED,

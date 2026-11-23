@@ -19,7 +19,7 @@
 use crate::bindings::{
     ActivateAudioInterfaceAsync, DEVINTERFACE_AUDIO_CAPTURE, DEVINTERFACE_AUDIO_RENDER,
     IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
-    IActivateAudioInterfaceCompletionHandler_Impl, IAudioClient,
+    IActivateAudioInterfaceCompletionHandler_Impl, IAudioClient, S_OK,
 };
 use crate::support;
 use std::sync::{Arc, Condvar, Mutex};
@@ -31,14 +31,11 @@ use windows_core::{Interface, PCWSTR, Ref, implement};
 struct Handler(Arc<(Mutex<bool>, Condvar)>);
 
 impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
-    fn ActivateCompleted(
-        &self,
-        _operation: Ref<IActivateAudioInterfaceAsyncOperation>,
-    ) -> windows_core::Result<()> {
+    fn ActivateCompleted(&self, _operation: Ref<IActivateAudioInterfaceAsyncOperation>) -> HRESULT {
         let (lock, cvar) = &*self.0;
         *lock.lock().unwrap() = true;
         cvar.notify_one();
-        Ok(())
+        S_OK
     }
 }
 

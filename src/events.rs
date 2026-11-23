@@ -1,7 +1,7 @@
 use std::fmt;
 use std::slice;
 use std::string::FromUtf16Error;
-use windows_core::{GUID, PCWSTR, Result, implement};
+use windows_core::{GUID, HRESULT, PCWSTR, implement};
 
 use crate::bindings::{
     AudioSessionDisconnectReason, AudioSessionState, AudioSessionStateActive,
@@ -9,7 +9,7 @@ use crate::bindings::{
     DisconnectReasonExclusiveModeOverride, DisconnectReasonFormatChanged,
     DisconnectReasonServerShutdown, DisconnectReasonSessionDisconnected,
     DisconnectReasonSessionLogoff, EDataFlow, ERole, IAudioSessionEvents, IAudioSessionEvents_Impl,
-    IMMNotificationClient, IMMNotificationClient_Impl, PROPERTYKEY,
+    IMMNotificationClient, IMMNotificationClient_Impl, PROPERTYKEY, S_OK,
 };
 
 use crate::{DeviceState, Direction, Role, SessionState};
@@ -218,7 +218,7 @@ impl AudioSessionEvents {
 }
 
 impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
-    fn OnStateChanged(&self, newstate: AudioSessionState) -> Result<()> {
+    fn OnStateChanged(&self, newstate: AudioSessionState) -> HRESULT {
         #[allow(non_upper_case_globals)]
         let state_name = match newstate {
             AudioSessionStateActive => "Active",
@@ -232,15 +232,15 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
             AudioSessionStateActive => SessionState::Active,
             AudioSessionStateInactive => SessionState::Inactive,
             AudioSessionStateExpired => SessionState::Expired,
-            _ => return Ok(()),
+            _ => return S_OK,
         };
         if let Some(callback) = &self.callbacks.state {
             callback(sessionstate);
         }
-        Ok(())
+        S_OK
     }
 
-    fn OnSessionDisconnected(&self, disconnectreason: AudioSessionDisconnectReason) -> Result<()> {
+    fn OnSessionDisconnected(&self, disconnectreason: AudioSessionDisconnectReason) -> HRESULT {
         trace!("Disconnected");
         #[allow(non_upper_case_globals)]
         let reason = match disconnectreason {
@@ -256,31 +256,27 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         if let Some(callback) = &self.callbacks.disconnected {
             callback(reason);
         }
-        Ok(())
+        S_OK
     }
 
-    fn OnDisplayNameChanged(
-        &self,
-        newdisplayname: &PCWSTR,
-        eventcontext: *const GUID,
-    ) -> Result<()> {
+    fn OnDisplayNameChanged(&self, newdisplayname: &PCWSTR, eventcontext: *const GUID) -> HRESULT {
         let name = unsafe { newdisplayname.to_string().unwrap_or_default() };
         trace!("New display name: {name}");
         if let Some(callback) = &self.callbacks.displayname {
             let context = read_guid(eventcontext);
             callback(name, context);
         }
-        Ok(())
+        S_OK
     }
 
-    fn OnIconPathChanged(&self, newiconpath: &PCWSTR, eventcontext: *const GUID) -> Result<()> {
+    fn OnIconPathChanged(&self, newiconpath: &PCWSTR, eventcontext: *const GUID) -> HRESULT {
         let path = unsafe { newiconpath.to_string().unwrap_or_default() };
         trace!("New icon path: {path}");
         if let Some(callback) = &self.callbacks.iconpath {
             let context = read_guid(eventcontext);
             callback(path, context);
         }
-        Ok(())
+        S_OK
     }
 
     fn OnSimpleVolumeChanged(
@@ -288,13 +284,13 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         newvolume: f32,
         newmute: windows_core::BOOL,
         eventcontext: *const GUID,
-    ) -> Result<()> {
+    ) -> HRESULT {
         trace!("New volume: {newvolume}, mute: {newmute:?}");
         if let Some(callback) = &self.callbacks.simple_volume {
             let context = read_guid(eventcontext);
             callback(newvolume, bool::from(newmute), context);
         }
-        Ok(())
+        S_OK
     }
 
     fn OnChannelVolumeChanged(
@@ -303,7 +299,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
         newchannelvolumearray: *const f32,
         changedchannel: u32,
         eventcontext: *const GUID,
-    ) -> Result<()> {
+    ) -> HRESULT {
         trace!("New channel volume for channel: {changedchannel}");
         let volslice =
             unsafe { slice::from_raw_parts(newchannelvolumearray, channelcount as usize) };
@@ -315,7 +311,7 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
                 for (idx, newvol) in volslice.iter().enumerate() {
                     callback(idx, *newvol, context);
                 }
-                return Ok(());
+                return S_OK;
             }
             if (changedchannel as usize) < volslice.len() {
                 let newvol = volslice[changedchannel as usize];
@@ -326,24 +322,24 @@ impl IAudioSessionEvents_Impl for AudioSessionEvents_Impl {
                     changedchannel,
                     volslice.len()
                 );
-                return Ok(());
+                return S_OK;
             }
         }
-        Ok(())
+        S_OK
     }
 
     fn OnGroupingParamChanged(
         &self,
         newgroupingparam: *const GUID,
         eventcontext: *const GUID,
-    ) -> Result<()> {
+    ) -> HRESULT {
         trace!("Grouping changed");
         if let Some(callback) = &self.callbacks.groupingparam {
             let context = read_guid(eventcontext);
             let grouping = read_guid(newgroupingparam);
             callback(grouping, context);
         }
-        Ok(())
+        S_OK
     }
 }
 
@@ -463,44 +459,44 @@ impl NotificationClient {
 }
 
 impl IMMNotificationClient_Impl for NotificationClient_Impl {
-    fn OnDeviceStateChanged(&self, pwstrdeviceid: &PCWSTR, dwnewstate: u32) -> Result<()> {
+    fn OnDeviceStateChanged(&self, pwstrdeviceid: &PCWSTR, dwnewstate: u32) -> HRESULT {
         let Some(id) = read_device_id(pwstrdeviceid, "OnDeviceStateChanged") else {
-            return Ok(());
+            return S_OK;
         };
         let state = match DeviceState::from_device_state(dwnewstate) {
             Ok(state) => state,
             Err(err) => {
                 warn!("OnDeviceStateChanged: {err}");
-                return Ok(());
+                return S_OK;
             }
         };
         trace!("Device {id} changed state to: {state}");
         if let Some(callback) = &self.callbacks.device_state {
             callback(id, state);
         }
-        Ok(())
+        S_OK
     }
 
-    fn OnDeviceAdded(&self, pwstrdeviceid: &PCWSTR) -> Result<()> {
+    fn OnDeviceAdded(&self, pwstrdeviceid: &PCWSTR) -> HRESULT {
         let Some(id) = read_device_id(pwstrdeviceid, "OnDeviceAdded") else {
-            return Ok(());
+            return S_OK;
         };
         trace!("Device added: {id}");
         if let Some(callback) = &self.callbacks.device_added {
             callback(id);
         }
-        Ok(())
+        S_OK
     }
 
-    fn OnDeviceRemoved(&self, pwstrdeviceid: &PCWSTR) -> Result<()> {
+    fn OnDeviceRemoved(&self, pwstrdeviceid: &PCWSTR) -> HRESULT {
         let Some(id) = read_device_id(pwstrdeviceid, "OnDeviceRemoved") else {
-            return Ok(());
+            return S_OK;
         };
         trace!("Device removed: {id}");
         if let Some(callback) = &self.callbacks.device_removed {
             callback(id);
         }
-        Ok(())
+        S_OK
     }
 
     fn OnDefaultDeviceChanged(
@@ -508,46 +504,46 @@ impl IMMNotificationClient_Impl for NotificationClient_Impl {
         flow: EDataFlow,
         role: ERole,
         pwstrdefaultdeviceid: &PCWSTR,
-    ) -> Result<()> {
+    ) -> HRESULT {
         // A null id means that there is no longer a default device.
         // An unreadable id must not be reported as no device, so it is skipped.
         let id = match read_pcwstr(pwstrdefaultdeviceid) {
             Ok(id) => id,
             Err(err) => {
                 warn!("OnDefaultDeviceChanged: received an unreadable device id, {err}");
-                return Ok(());
+                return S_OK;
             }
         };
         let direction = match Direction::from_edataflow(flow) {
             Ok(direction) => direction,
             Err(err) => {
                 warn!("OnDefaultDeviceChanged: {err}");
-                return Ok(());
+                return S_OK;
             }
         };
         let device_role = match Role::from_erole(role) {
             Ok(role) => role,
             Err(err) => {
                 warn!("OnDefaultDeviceChanged: {err}");
-                return Ok(());
+                return S_OK;
             }
         };
         trace!("New default {direction} device for role {device_role}: {id:?}");
         if let Some(callback) = &self.callbacks.default_device {
             callback(direction, device_role, id);
         }
-        Ok(())
+        S_OK
     }
 
-    fn OnPropertyValueChanged(&self, pwstrdeviceid: &PCWSTR, key: &PROPERTYKEY) -> Result<()> {
+    fn OnPropertyValueChanged(&self, pwstrdeviceid: &PCWSTR, key: &PROPERTYKEY) -> HRESULT {
         let Some(id) = read_device_id(pwstrdeviceid, "OnPropertyValueChanged") else {
-            return Ok(());
+            return S_OK;
         };
         trace!("Property {key:?} changed for device {id}");
         if let Some(callback) = &self.callbacks.property_value {
             callback(id, *key);
         }
-        Ok(())
+        S_OK
     }
 }
 
@@ -728,7 +724,9 @@ mod tests {
             session.OnDisplayNameChanged(text, null).unwrap();
             session.OnIconPathChanged(text, null).unwrap();
             session.OnSimpleVolumeChanged(0.5, true, null).unwrap();
-            session.OnChannelVolumeChanged(&[0.25], 0, null).unwrap();
+            session
+                .OnChannelVolumeChanged(1, [0.25].as_ptr(), 0, null)
+                .unwrap();
             session.OnGroupingParamChanged(null, null).unwrap();
         }
 
@@ -751,16 +749,17 @@ mod tests {
         let (session, log) = logging_session();
         let context = GUID::from_u128(1);
         let volumes = [0.25, 0.5, 0.75];
+        let count = volumes.len() as u32;
 
         unsafe {
             session
-                .OnChannelVolumeChanged(&volumes, u32::MAX, &context)
+                .OnChannelVolumeChanged(count, volumes.as_ptr(), u32::MAX, &context)
                 .unwrap();
             session
-                .OnChannelVolumeChanged(&volumes, 1, &context)
+                .OnChannelVolumeChanged(count, volumes.as_ptr(), 1, &context)
                 .unwrap();
             session
-                .OnChannelVolumeChanged(&volumes, 3, &context)
+                .OnChannelVolumeChanged(count, volumes.as_ptr(), 3, &context)
                 .unwrap();
         }
 

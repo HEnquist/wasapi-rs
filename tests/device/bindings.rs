@@ -1,7 +1,7 @@
 #[inline]
 pub unsafe fn ActivateAudioInterfaceAsync<P0, P3>(
     deviceinterfacepath: P0,
-    riid: *const windows_core::GUID,
+    riid: *const IID,
     activationparams: Option<*const PROPVARIANT>,
     completionhandler: P3,
 ) -> windows_core::Result<IActivateAudioInterfaceAsyncOperation>
@@ -9,7 +9,7 @@ where
     P0: windows_core::Param<windows_core::PCWSTR>,
     P3: windows_core::Param<IActivateAudioInterfaceCompletionHandler>,
 {
-    windows_core::link!("mmdevapi.dll" "system" fn ActivateAudioInterfaceAsync(deviceinterfacepath : windows_core::PCWSTR, riid : *const windows_core::GUID, activationparams : *const PROPVARIANT, completionhandler : *mut core::ffi::c_void, activationoperation : *mut *mut core::ffi::c_void) -> windows_core::HRESULT);
+    windows_core::link!("mmdevapi.dll" "system" fn ActivateAudioInterfaceAsync(deviceinterfacepath : windows_core::PCWSTR, riid : *const IID, activationparams : *const PROPVARIANT, completionhandler : *mut core::ffi::c_void, activationoperation : *mut *mut core::ffi::c_void) -> windows_core::HRESULT);
     unsafe {
         let mut result__ = core::mem::zeroed();
         ActivateAudioInterfaceAsync(
@@ -19,7 +19,7 @@ where
             completionhandler.param().abi(),
             &mut result__,
         )
-        .and_then(|| windows_core::imp::Type::from_abi(result__))
+        .and_then(|| windows_core::imp::from_abi(result__))
     }
 }
 #[inline]
@@ -29,7 +29,7 @@ pub unsafe fn CloseHandle(hobject: HANDLE) -> windows_core::BOOL {
 }
 #[inline]
 pub unsafe fn CreateEventW<P3>(
-    lpeventattributes: Option<*const SECURITY_ATTRIBUTES>,
+    lpeventattributes: Option<LPSECURITY_ATTRIBUTES>,
     bmanualreset: bool,
     binitialstate: bool,
     lpname: P3,
@@ -37,7 +37,7 @@ pub unsafe fn CreateEventW<P3>(
 where
     P3: windows_core::Param<windows_core::PCWSTR>,
 {
-    windows_core::link!("kernel32.dll" "system" fn CreateEventW(lpeventattributes : *const SECURITY_ATTRIBUTES, bmanualreset : windows_core::BOOL, binitialstate : windows_core::BOOL, lpname : windows_core::PCWSTR) -> HANDLE);
+    windows_core::link!("kernel32.dll" "system" fn CreateEventW(lpeventattributes : LPSECURITY_ATTRIBUTES, bmanualreset : windows_core::BOOL, binitialstate : windows_core::BOOL, lpname : windows_core::PCWSTR) -> HANDLE);
     unsafe {
         CreateEventW(
             lpeventattributes.unwrap_or(core::mem::zeroed()) as _,
@@ -54,178 +54,176 @@ pub unsafe fn SetEvent(hevent: HANDLE) -> windows_core::BOOL {
 }
 #[inline]
 pub unsafe fn WaitForMultipleObjects(
-    lphandles: &[HANDLE],
+    ncount: DWORD,
+    lphandles: *const HANDLE,
     bwaitall: bool,
-    dwmilliseconds: u32,
-) -> u32 {
-    windows_core::link!("kernel32.dll" "system" fn WaitForMultipleObjects(ncount : u32, lphandles : *const HANDLE, bwaitall : windows_core::BOOL, dwmilliseconds : u32) -> u32);
-    unsafe {
-        WaitForMultipleObjects(
-            lphandles.len().try_into().unwrap(),
-            lphandles.as_ptr(),
-            bwaitall.into(),
-            dwmilliseconds,
-        )
-    }
+    dwmilliseconds: DWORD,
+) -> DWORD {
+    windows_core::link!("kernel32.dll" "system" fn WaitForMultipleObjects(ncount : DWORD, lphandles : *const HANDLE, bwaitall : windows_core::BOOL, dwmilliseconds : DWORD) -> DWORD);
+    unsafe { WaitForMultipleObjects(ncount, lphandles, bwaitall.into(), dwmilliseconds) }
 }
 pub type AUDCLNT_SHAREMODE = i32;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct BLOB {
-    pub cbSize: u32,
-    pub pBlobData: *mut u8,
+    pub cbSize: ULONG,
+    pub pBlobData: *mut BYTE,
 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct BSTRBLOB {
-    pub cbSize: u32,
-    pub pData: *mut u8,
+    pub cbSize: ULONG,
+    pub pData: *mut BYTE,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub type BYTE = u8;
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CABOOL {
-    pub cElems: u32,
+    pub cElems: ULONG,
     pub pElems: *mut VARIANT_BOOL,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CABSTR {
-    pub cElems: u32,
+    pub cElems: ULONG,
     pub pElems: *mut windows_core::BSTR,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CABSTRBLOB {
-    pub cElems: u32,
+    pub cElems: ULONG,
     pub pElems: *mut BSTRBLOB,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAC {
-    pub cElems: u32,
-    pub pElems: *mut i8,
+    pub cElems: ULONG,
+    pub pElems: *mut CHAR,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CACLIPDATA {
-    pub cElems: u32,
+    pub cElems: ULONG,
     pub pElems: *mut CLIPDATA,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CACLSID {
-    pub cElems: u32,
-    pub pElems: *mut windows_core::GUID,
+    pub cElems: ULONG,
+    pub pElems: *mut CLSID,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CACY {
-    pub cElems: u32,
+    pub cElems: ULONG,
     pub pElems: *mut CY,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CADATE {
-    pub cElems: u32,
-    pub pElems: *mut f64,
+    pub cElems: ULONG,
+    pub pElems: *mut DATE,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CADBL {
-    pub cElems: u32,
-    pub pElems: *mut f64,
+    pub cElems: ULONG,
+    pub pElems: *mut DOUBLE,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAFILETIME {
-    pub cElems: u32,
+    pub cElems: ULONG,
     pub pElems: *mut FILETIME,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAFLT {
-    pub cElems: u32,
-    pub pElems: *mut f32,
+    pub cElems: ULONG,
+    pub pElems: *mut FLOAT,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAH {
-    pub cElems: u32,
-    pub pElems: *mut i64,
+    pub cElems: ULONG,
+    pub pElems: *mut LARGE_INTEGER,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAI {
-    pub cElems: u32,
-    pub pElems: *mut i16,
+    pub cElems: ULONG,
+    pub pElems: *mut SHORT,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAL {
-    pub cElems: u32,
-    pub pElems: *mut i32,
+    pub cElems: ULONG,
+    pub pElems: *mut LONG,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CALPSTR {
-    pub cElems: u32,
+    pub cElems: ULONG,
     pub pElems: *mut windows_core::PSTR,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CALPWSTR {
-    pub cElems: u32,
+    pub cElems: ULONG,
     pub pElems: *mut windows_core::PWSTR,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAPROPVARIANT {
-    pub cElems: u32,
+    pub cElems: ULONG,
     pub pElems: *mut PROPVARIANT,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CASCODE {
-    pub cElems: u32,
+    pub cElems: ULONG,
     pub pElems: *mut SCODE,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAUB {
-    pub cElems: u32,
-    pub pElems: *mut u8,
+    pub cElems: ULONG,
+    pub pElems: *mut UCHAR,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAUH {
-    pub cElems: u32,
-    pub pElems: *mut u64,
+    pub cElems: ULONG,
+    pub pElems: *mut ULARGE_INTEGER,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAUI {
-    pub cElems: u32,
-    pub pElems: *mut u16,
+    pub cElems: ULONG,
+    pub pElems: *mut USHORT,
 }
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
 pub struct CAUL {
-    pub cElems: u32,
-    pub pElems: *mut u32,
+    pub cElems: ULONG,
+    pub pElems: *mut ULONG,
 }
+pub type CHAR = i8;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CLIPDATA {
-    pub cbSize: u32,
-    pub ulClipFmt: i32,
-    pub pClipData: *mut u8,
+    pub cbSize: ULONG,
+    pub ulClipFmt: LONG,
+    pub pClipData: *mut BYTE,
 }
-pub const CLSCTX_ALL: i32 = 23;
+pub type CLSCTX = i32;
+pub const CLSCTX_ALL: CLSCTX = 23;
+pub type CLSID = windows_core::GUID;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub union CY {
     pub Anonymous: CY_0,
-    pub int64: i64,
+    pub int64: LONGLONG,
 }
 impl Default for CY {
     fn default() -> Self {
@@ -235,15 +233,16 @@ impl Default for CY {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CY_0 {
-    pub Lo: u32,
-    pub Hi: i32,
+    pub Lo: ULONG,
+    pub Hi: LONG,
 }
+pub type DATE = f64;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct DECIMAL {
-    pub wReserved: u16,
+    pub wReserved: USHORT,
     pub Anonymous: DECIMAL_0,
-    pub Hi32: u32,
+    pub Hi32: ULONG,
     pub Anonymous2: DECIMAL_1,
 }
 impl Default for DECIMAL {
@@ -255,7 +254,7 @@ impl Default for DECIMAL {
 #[derive(Clone, Copy)]
 pub union DECIMAL_0 {
     pub Anonymous: DECIMAL_0_0,
-    pub signscale: u16,
+    pub signscale: USHORT,
 }
 impl Default for DECIMAL_0 {
     fn default() -> Self {
@@ -265,14 +264,14 @@ impl Default for DECIMAL_0 {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct DECIMAL_0_0 {
-    pub scale: u8,
-    pub sign: u8,
+    pub scale: BYTE,
+    pub sign: BYTE,
 }
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub union DECIMAL_1 {
     pub Anonymous: DECIMAL_1_0,
-    pub Lo64: u64,
+    pub Lo64: ULONGLONG,
 }
 impl Default for DECIMAL_1 {
     fn default() -> Self {
@@ -282,22 +281,23 @@ impl Default for DECIMAL_1 {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct DECIMAL_1_0 {
-    pub Lo32: u32,
-    pub Mid32: u32,
+    pub Lo32: ULONG,
+    pub Mid32: ULONG,
 }
 pub const DEVINTERFACE_AUDIO_CAPTURE: windows_core::GUID =
     windows_core::GUID::from_u128(0x2eef81be_33fa_4800_9670_1cd474972c3f);
 pub const DEVINTERFACE_AUDIO_RENDER: windows_core::GUID =
     windows_core::GUID::from_u128(0xe6327cad_dcec_4949_ae8a_991e976a79d2);
+pub type DOUBLE = f64;
+pub type DWORD = u32;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FILETIME {
-    pub dwLowDateTime: u32,
-    pub dwHighDateTime: u32,
+    pub dwLowDateTime: DWORD,
+    pub dwHighDateTime: DWORD,
 }
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct HANDLE(pub *mut core::ffi::c_void);
+pub type FLOAT = f32;
+pub type HANDLE = *mut core::ffi::c_void;
 windows_core::imp::define_interface!(
     IActivateAudioInterfaceAsyncOperation,
     IActivateAudioInterfaceAsyncOperation_Vtbl,
@@ -317,7 +317,7 @@ impl IActivateAudioInterfaceAsyncOperation {
             (windows_core::Interface::vtable(self).GetActivateResult)(
                 windows_core::Interface::as_raw(self),
                 activateresult as _,
-                core::mem::transmute(activatedinterface),
+                activatedinterface as _,
             )
         }
     }
@@ -365,7 +365,7 @@ pub trait IActivateAudioInterfaceCompletionHandler_Impl: windows_core::IUnknownI
     fn ActivateCompleted(
         &self,
         activateoperation: windows_core::Ref<IActivateAudioInterfaceAsyncOperation>,
-    ) -> windows_core::Result<()>;
+    ) -> windows_core::HRESULT;
 }
 impl IActivateAudioInterfaceCompletionHandler_Vtbl {
     pub const fn new<
@@ -386,7 +386,6 @@ impl IActivateAudioInterfaceCompletionHandler_Vtbl {
                     this,
                     core::mem::transmute_copy(&activateoperation),
                 )
-                .into()
             }
         }
         Self {
@@ -409,11 +408,11 @@ impl IAudioClient {
     pub unsafe fn Initialize(
         &self,
         sharemode: AUDCLNT_SHAREMODE,
-        streamflags: u32,
+        streamflags: DWORD,
         hnsbufferduration: REFERENCE_TIME,
         hnsperiodicity: REFERENCE_TIME,
         pformat: *const WAVEFORMATEX,
-        audiosessionguid: Option<*const windows_core::GUID>,
+        audiosessionguid: Option<LPCGUID>,
     ) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).Initialize)(
@@ -427,34 +426,34 @@ impl IAudioClient {
             )
         }
     }
-    pub unsafe fn GetBufferSize(&self) -> windows_core::Result<u32> {
+    pub unsafe fn GetBufferSize(&self, pnumbufferframes: *mut UINT32) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetBufferSize)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                pnumbufferframes as _,
             )
-            .map(|| result__)
         }
     }
-    pub unsafe fn GetStreamLatency(&self) -> windows_core::Result<REFERENCE_TIME> {
+    pub unsafe fn GetStreamLatency(
+        &self,
+        phnslatency: *mut REFERENCE_TIME,
+    ) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetStreamLatency)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                phnslatency as _,
             )
-            .map(|| result__)
         }
     }
-    pub unsafe fn GetCurrentPadding(&self) -> windows_core::Result<u32> {
+    pub unsafe fn GetCurrentPadding(
+        &self,
+        pnumpaddingframes: *mut UINT32,
+    ) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetCurrentPadding)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                pnumpaddingframes as _,
             )
-            .map(|| result__)
         }
     }
     pub unsafe fn IsFormatSupported(
@@ -472,14 +471,15 @@ impl IAudioClient {
             )
         }
     }
-    pub unsafe fn GetMixFormat(&self) -> windows_core::Result<*mut WAVEFORMATEX> {
+    pub unsafe fn GetMixFormat(
+        &self,
+        ppdeviceformat: *mut *mut WAVEFORMATEX,
+    ) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetMixFormat)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                ppdeviceformat as _,
             )
-            .map(|| result__)
         }
     }
     pub unsafe fn GetDevicePeriod(
@@ -529,7 +529,7 @@ impl IAudioClient {
                 &T::IID,
                 &mut result__,
             )
-            .and_then(|| windows_core::imp::Type::from_abi(result__))
+            .and_then(|| windows_core::imp::from_abi(result__))
         }
     }
 }
@@ -539,20 +539,20 @@ pub struct IAudioClient_Vtbl {
     pub Initialize: unsafe extern "system" fn(
         *mut core::ffi::c_void,
         AUDCLNT_SHAREMODE,
-        u32,
+        DWORD,
         REFERENCE_TIME,
         REFERENCE_TIME,
         *const WAVEFORMATEX,
-        *const windows_core::GUID,
+        LPCGUID,
     ) -> windows_core::HRESULT,
     pub GetBufferSize:
-        unsafe extern "system" fn(*mut core::ffi::c_void, *mut u32) -> windows_core::HRESULT,
+        unsafe extern "system" fn(*mut core::ffi::c_void, *mut UINT32) -> windows_core::HRESULT,
     pub GetStreamLatency: unsafe extern "system" fn(
         *mut core::ffi::c_void,
         *mut REFERENCE_TIME,
     ) -> windows_core::HRESULT,
     pub GetCurrentPadding:
-        unsafe extern "system" fn(*mut core::ffi::c_void, *mut u32) -> windows_core::HRESULT,
+        unsafe extern "system" fn(*mut core::ffi::c_void, *mut UINT32) -> windows_core::HRESULT,
     pub IsFormatSupported: unsafe extern "system" fn(
         *mut core::ffi::c_void,
         AUDCLNT_SHAREMODE,
@@ -575,7 +575,7 @@ pub struct IAudioClient_Vtbl {
         unsafe extern "system" fn(*mut core::ffi::c_void, HANDLE) -> windows_core::HRESULT,
     pub GetService: unsafe extern "system" fn(
         *mut core::ffi::c_void,
-        *const windows_core::GUID,
+        *const IID,
         *mut *mut core::ffi::c_void,
     ) -> windows_core::HRESULT,
 }
@@ -619,10 +619,10 @@ impl IAudioClient3 {
     pub unsafe fn GetSharedModeEnginePeriod(
         &self,
         pformat: *const WAVEFORMATEX,
-        pdefaultperiodinframes: *mut u32,
-        pfundamentalperiodinframes: *mut u32,
-        pminperiodinframes: *mut u32,
-        pmaxperiodinframes: *mut u32,
+        pdefaultperiodinframes: *mut UINT32,
+        pfundamentalperiodinframes: *mut UINT32,
+        pminperiodinframes: *mut UINT32,
+        pmaxperiodinframes: *mut UINT32,
     ) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).GetSharedModeEnginePeriod)(
@@ -638,7 +638,7 @@ impl IAudioClient3 {
     pub unsafe fn GetCurrentSharedModeEnginePeriod(
         &self,
         ppformat: *mut *mut WAVEFORMATEX,
-        pcurrentperiodinframes: *mut u32,
+        pcurrentperiodinframes: *mut UINT32,
     ) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).GetCurrentSharedModeEnginePeriod)(
@@ -650,10 +650,10 @@ impl IAudioClient3 {
     }
     pub unsafe fn InitializeSharedAudioStream(
         &self,
-        streamflags: u32,
-        periodinframes: u32,
+        streamflags: DWORD,
+        periodinframes: UINT32,
         pformat: *const WAVEFORMATEX,
-        audiosessionguid: Option<*const windows_core::GUID>,
+        audiosessionguid: Option<LPCGUID>,
     ) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).InitializeSharedAudioStream)(
@@ -672,22 +672,22 @@ pub struct IAudioClient3_Vtbl {
     pub GetSharedModeEnginePeriod: unsafe extern "system" fn(
         *mut core::ffi::c_void,
         *const WAVEFORMATEX,
-        *mut u32,
-        *mut u32,
-        *mut u32,
-        *mut u32,
+        *mut UINT32,
+        *mut UINT32,
+        *mut UINT32,
+        *mut UINT32,
     ) -> windows_core::HRESULT,
     pub GetCurrentSharedModeEnginePeriod: unsafe extern "system" fn(
         *mut core::ffi::c_void,
         *mut *mut WAVEFORMATEX,
-        *mut u32,
+        *mut UINT32,
     ) -> windows_core::HRESULT,
     pub InitializeSharedAudioStream: unsafe extern "system" fn(
         *mut core::ffi::c_void,
-        u32,
-        u32,
+        DWORD,
+        UINT32,
         *const WAVEFORMATEX,
-        *const windows_core::GUID,
+        LPCGUID,
     ) -> windows_core::HRESULT,
 }
 windows_core::imp::define_interface!(
@@ -719,20 +719,18 @@ impl IAudioEndpointVolume {
             )
         }
     }
-    pub unsafe fn GetChannelCount(&self) -> windows_core::Result<u32> {
+    pub unsafe fn GetChannelCount(&self, pnchannelcount: *mut UINT) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetChannelCount)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                pnchannelcount as _,
             )
-            .map(|| result__)
         }
     }
     pub unsafe fn SetMasterVolumeLevel(
         &self,
         fleveldb: f32,
-        pguideventcontext: *const windows_core::GUID,
+        pguideventcontext: LPCGUID,
     ) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).SetMasterVolumeLevel)(
@@ -745,7 +743,7 @@ impl IAudioEndpointVolume {
     pub unsafe fn SetMasterVolumeLevelScalar(
         &self,
         flevel: f32,
-        pguideventcontext: *const windows_core::GUID,
+        pguideventcontext: LPCGUID,
     ) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).SetMasterVolumeLevelScalar)(
@@ -755,31 +753,27 @@ impl IAudioEndpointVolume {
             )
         }
     }
-    pub unsafe fn GetMasterVolumeLevel(&self) -> windows_core::Result<f32> {
+    pub unsafe fn GetMasterVolumeLevel(&self, pfleveldb: *mut f32) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetMasterVolumeLevel)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                pfleveldb as _,
             )
-            .map(|| result__)
         }
     }
-    pub unsafe fn GetMasterVolumeLevelScalar(&self) -> windows_core::Result<f32> {
+    pub unsafe fn GetMasterVolumeLevelScalar(&self, pflevel: *mut f32) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetMasterVolumeLevelScalar)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                pflevel as _,
             )
-            .map(|| result__)
         }
     }
     pub unsafe fn SetChannelVolumeLevel(
         &self,
-        nchannel: u32,
+        nchannel: UINT,
         fleveldb: f32,
-        pguideventcontext: *const windows_core::GUID,
+        pguideventcontext: LPCGUID,
     ) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).SetChannelVolumeLevel)(
@@ -792,9 +786,9 @@ impl IAudioEndpointVolume {
     }
     pub unsafe fn SetChannelVolumeLevelScalar(
         &self,
-        nchannel: u32,
+        nchannel: UINT,
         flevel: f32,
-        pguideventcontext: *const windows_core::GUID,
+        pguideventcontext: LPCGUID,
     ) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).SetChannelVolumeLevelScalar)(
@@ -805,33 +799,33 @@ impl IAudioEndpointVolume {
             )
         }
     }
-    pub unsafe fn GetChannelVolumeLevel(&self, nchannel: u32) -> windows_core::Result<f32> {
+    pub unsafe fn GetChannelVolumeLevel(
+        &self,
+        nchannel: UINT,
+        pfleveldb: *mut f32,
+    ) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetChannelVolumeLevel)(
                 windows_core::Interface::as_raw(self),
                 nchannel,
-                &mut result__,
+                pfleveldb as _,
             )
-            .map(|| result__)
         }
     }
-    pub unsafe fn GetChannelVolumeLevelScalar(&self, nchannel: u32) -> windows_core::Result<f32> {
+    pub unsafe fn GetChannelVolumeLevelScalar(
+        &self,
+        nchannel: UINT,
+        pflevel: *mut f32,
+    ) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetChannelVolumeLevelScalar)(
                 windows_core::Interface::as_raw(self),
                 nchannel,
-                &mut result__,
+                pflevel as _,
             )
-            .map(|| result__)
         }
     }
-    pub unsafe fn SetMute(
-        &self,
-        bmute: bool,
-        pguideventcontext: *const windows_core::GUID,
-    ) -> windows_core::HRESULT {
+    pub unsafe fn SetMute(&self, bmute: bool, pguideventcontext: LPCGUID) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).SetMute)(
                 windows_core::Interface::as_raw(self),
@@ -840,20 +834,18 @@ impl IAudioEndpointVolume {
             )
         }
     }
-    pub unsafe fn GetMute(&self) -> windows_core::Result<windows_core::BOOL> {
+    pub unsafe fn GetMute(&self, pbmute: *mut windows_core::BOOL) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetMute)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                pbmute as _,
             )
-            .map(|| result__)
         }
     }
     pub unsafe fn GetVolumeStepInfo(
         &self,
-        pnstep: *mut u32,
-        pnstepcount: *mut u32,
+        pnstep: *mut UINT,
+        pnstepcount: *mut UINT,
     ) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).GetVolumeStepInfo)(
@@ -863,10 +855,7 @@ impl IAudioEndpointVolume {
             )
         }
     }
-    pub unsafe fn VolumeStepUp(
-        &self,
-        pguideventcontext: *const windows_core::GUID,
-    ) -> windows_core::HRESULT {
+    pub unsafe fn VolumeStepUp(&self, pguideventcontext: LPCGUID) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).VolumeStepUp)(
                 windows_core::Interface::as_raw(self),
@@ -874,10 +863,7 @@ impl IAudioEndpointVolume {
             )
         }
     }
-    pub unsafe fn VolumeStepDown(
-        &self,
-        pguideventcontext: *const windows_core::GUID,
-    ) -> windows_core::HRESULT {
+    pub unsafe fn VolumeStepDown(&self, pguideventcontext: LPCGUID) -> windows_core::HRESULT {
         unsafe {
             (windows_core::Interface::vtable(self).VolumeStepDown)(
                 windows_core::Interface::as_raw(self),
@@ -885,14 +871,15 @@ impl IAudioEndpointVolume {
             )
         }
     }
-    pub unsafe fn QueryHardwareSupport(&self) -> windows_core::Result<u32> {
+    pub unsafe fn QueryHardwareSupport(
+        &self,
+        pdwhardwaresupportmask: *mut DWORD,
+    ) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).QueryHardwareSupport)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                pdwhardwaresupportmask as _,
             )
-            .map(|| result__)
         }
     }
     pub unsafe fn GetVolumeRange(
@@ -923,41 +910,35 @@ pub struct IAudioEndpointVolume_Vtbl {
         *mut core::ffi::c_void,
     ) -> windows_core::HRESULT,
     pub GetChannelCount:
-        unsafe extern "system" fn(*mut core::ffi::c_void, *mut u32) -> windows_core::HRESULT,
-    pub SetMasterVolumeLevel: unsafe extern "system" fn(
-        *mut core::ffi::c_void,
-        f32,
-        *const windows_core::GUID,
-    ) -> windows_core::HRESULT,
-    pub SetMasterVolumeLevelScalar: unsafe extern "system" fn(
-        *mut core::ffi::c_void,
-        f32,
-        *const windows_core::GUID,
-    ) -> windows_core::HRESULT,
+        unsafe extern "system" fn(*mut core::ffi::c_void, *mut UINT) -> windows_core::HRESULT,
+    pub SetMasterVolumeLevel:
+        unsafe extern "system" fn(*mut core::ffi::c_void, f32, LPCGUID) -> windows_core::HRESULT,
+    pub SetMasterVolumeLevelScalar:
+        unsafe extern "system" fn(*mut core::ffi::c_void, f32, LPCGUID) -> windows_core::HRESULT,
     pub GetMasterVolumeLevel:
         unsafe extern "system" fn(*mut core::ffi::c_void, *mut f32) -> windows_core::HRESULT,
     pub GetMasterVolumeLevelScalar:
         unsafe extern "system" fn(*mut core::ffi::c_void, *mut f32) -> windows_core::HRESULT,
     pub SetChannelVolumeLevel: unsafe extern "system" fn(
         *mut core::ffi::c_void,
-        u32,
+        UINT,
         f32,
-        *const windows_core::GUID,
+        LPCGUID,
     ) -> windows_core::HRESULT,
     pub SetChannelVolumeLevelScalar: unsafe extern "system" fn(
         *mut core::ffi::c_void,
-        u32,
+        UINT,
         f32,
-        *const windows_core::GUID,
+        LPCGUID,
     ) -> windows_core::HRESULT,
     pub GetChannelVolumeLevel:
-        unsafe extern "system" fn(*mut core::ffi::c_void, u32, *mut f32) -> windows_core::HRESULT,
+        unsafe extern "system" fn(*mut core::ffi::c_void, UINT, *mut f32) -> windows_core::HRESULT,
     pub GetChannelVolumeLevelScalar:
-        unsafe extern "system" fn(*mut core::ffi::c_void, u32, *mut f32) -> windows_core::HRESULT,
+        unsafe extern "system" fn(*mut core::ffi::c_void, UINT, *mut f32) -> windows_core::HRESULT,
     pub SetMute: unsafe extern "system" fn(
         *mut core::ffi::c_void,
         windows_core::BOOL,
-        *const windows_core::GUID,
+        LPCGUID,
     ) -> windows_core::HRESULT,
     pub GetMute: unsafe extern "system" fn(
         *mut core::ffi::c_void,
@@ -965,19 +946,15 @@ pub struct IAudioEndpointVolume_Vtbl {
     ) -> windows_core::HRESULT,
     pub GetVolumeStepInfo: unsafe extern "system" fn(
         *mut core::ffi::c_void,
-        *mut u32,
-        *mut u32,
+        *mut UINT,
+        *mut UINT,
     ) -> windows_core::HRESULT,
-    pub VolumeStepUp: unsafe extern "system" fn(
-        *mut core::ffi::c_void,
-        *const windows_core::GUID,
-    ) -> windows_core::HRESULT,
-    pub VolumeStepDown: unsafe extern "system" fn(
-        *mut core::ffi::c_void,
-        *const windows_core::GUID,
-    ) -> windows_core::HRESULT,
+    pub VolumeStepUp:
+        unsafe extern "system" fn(*mut core::ffi::c_void, LPCGUID) -> windows_core::HRESULT,
+    pub VolumeStepDown:
+        unsafe extern "system" fn(*mut core::ffi::c_void, LPCGUID) -> windows_core::HRESULT,
     pub QueryHardwareSupport:
-        unsafe extern "system" fn(*mut core::ffi::c_void, *mut u32) -> windows_core::HRESULT,
+        unsafe extern "system" fn(*mut core::ffi::c_void, *mut DWORD) -> windows_core::HRESULT,
     pub GetVolumeRange: unsafe extern "system" fn(
         *mut core::ffi::c_void,
         *mut f32,
@@ -1010,6 +987,7 @@ pub struct IDispatch_Vtbl {
     GetIDsOfNames: usize,
     Invoke: usize,
 }
+pub type IID = windows_core::GUID;
 windows_core::imp::define_interface!(
     IMMDevice,
     IMMDevice_Vtbl,
@@ -1019,7 +997,7 @@ windows_core::imp::interface_hierarchy!(IMMDevice, windows_core::IUnknown);
 impl IMMDevice {
     pub unsafe fn Activate<T>(
         &self,
-        dwclsctx: u32,
+        dwclsctx: DWORD,
         pactivationparams: Option<*const PROPVARIANT>,
     ) -> windows_core::Result<T>
     where
@@ -1034,41 +1012,36 @@ impl IMMDevice {
                 pactivationparams.unwrap_or(core::mem::zeroed()) as _,
                 &mut result__,
             )
-            .and_then(|| windows_core::imp::Type::from_abi(result__))
+            .and_then(|| windows_core::imp::from_abi(result__))
         }
     }
     pub unsafe fn OpenPropertyStore(
         &self,
-        stgmaccess: u32,
-    ) -> windows_core::Result<IPropertyStore> {
+        stgmaccess: DWORD,
+        ppproperties: *mut Option<IPropertyStore>,
+    ) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).OpenPropertyStore)(
                 windows_core::Interface::as_raw(self),
                 stgmaccess,
-                &mut result__,
+                ppproperties as _,
             )
-            .and_then(|| windows_core::imp::Type::from_abi(result__))
         }
     }
-    pub unsafe fn GetId(&self) -> windows_core::Result<windows_core::PWSTR> {
+    pub unsafe fn GetId(&self, ppstrid: *mut windows_core::PWSTR) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetId)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                ppstrid as _,
             )
-            .map(|| result__)
         }
     }
-    pub unsafe fn GetState(&self) -> windows_core::Result<u32> {
+    pub unsafe fn GetState(&self, pdwstate: *mut DWORD) -> windows_core::HRESULT {
         unsafe {
-            let mut result__ = core::mem::zeroed();
             (windows_core::Interface::vtable(self).GetState)(
                 windows_core::Interface::as_raw(self),
-                &mut result__,
+                pdwstate as _,
             )
-            .map(|| result__)
         }
     }
 }
@@ -1077,14 +1050,14 @@ pub struct IMMDevice_Vtbl {
     pub base__: windows_core::IUnknown_Vtbl,
     pub Activate: unsafe extern "system" fn(
         *mut core::ffi::c_void,
-        *const windows_core::GUID,
-        u32,
+        *const IID,
+        DWORD,
         *const PROPVARIANT,
         *mut *mut core::ffi::c_void,
     ) -> windows_core::HRESULT,
     pub OpenPropertyStore: unsafe extern "system" fn(
         *mut core::ffi::c_void,
-        u32,
+        DWORD,
         *mut *mut core::ffi::c_void,
     ) -> windows_core::HRESULT,
     pub GetId: unsafe extern "system" fn(
@@ -1092,8 +1065,9 @@ pub struct IMMDevice_Vtbl {
         *mut windows_core::PWSTR,
     ) -> windows_core::HRESULT,
     pub GetState:
-        unsafe extern "system" fn(*mut core::ffi::c_void, *mut u32) -> windows_core::HRESULT,
+        unsafe extern "system" fn(*mut core::ffi::c_void, *mut DWORD) -> windows_core::HRESULT,
 }
+pub type INT = i32;
 windows_core::imp::define_interface!(
     IPropertyStore,
     IPropertyStore_Vtbl,
@@ -1171,76 +1145,192 @@ pub struct IStream_Vtbl {
     Stat: usize,
     Clone: usize,
 }
-pub type LPSAFEARRAY = *mut SAFEARRAY;
-pub type LPVERSIONEDSTREAM = *mut VERSIONEDSTREAM;
 #[repr(C)]
-pub struct PROPVARIANT {
-    pub Anonymous: PROPVARIANT_0,
+#[derive(Clone, Copy)]
+pub union LARGE_INTEGER {
+    pub Anonymous: LARGE_INTEGER_0,
+    pub u: LARGE_INTEGER_1,
+    pub QuadPart: LONGLONG,
 }
-impl Clone for PROPVARIANT {
-    fn clone(&self) -> Self {
-        unsafe { core::mem::transmute_copy(self) }
-    }
-}
-impl Default for PROPVARIANT {
+impl Default for LARGE_INTEGER {
     fn default() -> Self {
         unsafe { core::mem::zeroed() }
     }
 }
 #[repr(C)]
-pub union PROPVARIANT_0 {
-    pub Anonymous: core::mem::ManuallyDrop<PROPVARIANT_0_0>,
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct LARGE_INTEGER_0 {
+    pub LowPart: DWORD,
+    pub HighPart: LONG,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct LARGE_INTEGER_1 {
+    pub LowPart: DWORD,
+    pub HighPart: LONG,
+}
+pub type LONG = i32;
+pub type LONGLONG = i64;
+pub type LPCGUID = *const windows_core::GUID;
+pub type LPSAFEARRAY = *mut SAFEARRAY;
+pub type LPSECURITY_ATTRIBUTES = *mut SECURITY_ATTRIBUTES;
+pub type LPVERSIONEDSTREAM = *mut VERSIONEDSTREAM;
+pub type LPVOID = *mut core::ffi::c_void;
+pub type PROPVARIANT = tagPROPVARIANT;
+pub type PROPVAR_PAD1 = u16;
+pub type PROPVAR_PAD2 = u16;
+pub type PROPVAR_PAD3 = u16;
+pub type PVOID = *mut core::ffi::c_void;
+pub type REFERENCE_TIME = i64;
+#[repr(C, packed(8))]
+#[derive(Clone, Copy)]
+pub struct SAFEARRAY {
+    pub cDims: USHORT,
+    pub fFeatures: USHORT,
+    pub cbElements: ULONG,
+    pub cLocks: ULONG,
+    pub pvData: PVOID,
+    pub rgsabound: [SAFEARRAYBOUND; 1],
+}
+impl Default for SAFEARRAY {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
+#[repr(C, packed(8))]
+#[derive(Clone, Copy, Default)]
+pub struct SAFEARRAYBOUND {
+    pub cElements: ULONG,
+    pub lLbound: LONG,
+}
+pub type SCODE = i32;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SECURITY_ATTRIBUTES {
+    pub nLength: DWORD,
+    pub lpSecurityDescriptor: LPVOID,
+    pub bInheritHandle: windows_core::BOOL,
+}
+pub type SHORT = i16;
+pub const S_OK: windows_core::HRESULT = windows_core::HRESULT(0x0_u32 as _);
+pub type UCHAR = u8;
+pub type UINT = u32;
+pub type UINT32 = u32;
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union ULARGE_INTEGER {
+    pub Anonymous: ULARGE_INTEGER_0,
+    pub u: ULARGE_INTEGER_1,
+    pub QuadPart: ULONGLONG,
+}
+impl Default for ULARGE_INTEGER {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ULARGE_INTEGER_0 {
+    pub LowPart: DWORD,
+    pub HighPart: DWORD,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ULARGE_INTEGER_1 {
+    pub LowPart: DWORD,
+    pub HighPart: DWORD,
+}
+pub type ULONG = u32;
+pub type ULONGLONG = u64;
+pub type USHORT = u16;
+pub type VARIANT_BOOL = i16;
+pub type VARTYPE = u16;
+#[repr(C, packed(8))]
+#[derive(Default)]
+pub struct VERSIONEDSTREAM {
+    pub guidVersion: windows_core::GUID,
+    pub pStream: core::mem::ManuallyDrop<Option<IStream>>,
+}
+#[repr(C, packed(1))]
+#[derive(Clone, Copy, Default)]
+pub struct WAVEFORMATEX {
+    pub wFormatTag: WORD,
+    pub nChannels: WORD,
+    pub nSamplesPerSec: DWORD,
+    pub nAvgBytesPerSec: DWORD,
+    pub nBlockAlign: WORD,
+    pub wBitsPerSample: WORD,
+    pub cbSize: WORD,
+}
+pub type WORD = u16;
+#[repr(C, packed(8))]
+pub struct tagPROPVARIANT {
+    pub Anonymous: tagPROPVARIANT_0,
+}
+impl Clone for tagPROPVARIANT {
+    fn clone(&self) -> Self {
+        unsafe { core::mem::transmute_copy(self) }
+    }
+}
+impl Default for tagPROPVARIANT {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
+#[repr(C, packed(8))]
+pub union tagPROPVARIANT_0 {
+    pub Anonymous: core::mem::ManuallyDrop<tagPROPVARIANT_0_0>,
     pub decVal: DECIMAL,
 }
-impl Clone for PROPVARIANT_0 {
+impl Clone for tagPROPVARIANT_0 {
     fn clone(&self) -> Self {
         unsafe { core::mem::transmute_copy(self) }
     }
 }
-impl Default for PROPVARIANT_0 {
+impl Default for tagPROPVARIANT_0 {
     fn default() -> Self {
         unsafe { core::mem::zeroed() }
     }
 }
-#[repr(C)]
-pub struct PROPVARIANT_0_0 {
+#[repr(C, packed(8))]
+pub struct tagPROPVARIANT_0_0 {
     pub vt: VARTYPE,
     pub wReserved1: PROPVAR_PAD1,
     pub wReserved2: PROPVAR_PAD2,
     pub wReserved3: PROPVAR_PAD3,
-    pub Anonymous: PROPVARIANT_0_0_0,
+    pub Anonymous: tagPROPVARIANT_0_0_0,
 }
-impl Clone for PROPVARIANT_0_0 {
+impl Clone for tagPROPVARIANT_0_0 {
     fn clone(&self) -> Self {
         unsafe { core::mem::transmute_copy(self) }
     }
 }
-impl Default for PROPVARIANT_0_0 {
+impl Default for tagPROPVARIANT_0_0 {
     fn default() -> Self {
         unsafe { core::mem::zeroed() }
     }
 }
-#[repr(C)]
-pub union PROPVARIANT_0_0_0 {
-    pub cVal: i8,
-    pub bVal: u8,
-    pub iVal: i16,
-    pub uiVal: u16,
-    pub lVal: i32,
-    pub ulVal: u32,
-    pub intVal: i32,
-    pub uintVal: u32,
-    pub hVal: i64,
-    pub uhVal: u64,
-    pub fltVal: f32,
-    pub dblVal: f64,
+#[repr(C, packed(8))]
+pub union tagPROPVARIANT_0_0_0 {
+    pub cVal: CHAR,
+    pub bVal: UCHAR,
+    pub iVal: SHORT,
+    pub uiVal: USHORT,
+    pub lVal: LONG,
+    pub ulVal: ULONG,
+    pub intVal: INT,
+    pub uintVal: UINT,
+    pub hVal: LARGE_INTEGER,
+    pub uhVal: ULARGE_INTEGER,
+    pub fltVal: FLOAT,
+    pub dblVal: DOUBLE,
     pub boolVal: VARIANT_BOOL,
     pub __OBSOLETE__VARIANT_BOOL: VARIANT_BOOL,
     pub scode: SCODE,
     pub cyVal: CY,
-    pub date: f64,
+    pub date: DATE,
     pub filetime: FILETIME,
-    pub puuid: *mut windows_core::GUID,
+    pub puuid: *mut CLSID,
     pub pclipdata: *mut CLIPDATA,
     pub bstrVal: core::mem::ManuallyDrop<windows_core::BSTR>,
     pub bstrblobVal: BSTRBLOB,
@@ -1275,100 +1365,34 @@ pub union PROPVARIANT_0_0_0 {
     pub calpstr: CALPSTR,
     pub calpwstr: CALPWSTR,
     pub capropvar: CAPROPVARIANT,
-    pub pcVal: *mut i8,
-    pub pbVal: *mut u8,
-    pub piVal: *mut i16,
-    pub puiVal: *mut u16,
-    pub plVal: *mut i32,
-    pub pulVal: *mut u32,
-    pub pintVal: *mut i32,
-    pub puintVal: *mut u32,
-    pub pfltVal: *mut f32,
-    pub pdblVal: *mut f64,
+    pub pcVal: *mut CHAR,
+    pub pbVal: *mut UCHAR,
+    pub piVal: *mut SHORT,
+    pub puiVal: *mut USHORT,
+    pub plVal: *mut LONG,
+    pub pulVal: *mut ULONG,
+    pub pintVal: *mut INT,
+    pub puintVal: *mut UINT,
+    pub pfltVal: *mut FLOAT,
+    pub pdblVal: *mut DOUBLE,
     pub pboolVal: *mut VARIANT_BOOL,
     pub pdecVal: *mut DECIMAL,
     pub pscode: *mut SCODE,
     pub pcyVal: *mut CY,
-    pub pdate: *mut f64,
+    pub pdate: *mut DATE,
     pub pbstrVal: *mut windows_core::BSTR,
     pub ppunkVal: *mut Option<windows_core::IUnknown>,
     pub ppdispVal: *mut Option<IDispatch>,
     pub pparray: *mut LPSAFEARRAY,
     pub pvarVal: *mut PROPVARIANT,
 }
-impl Clone for PROPVARIANT_0_0_0 {
+impl Clone for tagPROPVARIANT_0_0_0 {
     fn clone(&self) -> Self {
         unsafe { core::mem::transmute_copy(self) }
     }
 }
-impl Default for PROPVARIANT_0_0_0 {
+impl Default for tagPROPVARIANT_0_0_0 {
     fn default() -> Self {
         unsafe { core::mem::zeroed() }
     }
-}
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct PROPVAR_PAD1(pub u16);
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct PROPVAR_PAD2(pub u16);
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct PROPVAR_PAD3(pub u16);
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct REFERENCE_TIME(pub i64);
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SAFEARRAY {
-    pub cDims: u16,
-    pub fFeatures: u16,
-    pub cbElements: u32,
-    pub cLocks: u32,
-    pub pvData: *mut core::ffi::c_void,
-    pub rgsabound: [SAFEARRAYBOUND; 1],
-}
-impl Default for SAFEARRAY {
-    fn default() -> Self {
-        unsafe { core::mem::zeroed() }
-    }
-}
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct SAFEARRAYBOUND {
-    pub cElements: u32,
-    pub lLbound: i32,
-}
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct SCODE(pub i32);
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct SECURITY_ATTRIBUTES {
-    pub nLength: u32,
-    pub lpSecurityDescriptor: *mut core::ffi::c_void,
-    pub bInheritHandle: windows_core::BOOL,
-}
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct VARIANT_BOOL(pub i16);
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct VARTYPE(pub u16);
-#[repr(C)]
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct VERSIONEDSTREAM {
-    pub guidVersion: windows_core::GUID,
-    pub pStream: core::mem::ManuallyDrop<Option<IStream>>,
-}
-#[repr(C, packed(1))]
-#[derive(Clone, Copy, Default)]
-pub struct WAVEFORMATEX {
-    pub wFormatTag: u16,
-    pub nChannels: u16,
-    pub nSamplesPerSec: u32,
-    pub nAvgBytesPerSec: u32,
-    pub nBlockAlign: u16,
-    pub wBitsPerSample: u16,
-    pub cbSize: u16,
 }

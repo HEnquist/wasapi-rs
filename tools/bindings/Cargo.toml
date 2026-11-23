@@ -5,4 +5,5 @@ edition = "2024"
 publish = false
 
 [dependencies]
-windows-bindgen = "0.100.0"
+# Experiment: unreleased 0.101 from windows-rs master.
+windows-bindgen = { git = "https://github.com/microsoft/windows-rs", rev = "c614bab27346" }
