@@ -122,6 +122,8 @@ fn buffer_flags_round_trip() {
     let none = BufferFlags::none();
     assert!(!none.data_discontinuity && !none.silent && !none.timestamp_error);
     assert_eq!(none.to_u32(), 0);
+    assert_eq!(BufferFlags::default(), none);
+    assert_eq!(BufferInfo::default(), BufferInfo::none());
 
     // AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, _SILENT and _TIMESTAMP_ERROR are
     // bits 0, 1 and 2, and each one is read out on its own.
@@ -220,6 +222,23 @@ fn waveformat_display() {
         float.to_string(),
         "Float 32/32 bit, 6 channels, 44100 Hz, mask 0x3f"
     );
+}
+
+/// The Debug output of the callback holders says which callbacks are set.
+#[test]
+fn callbacks_debug_shows_what_is_set() {
+    let mut callbacks = EventCallbacks::new();
+    assert!(format!("{callbacks:?}").contains("disconnected: false"));
+    callbacks.set_disconnected_callback(|_| {});
+    let debug = format!("{callbacks:?}");
+    assert!(debug.contains("disconnected: true"), "{debug}");
+    assert!(debug.contains("state: false"), "{debug}");
+
+    let mut device_callbacks = DeviceEventCallbacks::new();
+    device_callbacks.set_device_added_callback(|_| {});
+    let debug = format!("{device_callbacks:?}");
+    assert!(debug.contains("device_added: true"), "{debug}");
+    assert!(debug.contains("device_removed: false"), "{debug}");
 }
 
 /// A stream option accumulates into the properties rather than replacing what is there.
