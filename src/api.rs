@@ -2702,7 +2702,7 @@ pub struct AudioEffectsManager {
 
 /// An audio effect on a stream, mirroring an
 /// [AUDIO_EFFECT](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/ns-audioclient-audio_effect).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub struct AudioEffect {
     /// The type of the effect, one of the `AUDIO_EFFECT_TYPE_XXX` GUIDs from ksmedia.h,
