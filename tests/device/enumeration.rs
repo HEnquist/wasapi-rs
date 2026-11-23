@@ -94,6 +94,7 @@ fn collection_agrees_with_iterator() {
             .collect();
         assert_eq!(by_index, by_iterator, "{direction} devices");
         assert_eq!(by_index.len(), count as usize);
+        assert_eq!((&collection).into_iter().len(), count as usize);
 
         for device in (&collection).into_iter().flatten() {
             assert_eq!(device.get_direction(), direction);

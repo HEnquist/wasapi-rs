@@ -93,6 +93,28 @@ impl fmt::Debug for WaveFormat {
     }
 }
 
+/// A short human readable summary, for example `Int 24/32 bit, 2 channels, 48000 Hz, mask 0x3`.
+///
+/// The bit depth is given as valid bits over stored bits.
+/// A sub format other than integer or float is shown as `Unknown`.
+impl fmt::Display for WaveFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.get_subformat() {
+            Ok(sample_type) => write!(f, "{sample_type}")?,
+            Err(_) => write!(f, "Unknown")?,
+        }
+        write!(
+            f,
+            " {}/{} bit, {} channels, {} Hz, mask {:#x}",
+            self.get_validbitspersample(),
+            self.get_bitspersample(),
+            self.get_nchannels(),
+            self.get_samplespersec(),
+            self.get_dwchannelmask(),
+        )
+    }
+}
+
 impl PartialEq for WaveFormat {
     fn eq(&self, other: &Self) -> bool {
         ({ self.wave_fmt.Format.wFormatTag } == { other.wave_fmt.Format.wFormatTag })

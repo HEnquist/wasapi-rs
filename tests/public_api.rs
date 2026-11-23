@@ -53,6 +53,7 @@ fn enumerator_works_without_any_device() {
                 "a default {direction} device appeared on a runner with none"
             );
             // An empty collection still iterates, it just yields nothing.
+            assert_eq!((&collection).into_iter().len(), 0);
             assert_eq!((&collection).into_iter().count(), 0);
             assert!(collection.get_device_at_index(0).is_err());
         }
@@ -164,6 +165,63 @@ fn hardware_support_bits() {
 
     let all = HardwareSupport::new(0x7);
     assert!(all.volume && all.mute && all.meter);
+}
+
+/// The plain enums display as their variant names, the same as their Debug output.
+#[test]
+#[allow(deprecated)]
+fn enums_display_as_variant_names() {
+    fn check<T: std::fmt::Display + std::fmt::Debug>(values: &[T]) {
+        for value in values {
+            assert_eq!(format!("{value}"), format!("{value:?}"));
+        }
+    }
+    check(&[TimingMode::Polling, TimingMode::Events]);
+    check(&[
+        DisconnectReason::DeviceRemoval,
+        DisconnectReason::ServerShutdown,
+        DisconnectReason::FormatChanged,
+        DisconnectReason::SessionLogoff,
+        DisconnectReason::SessionDisconnected,
+        DisconnectReason::ExclusiveModeOverride,
+        DisconnectReason::Unknown,
+    ]);
+    check(&[
+        StreamCategory::Other,
+        StreamCategory::ForegroundOnlyMedia,
+        StreamCategory::Communications,
+        StreamCategory::Alerts,
+        StreamCategory::SoundEffects,
+        StreamCategory::GameEffects,
+        StreamCategory::GameMedia,
+        StreamCategory::GameChat,
+        StreamCategory::Speech,
+        StreamCategory::Movie,
+        StreamCategory::Media,
+        StreamCategory::FarFieldSpeech,
+        StreamCategory::UniformSpeech,
+        StreamCategory::VoiceTyping,
+    ]);
+    check(&[
+        StreamOption::Raw,
+        StreamOption::MatchFormat,
+        StreamOption::Ambisonics,
+    ]);
+}
+
+/// A wave format displays as a short summary of its fields.
+#[test]
+fn waveformat_display() {
+    let padded = WaveFormat::new(32, 24, SampleType::Int, 48000, 2, None);
+    assert_eq!(
+        padded.to_string(),
+        "Int 24/32 bit, 2 channels, 48000 Hz, mask 0x3"
+    );
+    let float = WaveFormat::new(32, 32, SampleType::Float, 44100, 6, Some(0x3f));
+    assert_eq!(
+        float.to_string(),
+        "Float 32/32 bit, 6 channels, 44100 Hz, mask 0x3f"
+    );
 }
 
 /// The Debug output of the callback holders says which callbacks are set.

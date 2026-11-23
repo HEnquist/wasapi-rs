@@ -192,6 +192,21 @@ pub enum DisconnectReason {
     Unknown,
 }
 
+impl fmt::Display for DisconnectReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match *self {
+            DisconnectReason::DeviceRemoval => "DeviceRemoval",
+            DisconnectReason::ServerShutdown => "ServerShutdown",
+            DisconnectReason::FormatChanged => "FormatChanged",
+            DisconnectReason::SessionLogoff => "SessionLogoff",
+            DisconnectReason::SessionDisconnected => "SessionDisconnected",
+            DisconnectReason::ExclusiveModeOverride => "ExclusiveModeOverride",
+            DisconnectReason::Unknown => "Unknown",
+        };
+        write!(f, "{name}")
+    }
+}
+
 /// Wrapper for [IAudioSessionEvents](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionevents).
 #[implement(IAudioSessionEvents)]
 pub(crate) struct AudioSessionEvents {

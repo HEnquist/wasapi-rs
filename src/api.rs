@@ -1,6 +1,7 @@
 use num_integer::Integer;
 use std::cmp;
 use std::collections::VecDeque;
+use std::iter::FusedIterator;
 use std::mem::{ManuallyDrop, size_of};
 use std::ops::Deref;
 use std::pin::Pin;
@@ -304,6 +305,15 @@ impl fmt::Display for ShareMode {
     }
 }
 
+impl fmt::Display for TimingMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            TimingMode::Polling => write!(f, "Polling"),
+            TimingMode::Events => write!(f, "Events"),
+        }
+    }
+}
+
 /// Sample type, float or integer
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum SampleType {
@@ -566,17 +576,25 @@ impl DeviceCollection {
 }
 
 /// Iterator for [DeviceCollection]
+///
+/// The number of devices is read once, when the iterator is created.
+/// If reading it fails, the iterator yields that error as its only item.
 #[derive(Debug)]
 pub struct DeviceCollectionIter<'a> {
     collection: &'a DeviceCollection,
     index: u32,
+    count: u32,
+    error: Option<WasapiError>,
 }
 
 impl Iterator for DeviceCollectionIter<'_> {
     type Item = WasapiRes<Device>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.collection.get_nbr_devices().unwrap() {
+        if let Some(err) = self.error.take() {
+            return Some(Err(err));
+        }
+        if self.index < self.count {
             let device = self.collection.get_device_at_index(self.index);
             self.index += 1;
             Some(device)
@@ -584,7 +602,16 @@ impl Iterator for DeviceCollectionIter<'_> {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = (self.count - self.index) as usize + usize::from(self.error.is_some());
+        (remaining, Some(remaining))
+    }
 }
+
+impl ExactSizeIterator for DeviceCollectionIter<'_> {}
+
+impl FusedIterator for DeviceCollectionIter<'_> {}
 
 /// Implement iterator for [DeviceCollection]
 impl<'a> IntoIterator for &'a DeviceCollection {
@@ -592,9 +619,15 @@ impl<'a> IntoIterator for &'a DeviceCollection {
     type IntoIter = DeviceCollectionIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
+        let (count, error) = match self.get_nbr_devices() {
+            Ok(count) => (count, None),
+            Err(err) => (0, Some(err)),
+        };
         DeviceCollectionIter {
             collection: self,
             index: 0,
+            count,
+            error,
         }
     }
 }
@@ -1905,6 +1938,63 @@ impl AudioSessionEnumerator {
     }
 }
 
+/// Iterator for [AudioSessionEnumerator]
+///
+/// The number of sessions is read once, when the iterator is created.
+/// If reading it fails, the iterator yields that error as its only item.
+#[derive(Debug)]
+pub struct AudioSessionEnumeratorIter<'a> {
+    enumerator: &'a AudioSessionEnumerator,
+    index: i32,
+    count: i32,
+    error: Option<WasapiError>,
+}
+
+impl Iterator for AudioSessionEnumeratorIter<'_> {
+    type Item = WasapiRes<AudioSessionControl>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(err) = self.error.take() {
+            return Some(Err(err));
+        }
+        if self.index < self.count {
+            let session = self.enumerator.get_session(self.index);
+            self.index += 1;
+            Some(session)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = (self.count - self.index) as usize + usize::from(self.error.is_some());
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for AudioSessionEnumeratorIter<'_> {}
+
+impl FusedIterator for AudioSessionEnumeratorIter<'_> {}
+
+/// Implement iterator for [AudioSessionEnumerator]
+impl<'a> IntoIterator for &'a AudioSessionEnumerator {
+    type Item = WasapiRes<AudioSessionControl>;
+    type IntoIter = AudioSessionEnumeratorIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let (count, error) = match self.get_count() {
+            Ok(count) => (count.max(0), None),
+            Err(err) => (0, Some(err)),
+        };
+        AudioSessionEnumeratorIter {
+            enumerator: self,
+            index: 0,
+            count,
+            error,
+        }
+    }
+}
+
 /// Specifies the category of an audio stream.
 ///
 /// Wrapper for
@@ -1968,6 +2058,29 @@ impl From<StreamCategory> for AUDIO_STREAM_CATEGORY {
     }
 }
 
+impl fmt::Display for StreamCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[allow(deprecated)]
+        let name = match *self {
+            StreamCategory::Other => "Other",
+            StreamCategory::ForegroundOnlyMedia => "ForegroundOnlyMedia",
+            StreamCategory::Communications => "Communications",
+            StreamCategory::Alerts => "Alerts",
+            StreamCategory::SoundEffects => "SoundEffects",
+            StreamCategory::GameEffects => "GameEffects",
+            StreamCategory::GameMedia => "GameMedia",
+            StreamCategory::GameChat => "GameChat",
+            StreamCategory::Speech => "Speech",
+            StreamCategory::Movie => "Movie",
+            StreamCategory::Media => "Media",
+            StreamCategory::FarFieldSpeech => "FarFieldSpeech",
+            StreamCategory::UniformSpeech => "UniformSpeech",
+            StreamCategory::VoiceTyping => "VoiceTyping",
+        };
+        write!(f, "{name}")
+    }
+}
+
 /// Defines values that describe the characteristics of an audio stream.
 ///
 /// Wrapper for
@@ -1990,6 +2103,16 @@ impl From<StreamOption> for AUDCLNT_STREAMOPTIONS {
             StreamOption::Raw => AUDCLNT_STREAMOPTIONS_RAW,
             StreamOption::MatchFormat => AUDCLNT_STREAMOPTIONS_MATCH_FORMAT,
             StreamOption::Ambisonics => AUDCLNT_STREAMOPTIONS_AMBISONICS,
+        }
+    }
+}
+
+impl fmt::Display for StreamOption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            StreamOption::Raw => write!(f, "Raw"),
+            StreamOption::MatchFormat => write!(f, "MatchFormat"),
+            StreamOption::Ambisonics => write!(f, "Ambisonics"),
         }
     }
 }
