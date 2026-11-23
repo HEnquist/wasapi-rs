@@ -1,6 +1,7 @@
 use num_integer::Integer;
 use std::cmp;
 use std::collections::VecDeque;
+use std::iter::FusedIterator;
 use std::mem::{ManuallyDrop, size_of};
 use std::ops::Deref;
 use std::pin::Pin;
@@ -558,6 +559,8 @@ impl Iterator for DeviceCollectionIter<'_> {
 }
 
 impl ExactSizeIterator for DeviceCollectionIter<'_> {}
+
+impl FusedIterator for DeviceCollectionIter<'_> {}
 
 /// Implement iterator for [DeviceCollection]
 impl<'a> IntoIterator for &'a DeviceCollection {
@@ -1917,6 +1920,8 @@ impl Iterator for AudioSessionEnumeratorIter<'_> {
 }
 
 impl ExactSizeIterator for AudioSessionEnumeratorIter<'_> {}
+
+impl FusedIterator for AudioSessionEnumeratorIter<'_> {}
 
 /// Implement iterator for [AudioSessionEnumerator]
 impl<'a> IntoIterator for &'a AudioSessionEnumerator {
