@@ -1,0 +1,25 @@
+// Windows API symbols used by the device tests, generated into tests/device/bindings.rs.
+// These are the caller's side of the raw accessors, kept apart from the crate's own
+// bindings so that the tests can not reach anything the crate does not export.
+
+// Activating an audio client the WinRT way.
+ActivateAudioInterfaceAsync
+IActivateAudioInterfaceAsyncOperation
+IActivateAudioInterfaceCompletionHandler
+DEVINTERFACE_AUDIO_CAPTURE
+DEVINTERFACE_AUDIO_RENDER
+IAudioClient
+
+// Reaching a newer interface version from a client.
+IAudioClient3
+
+// Activating an endpoint service the crate does not wrap.
+IMMDevice
+IAudioEndpointVolume
+CLSCTX_ALL
+
+// Waiting on the stream event together with another one.
+CreateEventW
+SetEvent
+CloseHandle
+WaitForMultipleObjects
