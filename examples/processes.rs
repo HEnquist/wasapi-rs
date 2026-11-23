@@ -24,8 +24,8 @@ fn main() {
                 dev.get_friendlyname().unwrap()
             );
 
-            for i in 0..sessions.get_count().unwrap() {
-                let control = sessions.get_session(i).unwrap();
+            for control in &sessions {
+                let control = control.unwrap();
                 let state = control.get_state().unwrap();
                 if state != SessionState::Active {
                     continue;

@@ -73,7 +73,7 @@ pub enum WasapiError {
     #[error("Client has not been initialized")]
     ClientNotInit,
     #[error("Couldn't register notifications: {0}")]
-    RegisterNotifications(windows_core::Error),
+    RegisterNotifications(#[source] windows_core::Error),
     #[error("Wrong length of data, got {received}, expected exactly {expected}")]
     DataLengthMismatch { received: usize, expected: usize },
     #[error("Wrong length of data, got {received}, expected at least {expected}")]
@@ -90,4 +90,16 @@ pub enum WasapiError {
     Windows(#[from] windows_core::Error),
     #[error("String conversion error: {0}")]
     FromUtf16Error(#[from] std::string::FromUtf16Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error;
+
+    #[test]
+    fn register_notifications_has_source() {
+        let err = WasapiError::RegisterNotifications(windows_core::Error::empty());
+        assert!(err.source().is_some());
+    }
 }

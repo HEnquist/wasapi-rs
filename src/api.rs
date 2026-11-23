@@ -17,8 +17,9 @@ use crate::bindings::{
     AudioSessionStateExpired, AudioSessionStateInactive, BLOB, CLSCTX_ALL,
     COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED, CloseHandle, CoCreateInstance, CoInitializeEx,
     CoTaskMemFree, CoUninitialize, CreateEventA, DEVICE_STATE_ACTIVE, DEVICE_STATE_DISABLED,
-    DEVICE_STATE_NOTPRESENT, DEVICE_STATE_UNPLUGGED, E_INVALIDARG, E_NOINTERFACE, E_POINTER,
-    EDataFlow, ENDPOINT_HARDWARE_SUPPORT_METER, ENDPOINT_HARDWARE_SUPPORT_MUTE,
+    DEVICE_STATE_NOTPRESENT, DEVICE_STATE_UNPLUGGED, DEVINTERFACE_AUDIO_CAPTURE,
+    DEVINTERFACE_AUDIO_RENDER, E_INVALIDARG, E_NOINTERFACE, E_POINTER, EDataFlow,
+    ENDPOINT_HARDWARE_SUPPORT_METER, ENDPOINT_HARDWARE_SUPPORT_MUTE,
     ENDPOINT_HARDWARE_SUPPORT_VOLUME, ERole, FALSE, HANDLE, IAcousticEchoCancellationControl,
     IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
     IActivateAudioInterfaceCompletionHandler_Impl, IAudioCaptureClient, IAudioClient,
@@ -31,7 +32,7 @@ use crate::bindings::{
     PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
     PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, PROPERTYKEY, PROPVAR_PAD1, PROPVAR_PAD2,
     PROPVAR_PAD3, PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0, PropVariantClear,
-    PropVariantToStringAlloc, REFERENCE_TIME, STGM_READ, VARTYPE,
+    PropVariantToStringAlloc, REFERENCE_TIME, STGM_READ, StringFromIID, VARTYPE,
     VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, VT_BLOB, WAIT_OBJECT_0, WAVEFORMATEX,
     WaitForSingleObject, eCapture, eCommunications, eConsole, eMultimedia, eRender,
 };
@@ -39,6 +40,7 @@ use num_integer::Integer;
 use std::cmp;
 use std::collections::VecDeque;
 use std::ffi::c_void;
+use std::iter::FusedIterator;
 use std::mem::{ManuallyDrop, size_of};
 use std::ops::Deref;
 use std::pin::Pin;
@@ -55,23 +57,74 @@ use crate::{
 
 pub(crate) type WasapiRes<T> = Result<T, WasapiError>;
 
-/// Initializes COM for use by the calling thread for the multi-threaded apartment (MTA).
+/// Initializes COM on the calling thread in the multithreaded apartment (MTA).
+///
+/// This is a plain call to [`CoInitializeEx`] with `COINIT_MULTITHREADED`,
+/// and the `HRESULT` is returned as is.
+/// It is only a convenience, so that a small program doesn't need the `windows` crate
+/// just for this call.
+///
+/// This crate never initializes COM by itself.
+/// Initializing COM, choosing the apartment type, and keeping COM alive for as long as
+/// any object from this crate is in use are all up to the application.
+/// See [Initializing the COM Library] and [Processes, Threads, and Apartments].
+///
+/// [`CoInitializeEx`]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-coinitializeex
+/// [Initializing the COM Library]: https://learn.microsoft.com/en-us/windows/win32/learnwin32/initializing-the-com-library
+/// [Processes, Threads, and Apartments]: https://learn.microsoft.com/en-us/windows/win32/com/processes--threads--and-apartments
 pub fn initialize_mta() -> HRESULT {
     unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
 }
 
-/// Initializes COM for use by the calling thread for a single-threaded apartment (STA).
+/// Initializes COM on the calling thread in a single-threaded apartment (STA).
+///
+/// This is a plain call to [`CoInitializeEx`] with `COINIT_APARTMENTTHREADED`,
+/// and the `HRESULT` is returned as is.
+/// It is only a convenience, so that a small program doesn't need the `windows` crate
+/// just for this call.
+///
+/// This crate never initializes COM by itself.
+/// Initializing COM, choosing the apartment type, and keeping COM alive for as long as
+/// any object from this crate is in use are all up to the application.
+/// See [Initializing the COM Library] and [Processes, Threads, and Apartments].
+///
+/// [`CoInitializeEx`]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-coinitializeex
+/// [Initializing the COM Library]: https://learn.microsoft.com/en-us/windows/win32/learnwin32/initializing-the-com-library
+/// [Processes, Threads, and Apartments]: https://learn.microsoft.com/en-us/windows/win32/com/processes--threads--and-apartments
 pub fn initialize_sta() -> HRESULT {
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
 }
 
-/// Close the COM library on the current thread.
-pub fn deinitialize() {
+/// Closes COM on the calling thread.
+///
+/// This is a plain call to [`CoUninitialize`].
+/// Most programs don't need it.
+/// COM is cleaned up when the process exits,
+/// and an initialization that is never closed only keeps the COM library loaded.
+///
+/// This crate never initializes or closes COM by itself, managing COM is up to the application.
+/// See [Initializing the COM Library] and [Processes, Threads, and Apartments].
+///
+/// # Safety
+///
+/// - The call must balance an earlier successful [`initialize_mta`], [`initialize_sta`]
+///   or `CoInitializeEx` call on the same thread.
+///   A call that returned `S_FALSE` counts as successful and needs balancing too.
+/// - Every object from this crate created in the apartment must be dropped before the call,
+///   unless something else keeps the apartment alive.
+///   When the last initialization of an apartment is closed, COM tears the apartment down and
+///   may unload the libraries behind its objects.
+///   Using or dropping such an object afterwards is undefined behaviour.
+///
+/// [`CoUninitialize`]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-couninitialize
+/// [Initializing the COM Library]: https://learn.microsoft.com/en-us/windows/win32/learnwin32/initializing-the-com-library
+/// [Processes, Threads, and Apartments]: https://learn.microsoft.com/en-us/windows/win32/com/processes--threads--and-apartments
+pub unsafe fn deinitialize() {
     unsafe { CoUninitialize() }
 }
 
 /// Audio direction, playback or capture.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Direction {
     Render,
     Capture,
@@ -107,7 +160,7 @@ impl Direction {
 
 /// Wrapper for [ERole](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/ne-mmdeviceapi-erole).
 /// Console is the role used by most applications
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Role {
     Console,
     Multimedia,
@@ -152,7 +205,7 @@ impl Role {
 /// See the documentation of [AudioClient::initialize_client()]
 /// for a description of the sharing and timing modes,
 /// and how to choose between them.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum StreamMode {
     /// Shared mode using polling for timing.
     /// The parameters that can be set are the device buffer duration (in units on 100 ns)
@@ -185,7 +238,7 @@ pub enum StreamMode {
 /// Sharemode for device.
 /// See the documentation of [AudioClient::initialize_client()]
 /// for a description of the two sharing modes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ShareMode {
     Shared,
     Exclusive,
@@ -194,7 +247,7 @@ pub enum ShareMode {
 /// Timing mode for device.
 /// See the documentation of [AudioClient::initialize_client()]
 /// for a description of the two timing modes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum TimingMode {
     Polling,
     Events,
@@ -209,8 +262,17 @@ impl fmt::Display for ShareMode {
     }
 }
 
+impl fmt::Display for TimingMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            TimingMode::Polling => write!(f, "Polling"),
+            TimingMode::Events => write!(f, "Events"),
+        }
+    }
+}
+
 /// Sample type, float or integer
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum SampleType {
     Float,
     Int,
@@ -227,7 +289,7 @@ impl fmt::Display for SampleType {
 
 /// Possible states for an [AudioSessionControl], an enum representing the
 /// [AudioSessionStateXxx constants](https://learn.microsoft.com/en-us/windows/win32/api/audiosessiontypes/ne-audiosessiontypes-audiosessionstate)
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum SessionState {
     /// The audio session is active. (At least one of the streams in the session is running.)
     Active,
@@ -249,7 +311,7 @@ impl fmt::Display for SessionState {
 
 /// Possible states for an `IMMDevice`, an enum representing the
 /// [DEVICE_STATE_XXX constants](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-state-xxx-constants)
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum DeviceState {
     /// The audio endpoint device is active. That is, the audio adapter that connects to the
     /// endpoint device is present and enabled. In addition, if the endpoint device plugs int
@@ -345,12 +407,20 @@ impl DeviceEnumerator {
         })
     }
 
-    /// Get the default playback or capture device for the console role
+    /// Get the current default playback or capture device for the console role.
+    ///
+    /// A stream opened on this device does __not__ move to another device
+    /// if the default is changed.
+    /// For a stream that follows the default device,
+    /// see [AudioClient::new_default_device_client].
     pub fn get_default_device(&self, direction: Direction) -> WasapiRes<Device> {
         self.get_default_device_for_role(direction, Role::Console)
     }
 
-    /// Get the default playback or capture device for a specific role
+    /// Get the current default playback or capture device for a specific role.
+    ///
+    /// As for [DeviceEnumerator::get_default_device], a stream opened on this device
+    /// does __not__ move to another device if the default is changed.
     pub fn get_default_device_for_role(
         &self,
         direction: Direction,
@@ -469,17 +539,25 @@ impl DeviceCollection {
 }
 
 /// Iterator for [DeviceCollection]
+///
+/// The number of devices is read once, when the iterator is created.
+/// If reading it fails, the iterator yields that error as its only item.
 #[derive(Debug)]
 pub struct DeviceCollectionIter<'a> {
     collection: &'a DeviceCollection,
     index: u32,
+    count: u32,
+    error: Option<WasapiError>,
 }
 
 impl Iterator for DeviceCollectionIter<'_> {
     type Item = WasapiRes<Device>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.collection.get_nbr_devices().unwrap() {
+        if let Some(err) = self.error.take() {
+            return Some(Err(err));
+        }
+        if self.index < self.count {
             let device = self.collection.get_device_at_index(self.index);
             self.index += 1;
             Some(device)
@@ -487,7 +565,16 @@ impl Iterator for DeviceCollectionIter<'_> {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = (self.count - self.index) as usize + usize::from(self.error.is_some());
+        (remaining, Some(remaining))
+    }
 }
+
+impl ExactSizeIterator for DeviceCollectionIter<'_> {}
+
+impl FusedIterator for DeviceCollectionIter<'_> {}
 
 /// Implement iterator for [DeviceCollection]
 impl<'a> IntoIterator for &'a DeviceCollection {
@@ -495,15 +582,23 @@ impl<'a> IntoIterator for &'a DeviceCollection {
     type IntoIter = DeviceCollectionIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
+        let (count, error) = match self.get_nbr_devices() {
+            Ok(count) => (count, None),
+            Err(err) => (0, Some(err)),
+        };
         DeviceCollectionIter {
             collection: self,
             index: 0,
+            count,
+            error,
         }
     }
 }
 
 /// Struct wrapping an [IMMDevice](https://docs.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nn-mmdeviceapi-immdevice).
-#[derive(Debug)]
+///
+/// Cloning is cheap, it adds a reference to the same COM object.
+#[derive(Clone, Debug)]
 pub struct Device {
     device: IMMDevice,
     direction: Direction,
@@ -559,7 +654,18 @@ impl Device {
         self.device.as_raw()
     }
 
-    /// Get an `IAudioClient` from an `IMMDevice`
+    /// Get an `IAudioClient` from an `IMMDevice`.
+    ///
+    /// The client is tied to this endpoint.
+    /// This matters when the [Device] is the default device from
+    /// [DeviceEnumerator::get_default_device].
+    /// A stream opened this way does __not__ follow the default device.
+    /// When the user picks another default device, the stream stays on the old one,
+    /// or fails if that endpoint goes away.
+    /// This is usually not what an application that plays to or records from
+    /// "the default device" wants.
+    /// Use [AudioClient::new_default_device_client] for that,
+    /// and use this method when the stream should stay on one specific endpoint.
     pub fn get_iaudioclient(&self) -> WasapiRes<AudioClient> {
         let audio_client = unsafe { self.device.Activate::<IAudioClient>(CLSCTX_ALL, None)? };
         Ok(AudioClient {
@@ -719,6 +825,41 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
     }
 }
 
+/// Activate an `IAudioClient` with `ActivateAudioInterfaceAsync`, and block until done.
+///
+/// # Safety
+///
+/// `params` must be `None`, or point to a valid `PROPVARIANT`
+/// that, together with whatever it points to, stays alive until this returns.
+unsafe fn activate_iaudioclient(
+    path: PCWSTR,
+    params: Option<*const PROPVARIANT>,
+) -> WasapiRes<IAudioClient> {
+    let setup = Arc::new((Mutex::new(false), Condvar::new()));
+    let callback: IActivateAudioInterfaceCompletionHandler = Handler::new(setup.clone()).into();
+
+    let operation =
+        unsafe { ActivateAudioInterfaceAsync(path, &IAudioClient::IID, params, &callback)? };
+
+    let (lock, cvar) = &*setup;
+    let mut completed = lock.lock().unwrap();
+    while !*completed {
+        completed = cvar.wait(completed).unwrap();
+    }
+    drop(completed);
+
+    let mut audio_client: Option<IUnknown> = Default::default();
+    let mut result: HRESULT = Default::default();
+    unsafe {
+        operation
+            .GetActivateResult(&mut result, &mut audio_client)
+            .ok()?
+    };
+    result.ok()?;
+    // Always safe to unwrap once the result above is checked.
+    Ok(audio_client.unwrap().cast()?)
+}
+
 /// Struct wrapping an [IAudioClient](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/nn-audioclient-iaudioclient).
 #[derive(Debug)]
 pub struct AudioClient {
@@ -822,38 +963,8 @@ impl AudioClient {
             let pinned_prop = Pin::new(activation_prop.deref());
             let activation_params = Some(std::ptr::from_ref(pinned_prop.get_ref()));
 
-            // Create completion handler
-            let setup = Arc::new((Mutex::new(false), Condvar::new()));
-            let callback: IActivateAudioInterfaceCompletionHandler =
-                Handler::new(setup.clone()).into();
-
-            // Activate audio interface
-            let operation = ActivateAudioInterfaceAsync(
-                VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
-                &IAudioClient::IID,
-                activation_params,
-                &callback,
-            )?;
-
-            // Wait for completion
-            let (lock, cvar) = &*setup;
-            let mut completed = lock.lock().unwrap();
-            while !*completed {
-                completed = cvar.wait(completed).unwrap();
-            }
-            drop(completed);
-
-            // Get audio client and result
-            let mut audio_client: Option<IUnknown> = Default::default();
-            let mut result: HRESULT = Default::default();
-            operation
-                .GetActivateResult(&mut result, &mut audio_client)
-                .ok()?;
-
-            // Ensure successful activation
-            result.ok()?;
-            // always safe to unwrap if result above is checked first
-            let audio_client: IAudioClient = audio_client.unwrap().cast()?;
+            let audio_client =
+                activate_iaudioclient(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, activation_params)?;
 
             Ok(AudioClient {
                 client: audio_client,
@@ -863,6 +974,78 @@ impl AudioClient {
                 bytes_per_frame: None,
             })
         }
+    }
+
+    /// Creates an [AudioClient] on the default device of a direction,
+    /// with [automatic stream routing](https://learn.microsoft.com/en-us/windows/win32/coreaudio/automatic-stream-routing).
+    /// This needs Windows 10 version 1607 or later.
+    ///
+    /// A client made this way is not tied to one endpoint.
+    /// When the default device changes, Windows moves the stream over to the new one.
+    /// This differs from a client from [DeviceEnumerator::get_default_device]
+    /// (that one is opened on the current default device,
+    /// and its stream does __not__ move to another device if the default is changed).
+    ///
+    /// The client is activated with
+    /// [ActivateAudioInterfaceAsync](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync),
+    /// using the `DEVINTERFACE_AUDIO_RENDER` or `DEVINTERFACE_AUDIO_CAPTURE` interface class as the device path.
+    /// The calling thread must have COM initialised,
+    /// see [initialize_mta](crate::initialize_mta) and [initialize_sta](crate::initialize_sta).
+    ///
+    /// The `direction` selects the default render or capture device,
+    /// and is what [AudioClient::get_direction] reports until the client is initialised.
+    /// A loopback capture of the default render device is set up by passing [Direction::Render] here,
+    /// and then [Direction::Capture] to [AudioClient::initialize_client],
+    /// as for a render device from the [DeviceCollection].
+    ///
+    /// The Microsoft documentation does not say which device role the stream follows,
+    /// or what a running stream sees when it is moved to a device with a different mix format.
+    ///
+    /// # Exclusive mode
+    /// Exclusive mode does not work on a client made this way.
+    /// [AudioClient::is_supported] and [AudioClient::is_supported_exclusive_with_quirks]
+    /// accept an exclusive mode format exactly as they would on the device itself,
+    /// but [AudioClient::initialize_client] then fails with `E_INVALIDARG`,
+    /// for both event driven and polled exclusive mode.
+    /// This is not documented by Microsoft, and the error is passed through as it is.
+    /// Use a [Device] from the [DeviceEnumerator] for exclusive mode.
+    ///
+    /// # Non-functional methods
+    /// There is no [Device] behind a client made this way,
+    /// so everything that needs one is unavailable.
+    /// This includes the [CapabilityProbe](crate::CapabilityProbe),
+    /// the [DataRange](crate::DataRange)s, the device state, and the endpoint properties.
+    ///
+    /// # Example
+    /// Marked `no_run` because it needs a running audio service, which a build
+    /// machine may not have. The behaviour is covered by the device backed tests.
+    /// ```no_run
+    /// use wasapi::{AudioClient, Direction, StreamMode, initialize_mta};
+    ///
+    /// initialize_mta().ok().unwrap(); // Don't do this on a UI thread
+    /// let mut audio_client = AudioClient::new_default_device_client(Direction::Render).unwrap();
+    /// let format = audio_client.get_mixformat().unwrap();
+    /// let (default_period, _min_period) = audio_client.get_device_period().unwrap();
+    /// let mode = StreamMode::EventsShared {
+    ///     autoconvert: true,
+    ///     buffer_duration_hns: default_period,
+    /// };
+    /// audio_client.initialize_client(&format, Direction::Render, mode, None).unwrap();
+    /// ```
+    pub fn new_default_device_client(direction: Direction) -> WasapiRes<Self> {
+        let class = match direction {
+            Direction::Render => DEVINTERFACE_AUDIO_RENDER,
+            Direction::Capture => DEVINTERFACE_AUDIO_CAPTURE,
+        };
+        let path = HSTRING::from(take_pwstr(unsafe { StringFromIID(&class)? })?);
+        let client = unsafe { activate_iaudioclient(PCWSTR(path.as_ptr()), None)? };
+        Ok(AudioClient {
+            client,
+            direction,
+            sharemode: None,
+            timingmode: None,
+            bytes_per_frame: None,
+        })
     }
 
     /// Build an [AudioClient] from a raw COM interface pointer to an audio client
@@ -1640,7 +1823,7 @@ impl AudioClient {
 }
 
 /// The values reported by [AudioClient::get_shared_mode_engine_period].
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SharedModeEnginePeriod {
     /// The default period, in frames.
     pub default: u32,
@@ -1737,11 +1920,68 @@ impl AudioSessionEnumerator {
     }
 }
 
+/// Iterator for [AudioSessionEnumerator]
+///
+/// The number of sessions is read once, when the iterator is created.
+/// If reading it fails, the iterator yields that error as its only item.
+#[derive(Debug)]
+pub struct AudioSessionEnumeratorIter<'a> {
+    enumerator: &'a AudioSessionEnumerator,
+    index: i32,
+    count: i32,
+    error: Option<WasapiError>,
+}
+
+impl Iterator for AudioSessionEnumeratorIter<'_> {
+    type Item = WasapiRes<AudioSessionControl>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(err) = self.error.take() {
+            return Some(Err(err));
+        }
+        if self.index < self.count {
+            let session = self.enumerator.get_session(self.index);
+            self.index += 1;
+            Some(session)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = (self.count - self.index) as usize + usize::from(self.error.is_some());
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for AudioSessionEnumeratorIter<'_> {}
+
+impl FusedIterator for AudioSessionEnumeratorIter<'_> {}
+
+/// Implement iterator for [AudioSessionEnumerator]
+impl<'a> IntoIterator for &'a AudioSessionEnumerator {
+    type Item = WasapiRes<AudioSessionControl>;
+    type IntoIter = AudioSessionEnumeratorIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let (count, error) = match self.get_count() {
+            Ok(count) => (count.max(0), None),
+            Err(err) => (0, Some(err)),
+        };
+        AudioSessionEnumeratorIter {
+            enumerator: self,
+            index: 0,
+            count,
+            error,
+        }
+    }
+}
+
 /// Specifies the category of an audio stream.
 ///
 /// Wrapper for
 /// [AUDIO_STREAM_CATEGORY](https://learn.microsoft.com/en-us/windows/win32/api/audiosessiontypes/ne-audiosessiontypes-audio_stream_category).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StreamCategory {
     /// Other audio stream.
     Other,
@@ -1800,11 +2040,34 @@ impl StreamCategory {
     }
 }
 
+impl fmt::Display for StreamCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[allow(deprecated)]
+        let name = match *self {
+            StreamCategory::Other => "Other",
+            StreamCategory::ForegroundOnlyMedia => "ForegroundOnlyMedia",
+            StreamCategory::Communications => "Communications",
+            StreamCategory::Alerts => "Alerts",
+            StreamCategory::SoundEffects => "SoundEffects",
+            StreamCategory::GameEffects => "GameEffects",
+            StreamCategory::GameMedia => "GameMedia",
+            StreamCategory::GameChat => "GameChat",
+            StreamCategory::Speech => "Speech",
+            StreamCategory::Movie => "Movie",
+            StreamCategory::Media => "Media",
+            StreamCategory::FarFieldSpeech => "FarFieldSpeech",
+            StreamCategory::UniformSpeech => "UniformSpeech",
+            StreamCategory::VoiceTyping => "VoiceTyping",
+        };
+        write!(f, "{name}")
+    }
+}
+
 /// Defines values that describe the characteristics of an audio stream.
 ///
 /// Wrapper for
 /// [AUDCLNT_STREAMOPTIONS](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-audclnt_streamoptions).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StreamOption {
     /// The audio stream is a 'raw' stream that bypasses all signal processing except for endpoint specific, always-on
     /// processing in the Audio Processing Object (APO), driver, and hardware.
@@ -1822,6 +2085,16 @@ impl StreamOption {
             StreamOption::Raw => AUDCLNT_STREAMOPTIONS_RAW,
             StreamOption::MatchFormat => AUDCLNT_STREAMOPTIONS_MATCH_FORMAT,
             StreamOption::Ambisonics => AUDCLNT_STREAMOPTIONS_AMBISONICS,
+        }
+    }
+}
+
+impl fmt::Display for StreamOption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            StreamOption::Raw => write!(f, "Raw"),
+            StreamOption::MatchFormat => write!(f, "MatchFormat"),
+            StreamOption::Ambisonics => write!(f, "Ambisonics"),
         }
     }
 }
@@ -2004,7 +2277,7 @@ impl AudioMeterInformation {
 
 /// Struct representing the [ENDPOINT_HARDWARE_SUPPORT_XXX constants](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-hardware-support-xxx-constants),
 /// describing which functions an audio endpoint device implements in hardware.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct HardwareSupport {
     /// ENDPOINT_HARDWARE_SUPPORT_VOLUME
     pub volume: bool,
@@ -2168,7 +2441,8 @@ impl AudioRenderClient {
 }
 
 /// Struct representing information on data read from an audio client buffer.
-#[derive(Debug)]
+/// The default value is the same as [BufferInfo::none].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub struct BufferInfo {
     /// Decoded audio client flags.
     pub flags: BufferFlags,
@@ -2188,6 +2462,7 @@ impl BufferInfo {
         }
     }
 
+    /// Create a new [BufferInfo] struct with no flags set, and index and timestamp set to zero.
     pub fn none() -> Self {
         Self {
             flags: BufferFlags::none(),
@@ -2198,7 +2473,8 @@ impl BufferInfo {
 }
 
 /// Struct representing the [ _AUDCLNT_BUFFERFLAGS enum values](https://docs.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-_audclnt_bufferflags).
-#[derive(Debug)]
+/// The default value is the same as [BufferFlags::none].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub struct BufferFlags {
     /// AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY
     pub data_discontinuity: bool,

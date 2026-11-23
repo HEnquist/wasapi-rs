@@ -142,7 +142,8 @@ DisconnectReasonServerShutdown
 DisconnectReasonSessionDisconnected
 DisconnectReasonSessionLogoff
 
-// Application loopback activation.
+// Activation through ActivateAudioInterfaceAsync,
+// for application loopback and for auto-routed default device clients.
 ActivateAudioInterfaceAsync
 IActivateAudioInterfaceAsyncOperation
 IActivateAudioInterfaceCompletionHandler
@@ -151,12 +152,15 @@ AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK
 PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE
 PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE
 VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK
+DEVINTERFACE_AUDIO_CAPTURE
+DEVINTERFACE_AUDIO_RENDER
 
 // COM, memory, handles and events.
 CoCreateInstance
 CoInitializeEx
 CoUninitialize
 CoTaskMemFree
+StringFromIID
 CLSCTX_ALL
 COINIT_APARTMENTTHREADED
 COINIT_MULTITHREADED

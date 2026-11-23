@@ -1,3 +1,4 @@
+use std::fmt;
 use std::slice;
 use std::string::FromUtf16Error;
 use windows_core::{GUID, PCWSTR, Result, implement};
@@ -63,6 +64,21 @@ pub struct EventCallbacks {
 impl Default for EventCallbacks {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// The callbacks can't be printed, so this shows which ones are set.
+impl fmt::Debug for EventCallbacks {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EventCallbacks")
+            .field("simple_volume", &self.simple_volume.is_some())
+            .field("channel_volume", &self.channel_volume.is_some())
+            .field("state", &self.state.is_some())
+            .field("disconnected", &self.disconnected.is_some())
+            .field("iconpath", &self.iconpath.is_some())
+            .field("displayname", &self.displayname.is_some())
+            .field("groupingparam", &self.groupingparam.is_some())
+            .finish()
     }
 }
 
@@ -155,7 +171,7 @@ impl EventCallbacks {
 
 /// Reason for session disconnect, an enum representing the `DisconnectReasonXxx` values of the
 /// [AudioSessionDisconnectReason enum](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nf-audiopolicy-iaudiosessionevents-onsessiondisconnected)
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DisconnectReason {
     /// The user removed the audio endpoint device.
     DeviceRemoval,
@@ -171,6 +187,21 @@ pub enum DisconnectReason {
     ExclusiveModeOverride,
     /// An unknown reason was returned.
     Unknown,
+}
+
+impl fmt::Display for DisconnectReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match *self {
+            DisconnectReason::DeviceRemoval => "DeviceRemoval",
+            DisconnectReason::ServerShutdown => "ServerShutdown",
+            DisconnectReason::FormatChanged => "FormatChanged",
+            DisconnectReason::SessionLogoff => "SessionLogoff",
+            DisconnectReason::SessionDisconnected => "SessionDisconnected",
+            DisconnectReason::ExclusiveModeOverride => "ExclusiveModeOverride",
+            DisconnectReason::Unknown => "Unknown",
+        };
+        write!(f, "{name}")
+    }
 }
 
 /// Wrapper for [IAudioSessionEvents](https://docs.microsoft.com/en-us/windows/win32/api/audiopolicy/nn-audiopolicy-iaudiosessionevents).
@@ -328,6 +359,19 @@ pub struct DeviceEventCallbacks {
 impl Default for DeviceEventCallbacks {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// The callbacks can't be printed, so this shows which ones are set.
+impl fmt::Debug for DeviceEventCallbacks {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DeviceEventCallbacks")
+            .field("device_state", &self.device_state.is_some())
+            .field("device_added", &self.device_added.is_some())
+            .field("device_removed", &self.device_removed.is_some())
+            .field("default_device", &self.default_device.is_some())
+            .field("property_value", &self.property_value.is_some())
+            .finish()
     }
 }
 

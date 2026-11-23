@@ -42,7 +42,7 @@ const INSUFFICIENT_BUFFER: HRESULT = WIN32_ERROR(ERROR_INSUFFICIENT_BUFFER).to_h
 ///
 /// This mirrors a
 /// [KSDATARANGE_AUDIO](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ksmedia/ns-ksmedia-ksdatarange_audio).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct DataRange {
     /// The largest number of channels.
     pub max_channels: u32,

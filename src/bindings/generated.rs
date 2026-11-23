@@ -155,6 +155,16 @@ pub unsafe fn PropVariantToStringAlloc(
     }
 }
 #[inline]
+pub unsafe fn StringFromIID(
+    rclsid: *const windows_core::GUID,
+) -> windows_core::Result<windows_core::PWSTR> {
+    windows_core::link!("ole32.dll" "system" fn StringFromIID(rclsid : *const windows_core::GUID, lplpsz : *mut windows_core::PWSTR) -> windows_core::HRESULT);
+    unsafe {
+        let mut result__ = core::mem::zeroed();
+        StringFromIID(rclsid, &mut result__).map(|| result__)
+    }
+}
+#[inline]
 pub unsafe fn WaitForSingleObject(hhandle: HANDLE, dwmilliseconds: u32) -> u32 {
     windows_core::link!("kernel32.dll" "system" fn WaitForSingleObject(hhandle : HANDLE, dwmilliseconds : u32) -> u32);
     unsafe { WaitForSingleObject(hhandle, dwmilliseconds) }
@@ -506,6 +516,10 @@ pub const DEVICE_STATE_ACTIVE: i32 = 1;
 pub const DEVICE_STATE_DISABLED: i32 = 2;
 pub const DEVICE_STATE_NOTPRESENT: i32 = 4;
 pub const DEVICE_STATE_UNPLUGGED: i32 = 8;
+pub const DEVINTERFACE_AUDIO_CAPTURE: windows_core::GUID =
+    windows_core::GUID::from_u128(0x2eef81be_33fa_4800_9670_1cd474972c3f);
+pub const DEVINTERFACE_AUDIO_RENDER: windows_core::GUID =
+    windows_core::GUID::from_u128(0xe6327cad_dcec_4949_ae8a_991e976a79d2);
 pub type DataFlow = i32;
 pub const DisconnectReasonDeviceRemoval: AudioSessionDisconnectReason = 0;
 pub const DisconnectReasonExclusiveModeOverride: AudioSessionDisconnectReason = 5;
