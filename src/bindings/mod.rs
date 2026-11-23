@@ -24,7 +24,15 @@ use windows_core::GUID;
 /// A constant defined here shadows the generated one of the same name,
 /// since a named item takes precedence over a glob import.
 /// The `HRESULT` form wraps the value instead of casting it.
+/// The `HRESULT unchanged` form is for codes the metadata already gives as `HRESULT`,
+/// and only adds the doc string.
 macro_rules! typed_consts {
+    (HRESULT unchanged, $doc:expr; $($name:ident),* $(,)?) => {
+        $(
+            #[doc = $doc]
+            pub const $name: windows_core::HRESULT = $crate::bindings::generated::$name;
+        )*
+    };
     (HRESULT, $doc:expr; $($name:ident),* $(,)?) => {
         $(
             #[doc = $doc]
@@ -69,8 +77,11 @@ typed_consts!(
     KSPROPERTY_TYPE_GET,
     OPEN_EXISTING,
     STGM_READ,
-    WAIT_OBJECT_0,
 );
+
+/// Retyped as the `u32` that `WaitForSingleObject` returns.
+/// The metadata gives it as an `NTSTATUS`.
+pub const WAIT_OBJECT_0: u32 = generated::WAIT_OBJECT_0.0 as u32;
 
 typed_consts!(
     u16,
@@ -96,22 +107,24 @@ pub const KSDATAFORMAT_TYPE_AUDIO: GUID = GUID::from_u128(0x73647561_0000_0010_8
 #[allow(non_upper_case_globals)]
 pub const KSPROPSETID_Pin: GUID = GUID::from_u128(0x8c134960_51ad_11cf_878a_94f801c10000);
 
-// The metadata does not mark the output of GetChannelsPeakValues as an array,
-// so the generated wrapper hands Windows room for a single value,
-// and any channel count above 1 makes Windows write past it.
-// The generated method can not be removed, so clippy.toml forbids calling it,
-// and this one takes a slice instead.
-impl IAudioMeterInformation {
-    /// Fill `peaks` with the peak value of each channel, one per element.
-    #[allow(non_snake_case)]
-    pub unsafe fn GetChannelsPeakValuesSlice(&self, peaks: &mut [f32]) -> windows_core::Result<()> {
-        unsafe {
-            (windows_core::Interface::vtable(self).GetChannelsPeakValues)(
-                windows_core::Interface::as_raw(self),
-                peaks.len() as u32,
-                peaks.as_mut_ptr(),
-            )
-            .ok()
-        }
-    }
+/// Call a method that writes its result through an out pointer, and return the value.
+///
+/// The generated methods take most outputs as plain pointers and return the `HRESULT`,
+/// since the metadata only marks a few parameters as return values.
+/// This turns such a call back into a `Result`.
+pub(crate) fn out<T: Default>(
+    call: impl FnOnce(*mut T) -> windows_core::HRESULT,
+) -> windows_core::Result<T> {
+    let mut value = T::default();
+    call(&mut value).ok()?;
+    Ok(value)
+}
+
+/// Like [out], for a method that hands back an interface.
+///
+/// A call that succeeds but leaves the interface null gives an `E_POINTER` error.
+pub(crate) fn out_interface<I: windows_core::Interface>(
+    call: impl FnOnce(*mut Option<I>) -> windows_core::HRESULT,
+) -> windows_core::Result<I> {
+    out(call)?.ok_or_else(|| E_POINTER.into())
 }

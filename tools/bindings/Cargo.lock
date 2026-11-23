@@ -22,9 +22,9 @@ dependencies = [
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.26"
+version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954"
+checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
 name = "wasapi-bindings-gen"
@@ -35,9 +35,8 @@ dependencies = [
 
 [[package]]
 name = "windows-bindgen"
-version = "0.100.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6bb7c22ca81c6dc1554fd328c12697b4b0ad5c45081df2c3c9a3f89cc467da2"
+version = "0.101.0"
+source = "git+https://github.com/microsoft/windows-rs?rev=c614bab27346#c614bab2734627db1944fa18859a542b9dea7156"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -47,12 +46,10 @@ dependencies = [
 
 [[package]]
 name = "windows-default"
-version = "0.100.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4882bb065b03115aa8891d44d076bbe843d286d8bfd0b55caaa4b049141a712"
+version = "0.101.0"
+source = "git+https://github.com/microsoft/windows-rs?rev=c614bab27346#c614bab2734627db1944fa18859a542b9dea7156"
 
 [[package]]
 name = "windows-metadata"
-version = "0.100.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d3a758dc1da4ae61aa7f93afbb505d564c72dd6431e513ed581377857896a72"
+version = "0.101.0"
+source = "git+https://github.com/microsoft/windows-rs?rev=c614bab27346#c614bab2734627db1944fa18859a542b9dea7156"

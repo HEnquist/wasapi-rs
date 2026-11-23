@@ -9,6 +9,7 @@ IActivateAudioInterfaceCompletionHandler
 DEVINTERFACE_AUDIO_CAPTURE
 DEVINTERFACE_AUDIO_RENDER
 IAudioClient
+S_OK
 
 // Reaching a newer interface version from a client.
 IAudioClient3

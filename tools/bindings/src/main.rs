@@ -24,7 +24,7 @@ fn main() {
                 .join("generated.rs"),
         )
         .filter_file(tools.join("filters.txt"))
-        .flat()
+        .full()
         // Only the callback interfaces that the crate implements get `_Impl` traits.
         // The names must be fully qualified, a bare name silently matches nothing.
         // The default metadata puts all of Win32 in the single `Windows.Win32` namespace.
@@ -40,7 +40,7 @@ fn main() {
         .input_default()
         .output(repo_root().join("tests").join("device").join("bindings.rs"))
         .filter_file(tools.join("filters_device_tests.txt"))
-        .flat()
+        .full()
         .implements(["Windows.Win32.IActivateAudioInterfaceCompletionHandler"])
         .write();
 }

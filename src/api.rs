@@ -30,11 +30,11 @@ use crate::bindings::{
     MMDeviceEnumerator, PKEY_AudioEngine_DeviceFormat, PKEY_Device_DeviceDesc,
     PKEY_Device_FriendlyName, PKEY_DeviceInterface_FriendlyName,
     PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
-    PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, PROPERTYKEY, PROPVAR_PAD1, PROPVAR_PAD2,
-    PROPVAR_PAD3, PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0, PropVariantClear,
-    PropVariantToStringAlloc, REFERENCE_TIME, STGM_READ, StringFromIID, VARTYPE,
+    PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, PROPERTYKEY, PROPVARIANT, PropVariantClear,
+    PropVariantToStringAlloc, S_OK, STGM_READ, StringFromIID,
     VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, VT_BLOB, WAIT_OBJECT_0, WAVEFORMATEX,
-    WaitForSingleObject, eCapture, eCommunications, eConsole, eMultimedia, eRender,
+    WaitForSingleObject, eCapture, eCommunications, eConsole, eMultimedia, eRender, out,
+    out_interface, tagPROPVARIANT_0, tagPROPVARIANT_0_0, tagPROPVARIANT_0_0_0,
 };
 use num_integer::Integer;
 use std::cmp;
@@ -397,10 +397,10 @@ impl DeviceEnumerator {
     /// Get an `IMMDeviceCollection` of all active playback or capture devices
     pub fn get_device_collection(&self, direction: Direction) -> WasapiRes<DeviceCollection> {
         let dir = direction.to_edataflow();
-        let devs = unsafe {
+        let devs = out_interface(|p| unsafe {
             self.enumerator
-                .EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE)?
-        };
+                .EnumAudioEndpoints(dir, DEVICE_STATE_ACTIVE, p)
+        })?;
         Ok(DeviceCollection {
             collection: devs,
             direction,
@@ -429,7 +429,8 @@ impl DeviceEnumerator {
         let dir = direction.to_edataflow();
         let e_role = role.to_erole();
 
-        let device = unsafe { self.enumerator.GetDefaultAudioEndpoint(dir, e_role)? };
+        let device =
+            out_interface(|p| unsafe { self.enumerator.GetDefaultAudioEndpoint(dir, e_role, p) })?;
 
         let dev = Device { device, direction };
         debug!("default device {:?}", dev.get_friendlyname());
@@ -440,7 +441,7 @@ impl DeviceEnumerator {
     pub fn get_device(&self, device_id: &str) -> WasapiRes<Device> {
         // Keep the HSTRING in a variable, to make sure it outlives the call to GetDevice.
         let w_id = HSTRING::from(device_id);
-        let immdevice = unsafe { self.enumerator.GetDevice(&w_id)? };
+        let immdevice = out_interface(|p| unsafe { self.enumerator.GetDevice(&w_id, p) })?;
         let device = Device::from_immdevice(immdevice)?;
         Ok(device)
     }
@@ -505,13 +506,13 @@ pub struct DeviceCollection {
 impl DeviceCollection {
     /// Get the number of devices in an `IMMDeviceCollection`
     pub fn get_nbr_devices(&self) -> WasapiRes<u32> {
-        let count = unsafe { self.collection.GetCount()? };
+        let count = out(|p| unsafe { self.collection.GetCount(p) })?;
         Ok(count)
     }
 
     /// Get a device from an `IMMDeviceCollection` using index
     pub fn get_device_at_index(&self, idx: u32) -> WasapiRes<Device> {
-        let device = unsafe { self.collection.Item(idx)? };
+        let device = out_interface(|p| unsafe { self.collection.Item(idx, p) })?;
         Ok(Device {
             device,
             direction: self.direction,
@@ -520,7 +521,7 @@ impl DeviceCollection {
 
     /// Get a device from an `IMMDeviceCollection` using name
     pub fn get_device_with_name(&self, name: &str) -> WasapiRes<Device> {
-        let count = unsafe { self.collection.GetCount()? };
+        let count = self.get_nbr_devices()?;
         trace!("nbr devices {count}");
         for n in 0..count {
             let device = self.get_device_at_index(n)?;
@@ -609,7 +610,7 @@ impl Device {
     /// querying the endpoint for its data flow direction.
     fn from_immdevice(device: IMMDevice) -> WasapiRes<Device> {
         let endpoint: IMMEndpoint = device.cast()?;
-        let direction = Direction::from_edataflow(unsafe { endpoint.GetDataFlow()? })?;
+        let direction = Direction::from_edataflow(out(|p| unsafe { endpoint.GetDataFlow(p) })?)?;
 
         Ok(Device { device, direction })
     }
@@ -716,7 +717,7 @@ impl Device {
 
     /// Read state from an `IMMDevice`
     pub fn get_state(&self) -> WasapiRes<DeviceState> {
-        let state = unsafe { self.device.GetState()? };
+        let state = out(|p| unsafe { self.device.GetState(p) })?;
         trace!("state: {state:?}");
         DeviceState::from_device_state(state)
     }
@@ -762,8 +763,8 @@ impl Device {
         key: &PROPERTYKEY,
         parse: impl FnOnce(&PROPVARIANT) -> WasapiRes<T>,
     ) -> WasapiRes<T> {
-        let store = unsafe { self.device.OpenPropertyStore(STGM_READ)? };
-        let mut prop = unsafe { store.GetValue(key)? };
+        let store = out_interface(|p| unsafe { self.device.OpenPropertyStore(STGM_READ, p) })?;
+        let mut prop = out(|p| unsafe { store.GetValue(key, p) })?;
         let ret = parse(&prop);
         unsafe { PropVariantClear(&mut prop) }.ok()?;
         ret
@@ -771,7 +772,7 @@ impl Device {
 
     /// Parse a device string property to String
     fn parse_string_property(prop: &PROPVARIANT) -> WasapiRes<String> {
-        let propstr = unsafe { PropVariantToStringAlloc(prop)? };
+        let propstr = out(|p| unsafe { PropVariantToStringAlloc(prop, p) })?;
         let name = take_pwstr(propstr)?;
         trace!("name: {name}");
         Ok(name)
@@ -779,7 +780,7 @@ impl Device {
 
     /// Parse a device blob property to Vec<u8>
     fn parse_blob_property(prop: &PROPVARIANT) -> WasapiRes<Vec<u8>> {
-        if unsafe { prop.Anonymous.Anonymous.vt.0 } != VT_BLOB {
+        if unsafe { prop.Anonymous.Anonymous.vt } != VT_BLOB {
             return Err(windows_core::Error::from(E_INVALIDARG).into());
         }
         let blob = unsafe { prop.Anonymous.Anonymous.Anonymous.blob };
@@ -790,7 +791,7 @@ impl Device {
 
     /// Get the Id of an `IMMDevice`
     pub fn get_id(&self) -> WasapiRes<String> {
-        let idstr = unsafe { self.device.GetId()? };
+        let idstr = out(|p| unsafe { self.device.GetId(p) })?;
         let id = take_pwstr(idstr)?;
         trace!("id: {id}");
         Ok(id)
@@ -815,13 +816,13 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
     fn ActivateCompleted(
         &self,
         _activateoperation: Ref<IActivateAudioInterfaceAsyncOperation>,
-    ) -> windows_core::Result<()> {
+    ) -> HRESULT {
         let (lock, cvar) = &*self.0;
         let mut completed = lock.lock().unwrap();
         *completed = true;
         drop(completed);
         cvar.notify_one();
-        Ok(())
+        S_OK
     }
 }
 
@@ -943,13 +944,13 @@ impl AudioClient {
             let pinned_params = Pin::new(&mut audio_client_activation_params);
 
             let raw_prop = PROPVARIANT {
-                Anonymous: PROPVARIANT_0 {
-                    Anonymous: ManuallyDrop::new(PROPVARIANT_0_0 {
-                        vt: VARTYPE(VT_BLOB),
-                        wReserved1: PROPVAR_PAD1(0),
-                        wReserved2: PROPVAR_PAD2(0),
-                        wReserved3: PROPVAR_PAD3(0),
-                        Anonymous: PROPVARIANT_0_0_0 {
+                Anonymous: tagPROPVARIANT_0 {
+                    Anonymous: ManuallyDrop::new(tagPROPVARIANT_0_0 {
+                        vt: VT_BLOB,
+                        wReserved1: 0,
+                        wReserved2: 0,
+                        wReserved3: 0,
+                        Anonymous: tagPROPVARIANT_0_0_0 {
                             blob: BLOB {
                                 cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
                                 pBlobData: std::ptr::from_mut(pinned_params.get_mut()).cast(),
@@ -1037,7 +1038,9 @@ impl AudioClient {
             Direction::Render => DEVINTERFACE_AUDIO_RENDER,
             Direction::Capture => DEVINTERFACE_AUDIO_CAPTURE,
         };
-        let path = HSTRING::from(take_pwstr(unsafe { StringFromIID(&class)? })?);
+        // PWSTR is a transparent wrapper around the `*mut u16` that StringFromIID writes.
+        let iid = out(|p: *mut PWSTR| unsafe { StringFromIID(&class, p.cast()) })?;
+        let path = HSTRING::from(take_pwstr(iid)?);
         let client = unsafe { activate_iaudioclient(PCWSTR(path.as_ptr()), None)? };
         Ok(AudioClient {
             client,
@@ -1155,7 +1158,8 @@ impl AudioClient {
 
     /// Get MixFormat of the device. This is the format the device uses in shared mode and should always be accepted.
     pub fn get_mixformat(&self) -> WasapiRes<WaveFormat> {
-        let format_ptr = unsafe { self.client.GetMixFormat()? };
+        let mut format_ptr = ptr::null_mut();
+        unsafe { self.client.GetMixFormat(&mut format_ptr).ok()? };
         let parse_result = unsafe { WaveFormat::parse(format_ptr.cast()) };
         unsafe { CoTaskMemFree(format_ptr.cast()) };
         parse_result
@@ -1287,14 +1291,13 @@ impl AudioClient {
 
     /// Get default and minimum periods in 100-nanosecond units
     pub fn get_device_period(&self) -> WasapiRes<(i64, i64)> {
-        let mut def_time = REFERENCE_TIME::default();
-        let mut min_time = REFERENCE_TIME::default();
+        let mut def_time: i64 = 0;
+        let mut min_time: i64 = 0;
         unsafe {
             self.client
                 .GetDevicePeriod(Some(&mut def_time), Some(&mut min_time))
                 .ok()?
         };
-        let (def_time, min_time) = (def_time.0, min_time.0);
         trace!("default period {def_time}, min period {min_time}");
         Ok((def_time, min_time))
     }
@@ -1487,8 +1490,8 @@ impl AudioClient {
                 .Initialize(
                     mode,
                     streamflags,
-                    REFERENCE_TIME(buffer_duration),
-                    REFERENCE_TIME(period),
+                    buffer_duration,
+                    period,
                     wavefmt.as_waveformatex_ref(),
                     session_guid.as_ref().map(|guid| guid as *const GUID),
                 )
@@ -1505,7 +1508,7 @@ impl AudioClient {
     /// This is required when using an [AudioClient] initialized for event driven mode, [TimingMode::Events].
     pub fn set_get_eventhandle(&self) -> WasapiRes<Handle> {
         let h_event = unsafe { CreateEventA(None, false, false, PCSTR::null()) };
-        if h_event.0.is_null() {
+        if h_event.is_null() {
             return Err(windows_core::Error::from_thread().into());
         }
         // Wrapped before SetEventHandle, so that the event is closed if that fails.
@@ -1517,7 +1520,7 @@ impl AudioClient {
     /// Get buffer size in frames,
     /// see [IAudioClient::GetBufferSize](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getbuffersize).
     pub fn get_buffer_size(&self) -> WasapiRes<u32> {
-        let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
+        let buffer_frame_count = out(|p| unsafe { self.client.GetBufferSize(p) })?;
         trace!("buffer_frame_count {buffer_frame_count}");
         Ok(buffer_frame_count)
     }
@@ -1527,7 +1530,7 @@ impl AudioClient {
     /// The exact meaning depends on how the AudioClient was initialized, see
     /// [IAudioClient::GetCurrentPadding](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getcurrentpadding).
     pub fn get_current_padding(&self) -> WasapiRes<u32> {
-        let padding_count = unsafe { self.client.GetCurrentPadding()? };
+        let padding_count = out(|p| unsafe { self.client.GetCurrentPadding(p) })?;
         trace!("padding_count {padding_count}");
         Ok(padding_count)
     }
@@ -1537,13 +1540,13 @@ impl AudioClient {
     pub fn get_available_space_in_frames(&self) -> WasapiRes<u32> {
         let frames = match (self.sharemode, self.timingmode) {
             (Some(ShareMode::Exclusive), Some(TimingMode::Events)) => {
-                let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
+                let buffer_frame_count = out(|p| unsafe { self.client.GetBufferSize(p) })?;
                 trace!("buffer_frame_count {buffer_frame_count}");
                 buffer_frame_count
             }
             (Some(_), Some(_)) => {
-                let padding_count = unsafe { self.client.GetCurrentPadding()? };
-                let buffer_frame_count = unsafe { self.client.GetBufferSize()? };
+                let padding_count = out(|p| unsafe { self.client.GetCurrentPadding(p) })?;
+                let buffer_frame_count = out(|p| unsafe { self.client.GetBufferSize(p) })?;
 
                 buffer_frame_count - padding_count
             }
@@ -1697,8 +1700,8 @@ impl AudioClient {
     ) -> WasapiRes<(i64, i64)> {
         let audio_client_2 = self.client.cast::<IAudioClient2>()?;
 
-        let mut min = REFERENCE_TIME::default();
-        let mut max = REFERENCE_TIME::default();
+        let mut min: i64 = 0;
+        let mut max: i64 = 0;
         unsafe {
             audio_client_2
                 .GetBufferSizeLimits(
@@ -1710,7 +1713,7 @@ impl AudioClient {
                 .ok()?;
         }
 
-        Ok((min.0, max.0))
+        Ok((min, max))
     }
 
     /// Whether or not this endpoint supports hardware offloaded audio stream.
@@ -1719,7 +1722,7 @@ impl AudioClient {
     pub fn is_offload_capable(&self, category: StreamCategory) -> WasapiRes<bool> {
         let audio_client_2 = self.client.cast::<IAudioClient2>()?;
 
-        let res = unsafe { audio_client_2.IsOffloadCapable(category.to_raw())? };
+        let res = out(|p| unsafe { audio_client_2.IsOffloadCapable(category.to_raw(), p) })?;
         Ok(res.as_bool())
     }
 
@@ -1817,8 +1820,8 @@ impl AudioClient {
     ///
     /// WASAPI docs: [IAudioClient::GetStreamLatency](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-getstreamlatency)
     pub fn get_stream_latency(&self) -> WasapiRes<i64> {
-        let latency = unsafe { self.client.GetStreamLatency()? };
-        Ok(latency.0)
+        let latency = out(|p| unsafe { self.client.GetStreamLatency(p) })?;
+        Ok(latency)
     }
 }
 
@@ -1909,12 +1912,12 @@ pub struct AudioSessionEnumerator {
 impl AudioSessionEnumerator {
     /// Get the count of sessions.
     pub fn get_count(&self) -> WasapiRes<i32> {
-        Ok(unsafe { self.session_enumerator.GetCount()? })
+        Ok(out(|p| unsafe { self.session_enumerator.GetCount(p) })?)
     }
 
     /// Get the `IAudioSessionControl` at the specified index.
     pub fn get_session(&self, index: i32) -> WasapiRes<AudioSessionControl> {
-        let session = unsafe { self.session_enumerator.GetSession(index)? };
+        let session = out_interface(|p| unsafe { self.session_enumerator.GetSession(index, p) })?;
 
         Ok(AudioSessionControl { control: session })
     }
@@ -2108,7 +2111,7 @@ pub struct AudioSessionControl {
 impl AudioSessionControl {
     /// Get the current session state
     pub fn get_state(&self) -> WasapiRes<SessionState> {
-        let state = unsafe { self.control.GetState()? };
+        let state = out(|p| unsafe { self.control.GetState(p) })?;
         #[allow(non_upper_case_globals)]
         let sessionstate = match state {
             AudioSessionStateActive => SessionState::Active,
@@ -2145,7 +2148,7 @@ impl AudioSessionControl {
     pub fn get_process_id(&self) -> WasapiRes<u32> {
         let control2: IAudioSessionControl2 = self.control.cast()?;
 
-        Ok(unsafe { control2.GetProcessId()? })
+        Ok(out(|p| unsafe { control2.GetProcessId(p) })?)
     }
 
     /// Sets the default stream attenuation experience (auto-ducking) provided by the system.
@@ -2161,7 +2164,7 @@ impl AudioSessionControl {
     /// This is empty unless the client that owns the session has set a name.
     /// When it is empty, the volume mixer shows the name of the executable instead.
     pub fn get_display_name(&self) -> WasapiRes<String> {
-        let name = unsafe { self.control.GetDisplayName()? };
+        let name = out(|p| unsafe { self.control.GetDisplayName(p) })?;
 
         take_pwstr(name)
     }
@@ -2169,7 +2172,7 @@ impl AudioSessionControl {
     /// Get the path of the icon of this session.
     /// This is empty unless the client that owns the session has set an icon.
     pub fn get_icon_path(&self) -> WasapiRes<String> {
-        let path = unsafe { self.control.GetIconPath()? };
+        let path = out(|p| unsafe { self.control.GetIconPath(p) })?;
 
         take_pwstr(path)
     }
@@ -2214,7 +2217,7 @@ impl AudioSessionControl {
     /// All sessions of the same application on the same device share this identifier.
     pub fn get_session_identifier(&self) -> WasapiRes<String> {
         let control2: IAudioSessionControl2 = self.control.cast()?;
-        let id = unsafe { control2.GetSessionIdentifier()? };
+        let id = out(|p| unsafe { control2.GetSessionIdentifier(p) })?;
 
         take_pwstr(id)
     }
@@ -2223,7 +2226,7 @@ impl AudioSessionControl {
     /// which is unique across all session instances.
     pub fn get_session_instance_identifier(&self) -> WasapiRes<String> {
         let control2: IAudioSessionControl2 = self.control.cast()?;
-        let id = unsafe { control2.GetSessionInstanceIdentifier()? };
+        let id = out(|p| unsafe { control2.GetSessionInstanceIdentifier(p) })?;
 
         take_pwstr(id)
     }
@@ -2249,19 +2252,23 @@ impl AudioMeterInformation {
     /// Get the peak value of the channel with the largest peak,
     /// as a value between 0.0 and 1.0.
     pub fn get_peak_value(&self) -> WasapiRes<f32> {
-        Ok(unsafe { self.meter.GetPeakValue()? })
+        Ok(out(|p| unsafe { self.meter.GetPeakValue(p) })?)
     }
 
     /// Get the number of channels that the peak meter monitors.
     pub fn get_metering_channel_count(&self) -> WasapiRes<u32> {
-        Ok(unsafe { self.meter.GetMeteringChannelCount()? })
+        Ok(out(|p| unsafe { self.meter.GetMeteringChannelCount(p) })?)
     }
 
     /// Get the peak value of each channel, as values between 0.0 and 1.0.
     pub fn get_channels_peak_values(&self) -> WasapiRes<Vec<f32>> {
-        let nbr_channels = unsafe { self.meter.GetMeteringChannelCount()? };
+        let nbr_channels = self.get_metering_channel_count()?;
         let mut peaks = vec![0.0; nbr_channels as usize];
-        unsafe { self.meter.GetChannelsPeakValuesSlice(&mut peaks)? };
+        unsafe {
+            self.meter
+                .GetChannelsPeakValues(nbr_channels, peaks.as_mut_ptr())
+                .ok()?
+        };
         Ok(peaks)
     }
 
@@ -2269,7 +2276,7 @@ impl AudioMeterInformation {
     /// This is only meaningful for a meter that was fetched from a [Device],
     /// a meter belonging to a session always reports no hardware support.
     pub fn query_hardware_support(&self) -> WasapiRes<HardwareSupport> {
-        let mask = unsafe { self.meter.QueryHardwareSupport()? };
+        let mask = out(|p| unsafe { self.meter.QueryHardwareSupport(p) })?;
 
         Ok(HardwareSupport::new(mask))
     }
@@ -2325,7 +2332,7 @@ impl AudioClock {
     /// Get the frequency for this [AudioClock].
     /// Note that the unit for the value is undefined.
     pub fn get_frequency(&self) -> WasapiRes<u64> {
-        let freq = unsafe { self.clock.GetFrequency()? };
+        let freq = out(|p| unsafe { self.clock.GetFrequency(p) })?;
         Ok(freq)
     }
 
@@ -2395,7 +2402,12 @@ impl AudioRenderClient {
         if nbr_frames == 0 {
             return Ok(());
         }
-        let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
+        let mut bufferptr = ptr::null_mut();
+        unsafe {
+            self.client
+                .GetBuffer(nbr_frames as u32, &mut bufferptr)
+                .ok()?
+        };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         bufferslice.copy_from_slice(data);
         let flags = match buffer_flags {
@@ -2427,7 +2439,12 @@ impl AudioRenderClient {
                 expected: nbr_bytes,
             });
         }
-        let bufferptr = unsafe { self.client.GetBuffer(nbr_frames as u32)? };
+        let mut bufferptr = ptr::null_mut();
+        unsafe {
+            self.client
+                .GetBuffer(nbr_frames as u32, &mut bufferptr)
+                .ok()?
+        };
         let bufferslice = unsafe { slice::from_raw_parts_mut(bufferptr, nbr_bytes) };
         copy_from_deque(bufferslice, data);
         let flags = match buffer_flags {
@@ -2535,7 +2552,7 @@ impl AudioCaptureClient {
         if let Some(ShareMode::Exclusive) = self.sharemode {
             return Ok(None);
         }
-        let nbr_frames = unsafe { self.client.GetNextPacketSize()? };
+        let nbr_frames = out(|p| unsafe { self.client.GetNextPacketSize(p) })?;
         Ok(Some(nbr_frames))
     }
 
@@ -2690,7 +2707,7 @@ impl std::os::windows::io::AsRawHandle for Handle {
     /// returned value is only guaranteed to be valid while the [Handle] has not yet
     /// been destroyed, and it __must not__ be closed by the caller.
     fn as_raw_handle(&self) -> std::os::windows::io::RawHandle {
-        self.handle.0
+        self.handle
     }
 }
 

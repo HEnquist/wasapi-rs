@@ -16,16 +16,17 @@ use crate::bindings::{
     CLSCTX_ALL, CloseHandle, Connector, CreateFileW, DeviceIoControl, ERROR_INSUFFICIENT_BUFFER,
     ERROR_MORE_DATA, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, HANDLE,
     IConnector, IDeviceTopology, IMMDevice, INVALID_HANDLE_VALUE, IOCTL_KS_PROPERTY, IPart,
-    KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM, KSDATAFORMAT_TYPE_AUDIO,
-    KSDATARANGE_0, KSIDENTIFIER_0_0, KSMULTIPLE_ITEM, KSP_PIN, KSPIN_DATAFLOW_IN,
+    KSDATAFORMAT_0, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM,
+    KSDATAFORMAT_TYPE_AUDIO, KSIDENTIFIER_0_0, KSMULTIPLE_ITEM, KSP_PIN, KSPIN_DATAFLOW_IN,
     KSPIN_DATAFLOW_OUT, KSPROPERTY_PIN, KSPROPERTY_PIN_CTYPES, KSPROPERTY_PIN_DATAFLOW,
-    KSPROPERTY_PIN_DATARANGES, KSPROPERTY_TYPE_GET, KSPROPSETID_Pin, OPEN_EXISTING,
+    KSPROPERTY_PIN_DATARANGES, KSPROPERTY_TYPE_GET, KSPROPSETID_Pin, OPEN_EXISTING, out,
+    out_interface,
 };
 
 use crate::{Direction, SampleType, WasapiRes, WaveFormat};
 
 /// A KSDATAFORMAT is 64 bytes, the audio fields of a KSDATARANGE_AUDIO follow after it.
-const AUDIO_RANGE_SIZE: usize = size_of::<KSDATARANGE_0>() + 5 * size_of::<u32>();
+const AUDIO_RANGE_SIZE: usize = size_of::<KSDATAFORMAT_0>() + 5 * size_of::<u32>();
 
 /// The errors that mean the reply did not fit in the buffer.
 const MORE_DATA: HRESULT = WIN32_ERROR(ERROR_MORE_DATA).to_hresult();
@@ -114,8 +115,9 @@ pub(crate) fn read_data_ranges(
     direction: Direction,
 ) -> WasapiRes<Vec<DataRange>> {
     let topology: IDeviceTopology = unsafe { device.Activate(CLSCTX_ALL, None)? };
-    let endpoint_side = unsafe { topology.GetConnector(0)? };
-    let device_side: IPart = unsafe { endpoint_side.GetConnectedTo()? }.cast()?;
+    let endpoint_side = out_interface(|p| unsafe { topology.GetConnector(0, p) })?;
+    let device_side: IPart =
+        out_interface(|p| unsafe { endpoint_side.GetConnectedTo(p) })?.cast()?;
     let topology_filter = filter_id(&device_side);
 
     // The endpoint connects to the topology filter of the device, which holds
@@ -133,7 +135,7 @@ pub(crate) fn read_data_ranges(
             if upstream { "upstream" } else { "downstream" }
         );
         for connector in connectors {
-            let Ok(remote) = (unsafe { connector.GetConnectedTo() }) else {
+            let Ok(remote) = out_interface(|p| unsafe { connector.GetConnectedTo(p) }) else {
                 continue;
             };
             let Ok(remote) = remote.cast::<IPart>() else {
@@ -205,8 +207,9 @@ pub(crate) fn read_data_ranges(
 
 /// Get the device id of the filter that a part belongs to.
 fn filter_id(part: &IPart) -> Option<String> {
-    let topology: IDeviceTopology = unsafe { part.GetTopologyObject() }.ok()?;
-    unsafe { topology.GetDeviceId().ok()?.to_string() }.ok()
+    let topology = out_interface(|p| unsafe { part.GetTopologyObject(p) }).ok()?;
+    let id = out(|p| unsafe { topology.GetDeviceId(p) }).ok()?;
+    unsafe { id.to_string() }.ok()
 }
 
 /// Collect the connectors that can be reached from a part,
@@ -216,23 +219,23 @@ fn reachable_connectors(start: &IPart, upstream: bool) -> Vec<IConnector> {
     let mut seen = HashSet::new();
     let mut queue = vec![start.clone()];
     while let Some(part) = queue.pop() {
-        let Ok(global_id) = (unsafe { part.GetGlobalId() }) else {
+        let Ok(global_id) = out(|p| unsafe { part.GetGlobalId(p) }) else {
             continue;
         };
         if !seen.insert(unsafe { global_id.to_string() }.unwrap_or_default()) {
             continue;
         }
         let next = if upstream {
-            unsafe { part.EnumPartsIncoming() }
+            out_interface(|p| unsafe { part.EnumPartsIncoming(p) })
         } else {
-            unsafe { part.EnumPartsOutgoing() }
+            out_interface(|p| unsafe { part.EnumPartsOutgoing(p) })
         };
         let Ok(next) = next else { continue };
-        for index in 0..unsafe { next.GetCount() }.unwrap_or(0) {
-            let Ok(part) = (unsafe { next.GetPart(index) }) else {
+        for index in 0..out(|p| unsafe { next.GetCount(p) }).unwrap_or(0) {
+            let Ok(part) = out_interface(|p| unsafe { next.GetPart(index, p) }) else {
                 continue;
             };
-            if unsafe { part.GetPartType() } == Ok(Connector) {
+            if out(|p| unsafe { part.GetPartType(p) }) == Ok(Connector) {
                 if let Ok(connector) = part.cast::<IConnector>() {
                     connectors.push(connector);
                 }
@@ -307,7 +310,8 @@ fn ks_property(filter: HANDLE, property: &KSP_PIN, buffer: Option<&mut [u8]>) ->
         DeviceIoControl(
             filter,
             IOCTL_KS_PROPERTY,
-            Some(from_ref(property).cast()),
+            // The input buffer is only read, the metadata types it as mutable anyway.
+            Some(from_ref(property).cast_mut().cast()),
             size_of::<KSP_PIN>() as u32,
             data,
             size,
@@ -355,11 +359,11 @@ fn parse_data_ranges(buffer: &[u8]) -> Vec<DataRange> {
     let header: KSMULTIPLE_ITEM = unsafe { std::ptr::read_unaligned(buffer.as_ptr().cast()) };
     let mut offset = size_of::<KSMULTIPLE_ITEM>();
     for _ in 0..header.Count {
-        if offset + size_of::<KSDATARANGE_0>() > buffer.len() {
+        if offset + size_of::<KSDATAFORMAT_0>() > buffer.len() {
             debug!("The list of data ranges is truncated at offset {offset}");
             break;
         }
-        let format: KSDATARANGE_0 =
+        let format: KSDATAFORMAT_0 =
             unsafe { std::ptr::read_unaligned(buffer[offset..].as_ptr().cast()) };
         let size = format.FormatSize as usize;
         if format.MajorFormat == KSDATAFORMAT_TYPE_AUDIO
@@ -367,7 +371,7 @@ fn parse_data_ranges(buffer: &[u8]) -> Vec<DataRange> {
             && offset + AUDIO_RANGE_SIZE <= buffer.len()
         {
             let field = |nbr: usize| {
-                let start = offset + size_of::<KSDATARANGE_0>() + 4 * nbr;
+                let start = offset + size_of::<KSDATAFORMAT_0>() + 4 * nbr;
                 u32::from_le_bytes(buffer[start..start + 4].try_into().unwrap())
             };
             ranges.push(DataRange {
